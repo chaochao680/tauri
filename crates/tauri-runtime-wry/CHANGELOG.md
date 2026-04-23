@@ -1,5 +1,24 @@
 # Changelog
 
+## \[2.11.0]
+
+### New Features
+
+- [`001c8fe3d`](https://www.github.com/tauri-apps/tauri/commit/001c8fe3d288802de9a8c29cfd2f46f9220d97c5) ([#14722](https://www.github.com/tauri-apps/tauri/pull/14722) by [@aoxiangtianyu-go](https://www.github.com/tauri-apps/tauri/../../aoxiangtianyu-go)) Add a WebView option to control browser-level general autofill behavior. This option does not disable password or credit card autofill. On Windows (WebView2), setting it to true disables the general autofill "Suggestions" UI, which may appear even when `autocomplete="off"` is specified on input elements. On Linux, macOS, iOS, and Android, this option is currently unsupported and performs no operation.
+- [`b27be063f`](https://www.github.com/tauri-apps/tauri/commit/b27be063ff3052cb1071ac3ec719cfa104460fa4) ([#14925](https://www.github.com/tauri-apps/tauri/pull/14925) by [@lanyeeee](https://www.github.com/tauri-apps/tauri/../../lanyeeee)) Add `eval_with_callback` to the Tauri webview APIs and runtime dispatch layers.
+- [`cc5c97602`](https://www.github.com/tauri-apps/tauri/commit/cc5c976027b0ab2431c13ec5b2e201d4414a8a6e) ([#14486](https://www.github.com/tauri-apps/tauri/pull/14486) by [@lucasfernog](https://www.github.com/tauri-apps/tauri/../../lucasfernog)) Trigger `RunEvent::Opened` on Android.
+- [`093e2b47c`](https://www.github.com/tauri-apps/tauri/commit/093e2b47c01361c18783e9ff18750388e41650c5) ([#14484](https://www.github.com/tauri-apps/tauri/pull/14484) by [@lucasfernog](https://www.github.com/tauri-apps/tauri/../../lucasfernog)) Support creating multiple windows on Android (activity embedding) and iOS (scenes).
+- [`1063c48c5`](https://www.github.com/tauri-apps/tauri/commit/1063c48c5e7d099ad74d28a937edf42e3f5c9f03) ([#14523](https://www.github.com/tauri-apps/tauri/pull/14523) by [@JeffTsang](https://www.github.com/tauri-apps/tauri/../../JeffTsang)) Add handler for web content process termination on macOS and iOS.
+
+### What's Changed
+
+- [`d34497ef1`](https://www.github.com/tauri-apps/tauri/commit/d34497ef154eddcc36327a30dda06dc4748f6b20) ([#14862](https://www.github.com/tauri-apps/tauri/pull/14862) by [@Legend-Master](https://www.github.com/tauri-apps/tauri/../../Legend-Master)) The new window handler passed to `on_new_window` no longer requires `Sync`, and runs on main thread on Windows, aligning with other platforms
+
+### Dependencies
+
+- Upgraded to `tauri-runtime@2.11.0`
+- Upgraded to `tauri-utils@2.9.0`
+
 ## \[2.10.1]
 
 ### Dependencies

@@ -1,5 +1,42 @@
 # Changelog
 
+## \[2.11.0]
+
+### New Features
+
+- [`926a57bb0`](https://www.github.com/tauri-apps/tauri/commit/926a57bb0851e45d47ad1ee68fc96a9c25754c7c) ([#15201](https://www.github.com/tauri-apps/tauri/pull/15201) by [@Kokoro2336](https://www.github.com/tauri-apps/tauri/../../Kokoro2336)) Added uninstaller icon and uninstaller header image support for NSIS installer.
+
+  Notes:
+
+  - For `tauri-bundler` lib users, the `NsisSettings` now has 2 new fields `uninstaller_icon` and `uninstaller_header_image` which can be a breaking change
+  - When bundling with NSIS, users can add `uninstallerIcon` and `uninstallerHeaderImage` under `bundle > windows > nsis` to configure them.
+- [`cc5c97602`](https://www.github.com/tauri-apps/tauri/commit/cc5c976027b0ab2431c13ec5b2e201d4414a8a6e) ([#14486](https://www.github.com/tauri-apps/tauri/pull/14486) by [@lucasfernog](https://www.github.com/tauri-apps/tauri/../../lucasfernog)) Implement file association for Android and iOS.
+- [`5dc2cee60`](https://www.github.com/tauri-apps/tauri/commit/5dc2cee60370665af88c185684432e425b1c987d) ([#14793](https://www.github.com/tauri-apps/tauri/pull/14793) by [@Legend-Master](https://www.github.com/tauri-apps/tauri/../../Legend-Master)) Added support for `minimumWebview2Version` option support for the MSI (Wix) installer, the old `bundle > windows > nsis > minimumWebview2Version` is now deprecated in favor of `bundle > windows > minimumWebview2Version`
+
+  Notes:
+
+  - For anyone relying on the `WVRTINSTALLED` `Property` tag in `main.wxs`, it is now renamed to `INSTALLED_WEBVIEW2_VERSION`
+  - For `tauri-bundler` lib users, the `WindowsSettings` now has a new field `minimum_webview2_version` which can be a breaking change
+
+### Enhancements
+
+- [`8718d0816`](https://www.github.com/tauri-apps/tauri/commit/8718d08163f074dfc53387ebd1d823f9c28280ee) ([#15033](https://www.github.com/tauri-apps/tauri/pull/15033) by [@Legend-Master](https://www.github.com/tauri-apps/tauri/../../Legend-Master)) Show the context before prompting for updater signing key password
+
+### Bug Fixes
+
+- [`fcb702ec4`](https://www.github.com/tauri-apps/tauri/commit/fcb702ec4d924e81943efaeebea8d3edb7289c33) ([#14954](https://www.github.com/tauri-apps/tauri/pull/14954) by [@acx0](https://www.github.com/tauri-apps/tauri/../../acx0)) Fix `build --bundles` to allow `nsis` arg in linux+macOS
+- [`80c1425af`](https://www.github.com/tauri-apps/tauri/commit/80c1425af86058b1fc9489a30f778b6288d79b6b) ([#14921](https://www.github.com/tauri-apps/tauri/pull/14921) by [@setoelkahfi](https://www.github.com/tauri-apps/tauri/../../setoelkahfi)) Fix iOS build failure when `Metal Toolchain` is installed by using explicit `$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain` path instead of `$(TOOLCHAIN_DIR)` for Swift library search paths.
+
+### What's Changed
+
+- [`9979cde1c`](https://www.github.com/tauri-apps/tauri/commit/9979cde1c5534dafb1a07cc4dc2bc280d15d2f66) ([#15175](https://www.github.com/tauri-apps/tauri/pull/15175) by [@bovirus](https://www.github.com/tauri-apps/tauri/../../bovirus)) Update NSIS installer Italian translations
+
+### Dependencies
+
+- Upgraded to `tauri-macos-sign@2.3.4`
+- Upgraded to `tauri-bundler@2.9.0`
+- Upgraded to `tauri-utils@2.9.0`
+
 ## \[2.10.1]
 
 ### Bug Fixes

@@ -1,5 +1,38 @@
 # Changelog
 
+## \[2.9.0]
+
+### New Features
+
+- [`926a57bb0`](https://www.github.com/tauri-apps/tauri/commit/926a57bb0851e45d47ad1ee68fc96a9c25754c7c) ([#15201](https://www.github.com/tauri-apps/tauri/pull/15201) by [@Kokoro2336](https://www.github.com/tauri-apps/tauri/../../Kokoro2336)) Added uninstaller icon and uninstaller header image support for NSIS installer.
+
+  Notes:
+
+  - For `tauri-bundler` lib users, the `NsisSettings` now has 2 new fields `uninstaller_icon` and `uninstaller_header_image` which can be a breaking change
+  - When bundling with NSIS, users can add `uninstallerIcon` and `uninstallerHeaderImage` under `bundle > windows > nsis` to configure them.
+- [`cc5c97602`](https://www.github.com/tauri-apps/tauri/commit/cc5c976027b0ab2431c13ec5b2e201d4414a8a6e) ([#14486](https://www.github.com/tauri-apps/tauri/pull/14486) by [@lucasfernog](https://www.github.com/tauri-apps/tauri/../../lucasfernog)) Implement file association for Android and iOS.
+- [`5a0ca7edb`](https://www.github.com/tauri-apps/tauri/commit/5a0ca7edbbc707199615a91845146e98b6f5e8ca) ([#14671](https://www.github.com/tauri-apps/tauri/pull/14671) by [@lucasfernog](https://www.github.com/tauri-apps/tauri/../../lucasfernog)) Added support to Liquid Glass icons.
+- [`5dc2cee60`](https://www.github.com/tauri-apps/tauri/commit/5dc2cee60370665af88c185684432e425b1c987d) ([#14793](https://www.github.com/tauri-apps/tauri/pull/14793) by [@Legend-Master](https://www.github.com/tauri-apps/tauri/../../Legend-Master)) Added support for `minimumWebview2Version` option support for the MSI (Wix) installer, the old `bundle > windows > nsis > minimumWebview2Version` is now deprecated in favor of `bundle > windows > minimumWebview2Version`
+
+  Notes:
+
+  - For anyone relying on the `WVRTINSTALLED` `Property` tag in `main.wxs`, it is now renamed to `INSTALLED_WEBVIEW2_VERSION`
+  - For `tauri-bundler` lib users, the `WindowsSettings` now has a new field `minimum_webview2_version` which can be a breaking change
+
+### Bug Fixes
+
+- [`fcb702ec4`](https://www.github.com/tauri-apps/tauri/commit/fcb702ec4d924e81943efaeebea8d3edb7289c33) ([#14954](https://www.github.com/tauri-apps/tauri/pull/14954) by [@acx0](https://www.github.com/tauri-apps/tauri/../../acx0)) Fix `build --bundles` to allow `nsis` arg in linux+macOS
+- [`c8d7003b2`](https://www.github.com/tauri-apps/tauri/commit/c8d7003b23657019a547fd7cdf3164834a28849a) ([#15102](https://www.github.com/tauri-apps/tauri/pull/15102) by [@ShaunSHamilton](https://www.github.com/tauri-apps/tauri/../../ShaunSHamilton)) Correct GitHub Release URL path for Linux i686 tooling.
+
+### What's Changed
+
+- [`9979cde1c`](https://www.github.com/tauri-apps/tauri/commit/9979cde1c5534dafb1a07cc4dc2bc280d15d2f66) ([#15175](https://www.github.com/tauri-apps/tauri/pull/15175) by [@bovirus](https://www.github.com/tauri-apps/tauri/../../bovirus)) Update NSIS installer Italian translations
+
+### Dependencies
+
+- Upgraded to `tauri-macos-sign@2.3.4`
+- Upgraded to `tauri-utils@2.9.0`
+
 ## \[2.8.1]
 
 ### Bug Fixes

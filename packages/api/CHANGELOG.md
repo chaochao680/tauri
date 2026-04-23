@@ -1,5 +1,12 @@
 # Changelog
 
+## \[2.11.0]
+
+### New Features
+
+- [`074299c08`](https://www.github.com/tauri-apps/tauri/commit/074299c08dd99d2e1c57796f55ab24bc1d3976cc) ([#14307](https://www.github.com/tauri-apps/tauri/pull/14307) by [@signadou](https://www.github.com/tauri-apps/tauri/../../signadou)) Add Bring All to Front predefined menu item type
+- [`001c8fe3d`](https://www.github.com/tauri-apps/tauri/commit/001c8fe3d288802de9a8c29cfd2f46f9220d97c5) ([#14722](https://www.github.com/tauri-apps/tauri/pull/14722) by [@aoxiangtianyu-go](https://www.github.com/tauri-apps/tauri/../../aoxiangtianyu-go)) Add a WebView option to control browser-level general autofill behavior. This option does not disable password or credit card autofill. On Windows (WebView2), setting it to true disables the general autofill "Suggestions" UI, which may appear even when `autocomplete="off"` is specified on input elements. On Linux, macOS, iOS, and Android, this option is currently unsupported and performs no operation.
+
 ## \[2.10.1]
 
 ### Bug Fixes
