@@ -26,7 +26,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{
   webview::{PageLoadEvent, WebviewWindowBuilder},
-  App, Emitter, Listener, Runtime, WebviewUrl,
+  App, Emitter, Listener, Manager, Runtime, WebviewUrl,
 };
 #[allow(unused)]
 use tauri::{Manager, RunEvent};
@@ -344,12 +344,16 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       Ok(())
     })
     .on_page_load(|webview, payload| {
+      let app_handle = webview.app_handle().clone();
+      let url = payload.url().to_string();
       match payload.event() {
         PageLoadEvent::Started => {
-          log::info!("Page Begin: {}", payload.url());
+          log::info!("Page Begin: {}", url);
+          let _ = app_handle.emit("page-load-started", &url);
         }
         PageLoadEvent::Finished => {
-          log::info!("Page End: {}", payload.url());
+          log::info!("Page End: {}", url);
+          let _ = app_handle.emit("page-load-finished", &url);
         }
       }
 
