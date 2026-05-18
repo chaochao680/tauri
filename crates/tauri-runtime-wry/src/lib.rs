@@ -62,6 +62,8 @@ use wry::WebViewBuilderExtIos;
 use wry::WebViewBuilderExtMacos;
 #[cfg(windows)]
 use wry::WebViewBuilderExtWindows;
+#[cfg(target_env = "ohos")]
+use wry::WebViewBuilderExtOhos;
 #[cfg(target_vendor = "apple")]
 use wry::{WebViewBuilderExtDarwin, WebViewExtDarwin};
 
@@ -126,7 +128,7 @@ pub use tao::platform::macos::{
   ActivationPolicy as TaoActivationPolicy, EventLoopExtMacOS, WindowExtMacOS,
 };
 #[cfg(target_env = "ohos")]
-pub use tao::platform::ohos::EventLoopBuilderExtOpenHarmony;
+pub use tao::platform::ohos::{EventLoopBuilderExtOpenHarmony, WindowBuilderExtOpenHarmony};
 #[cfg(target_os = "macos")]
 use tauri_runtime::ActivationPolicy;
 
@@ -936,6 +938,12 @@ impl WindowBuilder for WindowBuilderWrapper {
       .maximizable(config.maximizable)
       .minimizable(config.minimizable)
       .shadow(config.shadow);
+
+    #[cfg(target_env = "ohos")]
+    {
+      log::info!("windowbuilder::with_config label {}", config.label);
+      window.inner = window.inner.with_label(&config.label);
+    }
 
     let mut constraints = WindowSizeConstraints::default();
 
@@ -4654,6 +4662,12 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
     }
   };
 
+  #[cfg(target_env = "ohos")]
+  {
+    use tao::platform::ohos::WindowBuilderExtOpenHarmony;
+    window_builder.inner = window_builder.inner.with_label(&label);
+  }
+
   let window = window_builder
     .inner
     .build(event_loop)
@@ -4868,6 +4882,15 @@ You may have it installed on another user account, but it is not available for t
   #[cfg(any(target_os = "windows", target_os = "android"))]
   {
     webview_builder = webview_builder.with_https_scheme(webview_attributes.use_https_scheme);
+  }
+
+  #[cfg(target_env = "ohos")]
+  {
+    use tao::platform::ohos::WindowExtOpenHarmony;
+    use wry::WebViewBuilderExtOhos;
+    if let Some(window_id) = window.window_id() {
+      webview_builder = webview_builder.with_window_id(window_id);
+    }
   }
 
   if let Some(background_throttling) = webview_attributes.background_throttling {

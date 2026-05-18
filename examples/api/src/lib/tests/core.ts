@@ -2,7 +2,8 @@ import type { TestCase } from '../test-runner';
 import { invoke, Channel, Resource } from '@tauri-apps/api/core';
 import { emit, listen, once } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
-import { getCurrentWindow, currentMonitor, WebviewWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { appCacheDir } from '@tauri-apps/api/path';
 
@@ -415,8 +416,9 @@ export const coreTests: TestCase[] = [
       try {
         // Trigger a page load by creating a new window
         await invoke('create_isolated_window', {
-          window_id: 'test-page-load-window',
-          data_suffix: 'test',
+          windowId: 'test-page-load-window',
+          dataSuffix: 'test',
+          url: '/hello.html'
         });
 
         // Wait for events to propagate

@@ -226,18 +226,26 @@
     document.body.appendChild(img)
   }
 
-  // Test 4: Data isolation - create window A
+  // Test 4: Data isolation - create window A (Hello World)
   function createWindowA() {
-    console.log('Creating isolated window A...')
-    invoke('create_isolated_window', { windowId: 'window_a', dataSuffix: 'a' })
+    console.log('Creating isolated window A (Hello World)...')
+    invoke('create_isolated_window', { 
+        windowId: 'window_a', 
+        dataSuffix: 'a',
+        url: '/hello.html'
+    })
       .then(() => console.log('✅ Window A created (isolated data dir A)'))
       .catch((e) => console.error('❌ Error: ' + e))
   }
 
-  // Test 4: Data isolation - create window B
+  // Test 4: Data isolation - create window B (Baidu)
   function createWindowB() {
-    console.log('Creating isolated window B...')
-    invoke('create_isolated_window', { windowId: 'window_b', dataSuffix: 'b' })
+    console.log('Creating isolated window B (Baidu)...')
+    invoke('create_isolated_window', { 
+        windowId: 'window_b', 
+        dataSuffix: 'b',
+        url: 'https://www.baidu.com'
+    })
       .then(() => console.log('✅ Window B created (isolated data dir B)'))
       .catch((e) => console.error('❌ Error: ' + e))
   }

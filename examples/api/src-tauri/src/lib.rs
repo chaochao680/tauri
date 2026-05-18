@@ -29,7 +29,7 @@ use tauri::{
   App, Emitter, Listener, Manager, Runtime, WebviewUrl,
 };
 #[allow(unused)]
-use tauri::{Manager, RunEvent};
+use tauri::RunEvent;
 #[cfg(not(target_env = "ohos"))]
 use tauri_plugin_sample::{PingRequest, SampleExt};
 
@@ -74,7 +74,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_env = "ohos")]
   let builder = builder
-    .plugin(
+     /*.plugin(
       tauri_plugin_log::Builder::default()
         .level(log::LevelFilter::Info)
         .clear_targets()
@@ -82,7 +82,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           tauri_plugin_log::TargetKind::Stdout,
         ))
         .build(),
-    )
+    )*/
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_shell::init())
@@ -90,7 +90,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_env = "ohos")]
   {
-    // tauri_plugin_log 已初始化 log facade，不再手动调用 ohos_log::init()
+    // 当前pulgin_log尚未对接hilog，因此需要调用 ohos_log::init()
+    ohos_log::init();
+    
     log::info!("OHOS log initialized via tauri_plugin_log");
   };
 

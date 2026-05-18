@@ -240,6 +240,7 @@ pub fn append_test_result<R: Runtime>(
   Ok(())
 }
 
+static WINDOW_SEQ: AtomicU32 = AtomicU32::new(1);
 static CONSOLE_LOG_BUFFER: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 #[command]
@@ -371,15 +372,29 @@ pub fn create_isolated_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
   window_id: String,
   data_suffix: String,
+  url: String,
 ) -> tauri::Result<()> {
-  log::info!("Creating isolated window: {}", window_id);
+  // Append a unique sequence number to ensure window name is always unique
+  let seq = WINDOW_SEQ.fetch_add(1, Ordering::SeqCst);
+  let unique_window_id = format!("{}_{}", window_id, seq);
+  log::info!("[Rust] create_isolated_window called. window_id={} (unique={}), url={}", window_id, unique_window_id, url);
 
   let mut data_dir = app.path().app_data_dir()?;
-  data_dir.push(format!("webview_data_{}", data_suffix));
+  data_dir.push(format!("webview_data_{}_{}", data_suffix, seq));
 
-  log::info!("Data directory: {:?}", data_dir);
+  // Try to parse as external URL (supports http, https, data, etc.)
+  let webview_url = match url::Url::parse(&url) {
+      Ok(parsed) => {
+          log::info!("[Rust] Parsed as External URL: {}", parsed);
+          WebviewUrl::External(parsed)
+      }
+      Err(e) => {
+          log::info!("[Rust] Failed to parse as External, using App URL: {}. Error: {}", url, e);
+          WebviewUrl::App(url.into())
+      }
+  };
 
-  tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
+  tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
     .inner_size(800.0, 600.0)

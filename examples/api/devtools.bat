@@ -55,15 +55,10 @@ if not errorlevel 1 (
     
     :: Clean up ALL existing mappings on port 9222
     echo Cleaning up all existing mappings on port 9222...
-    for /f "tokens=4 delims=_" %%a in ('hdc fport ls ^| findstr "tcp:!PORT!"') do (
-        set OLD_PID=%%a
-        for /f "tokens=1 delims='" %%b in ("!OLD_PID!") do set OLD_PID=%%b
-        if not "!OLD_PID!"=="" (
-            set MAPPING=tcp:!PORT! localabstract:webview_devtools_remote_!OLD_PID!
-            echo Removing mapping: !MAPPING!
-            echo [CMD] hdc fport rm !MAPPING!
-            hdc fport rm !MAPPING!
-        )
+    for /f "tokens=2,3 delims= " %%a in ('hdc fport ls ^| findstr "tcp:!PORT!"') do (
+        set MAPPING=%%a %%b
+        echo Removing mapping: !MAPPING!
+        hdc fport rm !MAPPING!
     )
     
     :: Add new mapping for the PID to port 9222
