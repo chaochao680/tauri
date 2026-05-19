@@ -28,6 +28,17 @@
 //!
 //! fn main() {
 //!     // Use `tauri::Builder::default()` to use the default runtime rather than the `MockRuntime`;
+
+fn tauri_os_name() -> &'static str {
+  #[cfg(target_env = "ohos")]
+  {
+    "ohos"
+  }
+  #[cfg(not(target_env = "ohos"))]
+  {
+    std::env::consts::OS
+  }
+}
 //!     // let app = create_app(tauri::Builder::default());
 //!     let app = create_app(mock_builder());
 //!     let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -167,7 +178,7 @@ pub fn mock_builder() -> Builder<MockRuntime> {
 
   builder.invoke_initialization_script = crate::app::InvokeInitializationScript {
     process_ipc_message_fn: crate::manager::webview::PROCESS_IPC_MESSAGE_FN,
-    os_name: std::env::consts::OS,
+    os_name: tauri_os_name(),
     fetch_channel_data_command: crate::ipc::channel::FETCH_CHANNEL_DATA_COMMAND,
     invoke_key: INVOKE_KEY,
   }

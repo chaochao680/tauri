@@ -2,6 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+fn tauri_os_name() -> &'static str {
+  #[cfg(target_env = "ohos")]
+  {
+    "ohos"
+  }
+  #[cfg(not(target_env = "ohos"))]
+  {
+    std::env::consts::OS
+  }
+}
+
 use crate::{
   image::Image,
   ipc::{
@@ -1573,7 +1584,7 @@ impl<R: Runtime> Builder<R> {
       invoke_handler: Box::new(|_| false),
       invoke_initialization_script: InvokeInitializationScript {
         process_ipc_message_fn: crate::manager::webview::PROCESS_IPC_MESSAGE_FN,
-        os_name: std::env::consts::OS,
+        os_name: tauri_os_name(),
         fetch_channel_data_command: crate::ipc::channel::FETCH_CHANNEL_DATA_COMMAND,
         invoke_key: &invoke_key.clone(),
       }

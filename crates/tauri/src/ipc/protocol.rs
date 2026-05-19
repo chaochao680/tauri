@@ -4,6 +4,9 @@
 
 use std::{borrow::Cow, sync::Arc};
 
+#[cfg(target_env = "ohos")]
+use ohos_hilog_binding::hilog_info;
+
 use crate::{
   ipc::InvokeResponseBody,
   manager::AppManager,
@@ -183,7 +186,26 @@ pub fn get<R: Runtime>(manager: Arc<AppManager<R>>) -> UriSchemeProtocolHandler 
 }
 
 fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager<R>, label: &str) {
+  #[cfg(target_env = "ohos")]
+  hilog_info!(
+    "[handle_ipc_message] called, label={}, uri={}, body={}",
+    label,
+    request.uri(),
+    request.body().len()
+  );
+  #[cfg(not(target_env = "ohos"))]
+  log::info!(
+    "[handle_ipc_message] called, label={}, uri={}, body={}",
+    label,
+    request.uri(),
+    request.body().len()
+  );
+
   if let Some(webview) = manager.get_webview(label) {
+    #[cfg(target_env = "ohos")]
+    hilog_info!("[handle_ipc_message] webview found for label {}", label);
+    #[cfg(not(target_env = "ohos"))]
+    log::info!("[handle_ipc_message] webview found for label {}", label);
     #[cfg(feature = "tracing")]
     let _span = tracing::trace_span!(
       "ipc::request",
@@ -288,11 +310,21 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
     let message = invoke_message.unwrap_or_else(|| {
       #[cfg(feature = "tracing")]
       let _span = tracing::trace_span!("ipc::request::deserialize").entered();
+      #[cfg(target_env = "ohos")]
+      hilog_info!("[handle_ipc_message] parsing message from body");
       serde_json::from_str::<Message>(request.body()).map_err(Into::into)
     });
 
+    #[cfg(target_env = "ohos")]
+    hilog_info!(
+      "[handle_ipc_message] message parsed, result is_ok={}",
+      message.is_ok()
+    );
+
     match message {
       Ok(message) => {
+        #[cfg(target_env = "ohos")]
+        hilog_info!("[handle_ipc_message] message cmd={}", message.cmd);
         let options = message.options.unwrap_or_default();
 
         let uri = request.uri().to_string();
@@ -316,9 +348,25 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         #[cfg(feature = "tracing")]
         let request_span = tracing::trace_span!("ipc::request::handle", cmd = request.cmd);
 
+        #[cfg(target_env = "ohos")]
+        hilog_info!(
+          "[handle_ipc_message] calling on_message with cmd={}",
+          request.cmd
+        );
+
         webview.on_message(
           request,
           Box::new(move |webview, cmd, response, callback, error| {
+            #[cfg(target_env = "ohos")]
+            {
+              let is_ok = matches!(response, InvokeResponse::Ok(_));
+              hilog_info!(
+                "[handle_ipc_message::response] cmd={}, response_ok={}",
+                cmd,
+                is_ok
+              );
+            }
+
             use crate::ipc::Channel;
 
             #[cfg(feature = "tracing")]

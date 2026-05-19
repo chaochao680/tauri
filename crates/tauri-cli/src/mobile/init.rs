@@ -133,8 +133,8 @@ fn exec(
   map.insert(
     "tauri-binary",
     dunce::simplified(std::path::Path::new(&binary))
-        .to_string_lossy()
-        .replace('\\', "/"),
+      .to_string_lossy()
+      .replace('\\', "/"),
   );
   map.insert("tauri-binary-args", &build_args);
   map.insert("tauri-binary-args-str", build_args.join(" "));
@@ -176,7 +176,51 @@ fn exec(
     Target::OpenHarmony => {
       let (config, _metadata) =
         super::open_harmony::get_config(&app, &tauri_config, None, &Default::default());
-      super::open_harmony::project::gen(&app, &config, (handlebars, map), skip_targets_install)?;
+
+      let detected_plugins =
+        super::open_harmony::plugins::detect_all_plugins(dirs.tauri).unwrap_or_default();
+
+      let plugin_metadata: Vec<super::open_harmony::plugins::PluginMeta> =
+        if detected_plugins.is_empty() {
+          vec![]
+        } else {
+          detected_plugins
+            .iter()
+            .filter_map(|d| {
+              match super::open_harmony::plugins::parse_plugin_meta(&d.har_path, &d.name) {
+                Ok(meta) => {
+                  if super::open_harmony::plugins::validate_plugin_meta(&meta).is_ok() {
+                    Some(meta)
+                  } else {
+                    log::warn!("Skipping plugin '{}': invalid metadata", d.name);
+                    None
+                  }
+                }
+                Err(e) => {
+                  log::warn!("Skipping plugin '{}': {}", d.name, e);
+                  None
+                }
+              }
+            })
+            .collect()
+        };
+
+      super::open_harmony::project::gen_with_plugins(
+        &app,
+        &config,
+        (handlebars, map),
+        skip_targets_install,
+        plugin_metadata.clone(),
+      )?;
+
+      if !plugin_metadata.is_empty() {
+        let project_dir = config.project_dir();
+        for plugin in &plugin_metadata {
+          super::open_harmony::plugins::copy_plugin_har(plugin, &project_dir)?;
+        }
+        super::open_harmony::plugins::update_plugin_configs(&project_dir, &plugin_metadata)?;
+      }
+
       app
     }
   };
@@ -189,7 +233,7 @@ fn exec(
   Ok(app)
 }
 
-fn handlebars(app: &App) -> (Handlebars<'static>, JsonMap) {
+pub(crate) fn handlebars(app: &App) -> (Handlebars<'static>, JsonMap) {
   let mut h = Handlebars::new();
   h.register_escape_fn(handlebars::no_escape);
 

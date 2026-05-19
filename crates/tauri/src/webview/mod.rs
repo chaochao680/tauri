@@ -4,6 +4,9 @@
 
 //! The Tauri webview types and functions.
 
+#[cfg(target_env = "ohos")]
+use ohos_hilog_binding::hilog_info;
+
 pub(crate) mod plugin;
 mod webview_window;
 
@@ -1777,7 +1780,7 @@ tauri::Builder::default()
       request.error,
     );
 
-    #[cfg(mobile)]
+    #[cfg(any(mobile, target_env = "ohos"))]
     let app_handle = self.app_handle.clone();
 
     let message = InvokeMessage::new(
@@ -1820,12 +1823,25 @@ tauri::Builder::default()
       (plugin, command)
     });
 
+    #[cfg(target_env = "ohos")]
+    hilog_info!(
+      "[on_message] plugin_command={:?}, has_app_acl_manifest={}",
+      plugin_command,
+      has_app_acl_manifest
+    );
+
     // we only check ACL on plugin commands or if the app defined its ACL manifest
     if (plugin_command.is_some() || has_app_acl_manifest)
       // TODO: Remove this special check in v3
       && request.cmd != crate::ipc::channel::FETCH_CHANNEL_DATA_COMMAND
       && invoke.acl.is_none()
     {
+      #[cfg(target_env = "ohos")]
+      hilog_info!(
+        "[on_message] ACL check failed, rejecting command {}",
+        request.cmd
+      );
+
       #[cfg(debug_assertions)]
       {
         let (key, command_name) = plugin_command
@@ -1852,18 +1868,31 @@ tauri::Builder::default()
       return;
     }
 
+    #[cfg(target_env = "ohos")]
+    hilog_info!("[on_message] ACL check passed for command {}", request.cmd);
+
     if let Some((plugin, command_name)) = plugin_command {
+      #[cfg(target_env = "ohos")]
+      hilog_info!(
+        "[on_message] dispatching to plugin {}, command {}",
+        plugin,
+        command_name
+      );
+
       invoke.message.command = command_name;
 
       let command = invoke.message.command.clone();
 
-      #[cfg(mobile)]
+      #[cfg(any(mobile, target_env = "ohos"))]
       let message = invoke.message.clone();
 
       #[allow(unused_mut)]
       let mut handled = manager.extend_api(plugin, invoke);
 
-      #[cfg(mobile)]
+      #[cfg(target_env = "ohos")]
+      hilog_info!("[on_message] extend_api returned handled={}", handled);
+
+      #[cfg(any(mobile, target_env = "ohos"))]
       {
         if !handled {
           handled = true;
@@ -1881,21 +1910,40 @@ tauri::Builder::default()
             }
           }
 
+          #[cfg(target_env = "ohos")]
+          hilog_info!(
+            "[on_message::mobile] calling run_command for plugin {}",
+            plugin
+          );
+
           let payload = message.payload.into_json();
           // initialize channels
           load_channels(&payload, &message.webview);
 
           let resolver_ = resolver.clone();
+          #[cfg(target_env = "ohos")]
+          let plugin_name = plugin.to_string();
+
           if let Err(e) = crate::plugin::mobile::run_command(
             plugin,
             &app_handle,
             heck::AsLowerCamelCase(message.command).to_string(),
             payload,
-            move |response| match response {
-              Ok(r) => resolver_.resolve(r),
-              Err(e) => resolver_.reject(e),
+            move |response| {
+              #[cfg(target_env = "ohos")]
+              hilog_info!(
+                "[on_message::mobile::response] plugin {} response is_ok={}",
+                plugin_name,
+                response.is_ok()
+              );
+              match response {
+                Ok(r) => resolver_.resolve(r),
+                Err(e) => resolver_.reject(e),
+              }
             },
           ) {
+            #[cfg(target_env = "ohos")]
+            hilog_info!("[on_message::mobile] run_command error: {}", e.to_string());
             resolver.reject(e.to_string());
             return;
           }

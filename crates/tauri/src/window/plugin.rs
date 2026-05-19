@@ -4,6 +4,17 @@
 
 //! The tauri plugin to create and manipulate windows from JS.
 
+fn tauri_os_name() -> &'static str {
+  #[cfg(target_env = "ohos")]
+  {
+    "ohos"
+  }
+  #[cfg(not(target_env = "ohos"))]
+  {
+    std::env::consts::OS
+  }
+}
+
 use crate::{
   plugin::{Builder, TauriPlugin},
   sealed::ManagerBase,
@@ -251,7 +262,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
   init_script.push_str(
     &Drag {
-      os_name: std::env::consts::OS,
+      os_name: tauri_os_name(),
     }
     .render_default(&Default::default())
     .unwrap()

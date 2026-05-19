@@ -101,6 +101,7 @@ use wry::{
 pub use tao;
 pub use tao::window::{Window, WindowBuilder as TaoWindowBuilder, WindowId as TaoWindowId};
 pub use wry;
+#[cfg(not(target_env = "ohos"))]
 pub use wry::webview_version;
 
 #[cfg(windows)]
@@ -271,6 +272,7 @@ pub struct Context<T: UserEvent> {
   next_webview_id: Arc<AtomicU32>,
   next_window_event_id: Arc<AtomicU32>,
   next_webview_event_id: Arc<AtomicU32>,
+  #[cfg(not(target_env = "ohos"))]
   webview_runtime_installed: bool,
 }
 
@@ -2977,6 +2979,7 @@ impl<T: UserEvent> Wry<T> {
       next_webview_id: Default::default(),
       next_window_event_id: Default::default(),
       next_webview_event_id: Default::default(),
+      #[cfg(not(target_env = "ohos"))]
       webview_runtime_installed: wry::webview_version().is_ok(),
     };
 
@@ -4787,6 +4790,7 @@ fn create_webview<T: UserEvent>(
   pending: PendingWebview<T, Wry<T>>,
   #[allow(unused_variables)] focused_webview: Arc<Mutex<Option<String>>>,
 ) -> Result<WebviewWrapper> {
+  #[cfg(not(target_env = "ohos"))]
   if !context.webview_runtime_installed {
     #[cfg(all(not(debug_assertions), windows))]
     dialog::error(
@@ -4974,27 +4978,27 @@ You may have it installed on another user account, but it is not available for t
             .unwrap()
             .clone();
 
-              #[cfg(desktop)]
-              wry::NewWindowResponse::Create {
-                #[cfg(target_os = "macos")]
-                webview: wry::WebViewExtMacOS::webview(&*webview).as_super().into(),
-                #[cfg(all(
-                  any(
-                    target_os = "linux",
-                    target_os = "dragonfly",
-                    target_os = "freebsd",
-                    target_os = "netbsd",
-                    target_os = "openbsd"
-                  ),
-                  not(target_env = "ohos")
-                ))]
-                webview: webview.webview(),
-                #[cfg(windows)]
-                webview: webview.webview(),
-              }
-            }
-            tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
+          #[cfg(desktop)]
+          wry::NewWindowResponse::Create {
+            #[cfg(target_os = "macos")]
+            webview: wry::WebViewExtMacOS::webview(&*webview).as_super().into(),
+            #[cfg(all(
+              any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+              ),
+              not(target_env = "ohos")
+            ))]
+            webview: webview.webview(),
+            #[cfg(windows)]
+            webview: webview.webview(),
           }
+        }
+        tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
+      }
     });
   }
 

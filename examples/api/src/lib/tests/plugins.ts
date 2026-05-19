@@ -276,8 +276,18 @@ export const pluginTests: TestCase[] = [
   },
 
   // @tauri-apps/plugin-dialog (manual)
+{
+    name: '@tauri-apps/plugin-dialog.open (single)',
+    category: 'manual',
+    async fn() {},
+  },
   {
-    name: '@tauri-apps/plugin-dialog.message',
+    name: '@tauri-apps/plugin-dialog.open (multiple)',
+    category: 'manual',
+    async fn() {},
+  },
+  {
+    name: '@tauri-apps/plugin-dialog.save',
     category: 'manual',
     async fn() {},
   },
@@ -287,12 +297,17 @@ export const pluginTests: TestCase[] = [
     async fn() {},
   },
   {
-    name: '@tauri-apps/plugin-dialog.open',
+    name: '@tauri-apps/plugin-dialog.message (info)',
     category: 'manual',
     async fn() {},
   },
   {
-    name: '@tauri-apps/plugin-dialog.save',
+    name: '@tauri-apps/plugin-dialog.message (warning)',
+    category: 'manual',
+    async fn() {},
+  },
+  {
+    name: '@tauri-apps/plugin-dialog.message (error)',
     category: 'manual',
     async fn() {},
   },
