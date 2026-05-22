@@ -33,6 +33,17 @@ impl<R: Runtime> MenuItem<R> {
     let text = text.as_ref().to_owned();
     let accelerator = accelerator.and_then(|s| s.as_ref().parse().ok());
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item = muda::MenuItem::new(text, enabled, accelerator);
+      MenuItemInner {
+        id: item.id().clone(),
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item = muda::MenuItem::new(text, enabled, accelerator);
       MenuItemInner {
@@ -69,6 +80,17 @@ impl<R: Runtime> MenuItem<R> {
     let accelerator = accelerator.and_then(|s| s.as_ref().parse().ok());
     let text = text.as_ref().to_owned();
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item = muda::MenuItem::with_id(id.clone(), text, enabled, accelerator);
+      MenuItemInner {
+        id,
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item = muda::MenuItem::with_id(id.clone(), text, enabled, accelerator);
       MenuItemInner {
@@ -93,33 +115,69 @@ impl<R: Runtime> MenuItem<R> {
 
   /// Get the text for this menu item.
   pub fn text(&self) -> crate::Result<String> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().text())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    }
   }
 
-  /// Set the text for this menu item. `text` could optionally contain
-  /// an `&` before a character to assign this character as the mnemonic
-  /// for this menu item. To display a `&` without assigning a mnemenonic, use `&&`.
+  /// Set the text for this menu item.
   pub fn set_text<S: AsRef<str>>(&self, text: S) -> crate::Result<()> {
     let text = text.as_ref().to_string();
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_text(text);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    }
   }
 
-  /// Get whether this menu item is enabled or not.
+  /// Get whether this menu item is enabled.
   pub fn is_enabled(&self) -> crate::Result<bool> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().is_enabled())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    }
   }
 
-  /// Enable or disable this menu item.
+  /// Set whether this menu item is enabled.
   pub fn set_enabled(&self, enabled: bool) -> crate::Result<()> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_enabled(enabled);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    }
   }
 
-  /// Set this menu item accelerator.
+  /// Set the accelerator for this menu item.
   pub fn set_accelerator<S: AsRef<str>>(&self, accelerator: Option<S>) -> crate::Result<()> {
     let accel = accelerator.and_then(|s| s.as_ref().parse().ok());
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().set_accelerator(accel)
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_accelerator(accel);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().set_accelerator(accel)
+      })?
+      .map_err(Into::into)
+    }
   }
 }

@@ -359,13 +359,25 @@ impl<R: Runtime> TrayIconBuilder<R> {
     // and will be accessed on the main thread
     let unsafe_builder = UnsafeSend(self.inner);
 
-    let (tx, rx) = std::sync::mpsc::channel();
-    let unsafe_tray = app_handle
-      .run_on_main_thread(move || {
-        // SAFETY: will only be accessed on main thread
-        let _ = tx.send(unsafe_builder.take().build().map(UnsafeSend));
-      })
-      .and_then(|_| rx.recv().map_err(|_| crate::Error::FailedToReceiveMessage))??;
+    #[cfg(target_env = "ohos")]
+    let unsafe_tray = {
+      // On OHOS, TrayIcon::new uses TSFN NonBlocking internally (returns immediately).
+      // We must NOT use run_on_main_thread here because it blocks Chrome_IOThread
+      // with rx.recv(), causing a deadlock when the main thread is busy processing
+      // a previous TSFN callback that needs Chrome_IOThread.
+      UnsafeSend(unsafe_builder.take().build()?)
+    };
+
+    #[cfg(not(target_env = "ohos"))]
+    let unsafe_tray = {
+      let (tx, rx) = std::sync::mpsc::channel();
+      app_handle
+        .run_on_main_thread(move || {
+          // SAFETY: will only be accessed on main thread
+          let _ = tx.send(unsafe_builder.take().build().map(UnsafeSend));
+        })
+        .and_then(|_| rx.recv().map_err(|_| crate::Error::FailedToReceiveMessage))??
+    };
 
     let icon = TrayIcon {
       id,
@@ -413,7 +425,11 @@ impl<R: Runtime> Clone for TrayIcon<R> {
 
 /// # Safety
 ///
-/// We make sure it always runs on the main thread.
+/// On non-OHOS platforms, we make sure it always runs on the main thread.
+/// On OHOS, tray operations bypass run_on_main_thread because TSFN uses
+/// NonBlocking mode and run_on_main_thread would deadlock Chrome_IOThread.
+/// This is safe because tray_icon::TrayIcon on OHOS uses TSFN internally
+/// which handles thread safety for NAPI calls.
 unsafe impl<R: Runtime> Sync for TrayIcon<R> {}
 unsafe impl<R: Runtime> Send for TrayIcon<R> {}
 
@@ -501,7 +517,14 @@ impl<R: Runtime> TrayIcon<R> {
       Some(i) => Some(i.try_into()?),
       None => None,
     };
-    run_item_main_thread!(self, |self_: Self| self_.inner.set_icon(icon))?.map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_icon(icon).map_err(Into::into)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| self_.inner.set_icon(icon))?.map_err(Into::into)
+    }
   }
 
   /// Sets a new tray menu.
@@ -510,9 +533,17 @@ impl<R: Runtime> TrayIcon<R> {
   ///
   /// - **Linux**: once a menu is set it cannot be removed so `None` has no effect
   pub fn set_menu<M: ContextMenu + 'static>(&self, menu: Option<M>) -> crate::Result<()> {
-    run_item_main_thread!(self, |self_: Self| {
-      self_.inner.set_menu(menu.map(|m| m.inner_context_owned()))
-    })
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_menu(menu.map(|m| m.inner_context_owned()));
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        self_.inner.set_menu(menu.map(|m| m.inner_context_owned()))
+      })
+    }
   }
 
   /// Sets the tooltip for this tray icon.
@@ -522,7 +553,14 @@ impl<R: Runtime> TrayIcon<R> {
   /// - **Linux:** Unsupported
   pub fn set_tooltip<S: AsRef<str>>(&self, tooltip: Option<S>) -> crate::Result<()> {
     let s = tooltip.map(|s| s.as_ref().to_string());
-    run_item_main_thread!(self, |self_: Self| self_.inner.set_tooltip(s))?.map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_tooltip(s).map_err(Into::into)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| self_.inner.set_tooltip(s))?.map_err(Into::into)
+    }
   }
 
   /// Sets the title for this tray icon.
@@ -536,13 +574,29 @@ impl<R: Runtime> TrayIcon<R> {
   ///   on the user's panel.  This may not be shown in all visualizations.
   /// - **Windows:** Unsupported
   pub fn set_title<S: AsRef<str>>(&self, title: Option<S>) -> crate::Result<()> {
-    let s = title.map(|s| s.as_ref().to_string());
-    run_item_main_thread!(self, |self_: Self| self_.inner.set_title(s))
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_title(title);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      let s = title.map(|s| s.as_ref().to_string());
+      run_item_main_thread!(self, |self_: Self| self_.inner.set_title(s))?;
+      Ok(())
+    }
   }
 
   /// Show or hide this tray icon.
   pub fn set_visible(&self, visible: bool) -> crate::Result<()> {
-    run_item_main_thread!(self, |self_: Self| self_.inner.set_visible(visible))?.map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_visible(visible).map_err(Into::into)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| self_.inner.set_visible(visible))?.map_err(Into::into)
+    }
   }
 
   /// Sets the tray icon temp dir path. **Linux only**.
@@ -586,24 +640,38 @@ impl<R: Runtime> TrayIcon<R> {
   ///
   /// - **Linux**: Unsupported, always returns `None`.
   pub fn rect(&self) -> crate::Result<Option<crate::Rect>> {
-    run_item_main_thread!(self, |self_: Self| {
-      self_.inner.rect().map(|rect| Rect {
-        position: rect.position.into(),
-        size: rect.size.into(),
+    #[cfg(target_env = "ohos")]
+    {
+      Ok(None)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        self_.inner.rect().map(|rect| Rect {
+          position: rect.position.into(),
+          size: rect.size.into(),
+        })
       })
-    })
+    }
   }
 
   /// Do something with the inner [`tray_icon::TrayIcon`] on main thread
   ///
   /// Note that `tray-icon` crate may be updated in minor releases of Tauri.
-  /// Therefore, it’s recommended to pin Tauri to at least a minor version when you’re using `with_inner_tray_icon`.
+  /// Therefore, it's recommended to pin Tauri to at least a minor version when you're using `with_inner_tray_icon`.
   pub fn with_inner_tray_icon<F, T>(&self, f: F) -> crate::Result<T>
   where
     F: FnOnce(&tray_icon::TrayIcon) -> T + Send + 'static,
     T: Send + 'static,
   {
-    run_item_main_thread!(self, |self_: Self| { f(&self_.inner) })
+    #[cfg(target_env = "ohos")]
+    {
+      Ok(f(&self.inner))
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| { f(&self_.inner) })
+    }
   }
 }
 

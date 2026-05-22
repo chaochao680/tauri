@@ -146,6 +146,100 @@ pub fn write_test_report<R: Runtime>(
   Ok(())
 }
 
+/// Clear the test report file before starting a new test run.
+#[command]
+pub fn clear_test_report<R: Runtime>(
+  #[allow(unused_variables)] app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+  #[cfg(target_env = "ohos")]
+  let dir = std::path::PathBuf::from("/data/storage/el2/base/cache");
+  #[cfg(not(target_env = "ohos"))]
+  let dir = {
+    use tauri::Manager;
+    app.path().app_cache_dir().map_err(|e| e.to_string())?
+  };
+
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let path = dir.join("test-report.md");
+
+  // Write report header with timestamp
+  let timestamp = chrono::Utc::now().to_rfc3339();
+  let header = format!(
+    "# Test Report\n\n*Generated: {}*\n\n| # | Test | Status | Duration | Error |\n|---|------|--------|----------|-------|\n",
+    timestamp
+  );
+  std::fs::write(&path, header).map_err(|e| e.to_string())?;
+
+  Ok(())
+}
+
+/// Append a single test result directly to the test-report.md file.
+/// Each call reads the existing markdown, appends the result as a table row, and writes back.
+/// This ensures the report is always up-to-date even if the app freezes later.
+#[command]
+pub fn append_test_result<R: Runtime>(
+  #[allow(unused_variables)] app: tauri::AppHandle<R>,
+  name: String,
+  status: String,
+  duration: u64,
+  error: Option<String>,
+  index: usize,
+  total: usize,
+) -> Result<(), String> {
+  #[cfg(target_env = "ohos")]
+  let dir = std::path::PathBuf::from("/data/storage/el2/base/cache");
+  #[cfg(not(target_env = "ohos"))]
+  let dir = {
+    use tauri::Manager;
+    app.path().app_cache_dir().map_err(|e| e.to_string())?
+  };
+
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let path = dir.join("test-report.md");
+
+  // Read existing report
+  let content = std::fs::read_to_string(&path).unwrap_or_default();
+
+  // If this is the first result, write header + table header
+  let mut output = if content.is_empty() || content.contains("_No tests run yet._") {
+    format!(
+      "# Test Report\n\n| # | Test | Status | Duration | Error |\n|---|------|--------|----------|-------|\n"
+    )
+  } else {
+    content
+  };
+
+  // Format status emoji
+  let status_icon = match status.as_str() {
+    "pass" => "✅",
+    "fail" => "❌",
+    "skip" => "⏭️",
+    _ => "❓",
+  };
+
+  // Format error column
+  let error_col = error.unwrap_or_default();
+
+  // Append row
+  output.push_str(&format!(
+    "| {} | {} | {} | {}ms | {} |\n",
+    index + 1,
+    name,
+    status_icon,
+    duration,
+    error_col
+  ));
+
+  // If this is the last result, append summary
+  if index + 1 == total {
+    output.push_str("\n---\n\n*Report generated at end of test run.*\n");
+  }
+
+  std::fs::write(&path, &output).map_err(|e| e.to_string())?;
+
+  Ok(())
+}
+
 static CONSOLE_LOG_BUFFER: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 #[command]

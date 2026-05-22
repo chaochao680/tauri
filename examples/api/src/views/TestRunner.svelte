@@ -6,6 +6,8 @@
   import { dpiTests } from '../lib/tests/dpi';
   import { windowDpiTests } from '../lib/tests/window-dpi';
   import { imageTests } from '../lib/tests/image';
+  import { menuTests } from '../lib/tests/menu';
+  import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
   import { appCacheDir } from '@tauri-apps/api/path';
@@ -23,7 +25,7 @@
   let focusWatchUnlisten = null;
   let focusEvents = $state([]);
 
-  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests];
+  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
 
   async function runAll() {
     running = true;
@@ -31,7 +33,17 @@
     report = null;
     onMessage('--- Test Run Started ---');
 
-    const r = await runTests(allTests, (result, index, total) => {
+    // Clear previous test report before starting
+    try {
+      await invoke('clear_test_report');
+    } catch (e) {
+      onMessage(`Failed to clear report: ${e}`);
+    }
+
+    // Skip manual tests - they require user interaction
+    const filtered = allTests.filter((t) => t.category !== 'manual');
+
+    const r = await runTests(filtered, (result, index, total) => {
       results = [...results, result];
       const icon = result.status === 'pass' ? '[PASS]' : result.status === 'fail' ? '[FAIL]' : '[SKIP]';
       const msg = `${icon} ${result.name}${result.error ? ' - ' + result.error : ''} (${result.duration}ms)`;
@@ -41,14 +53,12 @@
     report = r;
     onMessage(`--- Done: ${r.passed} passed, ${r.failed} failed, ${r.skipped} skipped ---`);
     running = false;
-
-    try {
-      await invoke('write_test_report', { report: JSON.stringify(r) });
-      onMessage('Report saved to device.');
-    } catch (e) {
-      onMessage(`Failed to save report: ${e}`);
-    }
   }
+
+  // Auto-run on first mount
+  onMount(() => {
+    runAll();
+  });
 
   async function runCategory(category) {
     running = true;
@@ -67,11 +77,6 @@
     onMessage(`--- Done: ${r.passed} passed, ${r.failed} failed, ${r.skipped} skipped ---`);
     running = false;
   }
-
-  // Auto-run on first mount so opening the Tests view kicks off tests immediately.
-  onMount(() => {
-    runAll();
-  });
 
   async function wrapManual(name, fn) {
     const start = Date.now();
@@ -170,6 +175,57 @@ Expected behavior:
       onMessage(manualResult);
     });
   }
+
+  // ─── Tray Manual Tests ───
+  async function manualTrayIconShow() {
+    await wrapManual('trayIconShow', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+      console.log('[Manual Tray] Creating tray icon...');
+      const tray = await TrayIcon.new({ icon: TEST_ICON, tooltip: 'Test Tray Icon' });
+      console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
+      manualResult = `Tray icon created with id: "${tray.id}".\nCheck the status bar (bottom of screen) for a blue square icon.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualTrayEvent() {
+    await wrapManual('trayEvent', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+      console.log('[Manual Tray] Creating tray with event listener...');
+      const tray = await TrayIcon.new({
+        icon: TEST_ICON,
+        tooltip: 'Click me!',
+        action: (event) => {
+          const data = JSON.stringify(event);
+          console.log(`[Manual Tray] Event received: ${data}`);
+          manualResult = `Tray event received:\n${data}`;
+          onMessage(manualResult);
+        }
+      });
+      console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
+      manualResult = `Tray created with id: "${tray.id}".\nClick the status bar icon to trigger events.\nResult will appear below.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualTrayMenu() {
+    await wrapManual('trayMenu', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const { Menu, MenuItem } = await import('@tauri-apps/api/menu');
+      const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+      console.log('[Manual Tray] Creating tray with menu...');
+      const item = await MenuItem.new({ text: 'Test Menu Item' });
+      console.log('[Manual Tray] Menu item created');
+      const menu = await Menu.new({ items: [item] });
+      console.log('[Manual Tray] Menu created');
+      const tray = await TrayIcon.new({ icon: TEST_ICON, menu, tooltip: 'Right-click me' });
+      console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
+      manualResult = `Tray created with menu.\nRight-click the status bar icon to see the context menu.\nClick the menu item to verify event trigger.`;
+      onMessage(manualResult);
+    });
+  }
 </script>
 
 <div class="flex flex-col gap-2">
@@ -228,6 +284,14 @@ Expected behavior:
       <button class="btn" onclick={manualMonitor}>currentMonitor</button>
       <button class="btn" onclick={manualAppCacheDir}>appCacheDir</button>
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Tray Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualTrayIconShow}>Tray Icon Show (check system tray)</button>
+        <button class="btn" onclick={manualTrayEvent}>Tray Event (click icon to trigger)</button>
+        <button class="btn" onclick={manualTrayMenu}>Tray Menu (right-click to see menu)</button>
+      </div>
     </div>
     {#if manualResult}
       <div class="mt-2 p-2 rd-1 bg-black/10 dark:bg-white/10 text-xs font-mono break-all">

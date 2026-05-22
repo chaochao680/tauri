@@ -16,6 +16,7 @@ SO_FILE="$PROJECT_ROOT/target/aarch64-unknown-linux-ohos/release/libapi_lib.so"
 echo "=== Tauri OpenHarmony Build ==="
 echo "DEVECO_HOME=$DEVECO_HOME"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
+echo "TAURI_OHOS_DEVICE_TYPE=$TAURI_OHOS_DEVICE_TYPE"
 echo ""
 
 # ─── 设置 Windows 格式环境变量 ───
@@ -53,9 +54,9 @@ export VITE_AUTOTEST="${VITE_AUTOTEST:-false}"
 
 # ─── Step 4: Rust 编译 ───
 echo ""
-echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release)..."
+echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release, device_type=$TAURI_OHOS_DEVICE_TYPE)..."
 rm -f "$SO_FILE"
-(cd "$SRC_TAURI" && cargo build --target aarch64-unknown-linux-ohos --release --features prod)
+(cd "$SRC_TAURI" && TAURI_OHOS_DEVICE_TYPE="$TAURI_OHOS_DEVICE_TYPE" cargo build --target aarch64-unknown-linux-ohos --release --features prod)
 
 if [ ! -f "$SO_FILE" ]; then
     echo "ERROR: Rust compilation failed - .so not found"

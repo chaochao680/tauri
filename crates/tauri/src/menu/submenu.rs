@@ -39,41 +39,53 @@ impl<R: Runtime> ContextMenuBase for Submenu<R> {
     position: Option<P>,
   ) -> crate::Result<()> {
     let position = position.map(Into::into);
-    run_item_main_thread!(self, move |self_: Self| {
-      #[cfg(target_os = "macos")]
-      if let Ok(view) = window.ns_view() {
-        unsafe {
+    #[cfg(target_env = "ohos")]
+    {
+      let (x, y) = match position {
+        Some(crate::Position::Logical(p)) => (Some(p.x), Some(p.y)),
+        Some(crate::Position::Physical(p)) => (Some(p.x as f64), Some(p.y as f64)),
+        None => (None, None),
+      };
+      (*self.0).as_ref().popup(x, y).map_err(Into::into)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, move |self_: Self| {
+        #[cfg(target_os = "macos")]
+        if let Ok(view) = window.ns_view() {
+          unsafe {
+            self_
+              .inner()
+              .show_context_menu_for_nsview(view as _, position);
+          }
+        }
+
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
+        ))]
+        if let Ok(w) = window.gtk_window() {
           self_
             .inner()
-            .show_context_menu_for_nsview(view as _, position);
+            .show_context_menu_for_gtk_window(w.as_ref(), position);
         }
-      }
 
-      #[cfg(all(
-        any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
-        ),
-        not(target_env = "ohos")
-      ))]
-      if let Ok(w) = window.gtk_window() {
-        self_
-          .inner()
-          .show_context_menu_for_gtk_window(w.as_ref(), position);
-      }
-
-      #[cfg(windows)]
-      if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-          self_
-            .inner()
-            .show_context_menu_for_hwnd(hwnd.0 as _, position);
+        #[cfg(windows)]
+        if let Ok(hwnd) = window.hwnd() {
+          unsafe {
+            self_
+              .inner()
+              .show_context_menu_for_hwnd(hwnd.0 as _, position);
+          }
         }
-      }
-    })
+      })
+    }
   }
 
   fn inner_context(&self) -> &dyn muda::ContextMenu {
@@ -97,6 +109,17 @@ impl<R: Runtime> Submenu<R> {
 
     let text = text.as_ref().to_owned();
 
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::new(text, enabled);
+      SubmenuInner {
+        id: submenu.id().clone(),
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::new(text, enabled);
       SubmenuInner {
@@ -120,6 +143,21 @@ impl<R: Runtime> Submenu<R> {
     let app_handle = handle.clone();
     let text = text.as_ref().to_owned();
     let icon_data = icon.map(|i| (i.rgba().to_vec(), i.width(), i.height()));
+    
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::new(text, enabled);
+      if let Some((rgba, width, height)) = icon_data.clone() {
+        submenu.set_icon(Some(MudaIcon::from_rgba(rgba, width, height).unwrap()));
+      }
+      SubmenuInner {
+        id: submenu.id().clone(),
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::new(text, enabled);
       if let Some((rgba, width, height)) = icon_data.clone() {
@@ -131,6 +169,7 @@ impl<R: Runtime> Submenu<R> {
         app_handle,
       }
     })?;
+    
     Ok(Self(Arc::new(submenu)))
   }
 
@@ -144,6 +183,21 @@ impl<R: Runtime> Submenu<R> {
     let handle = manager.app_handle();
     let app_handle = handle.clone();
     let text = text.as_ref().to_owned();
+    
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::new(text, enabled);
+      if let Some(icon) = icon {
+        submenu.set_native_icon(Some(icon.into()));
+      }
+      SubmenuInner {
+        id: submenu.id().clone(),
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::new(text, enabled);
       if let Some(icon) = icon {
@@ -155,6 +209,7 @@ impl<R: Runtime> Submenu<R> {
         app_handle,
       }
     })?;
+    
     Ok(Self(Arc::new(submenu)))
   }
 
@@ -171,6 +226,17 @@ impl<R: Runtime> Submenu<R> {
     let id = id.into();
     let text = text.as_ref().to_owned();
 
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
+      SubmenuInner {
+        id,
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
       SubmenuInner {
@@ -196,6 +262,21 @@ impl<R: Runtime> Submenu<R> {
     let id = id.into();
     let text = text.as_ref().to_owned();
     let icon_data = icon.map(|i| (i.rgba().to_vec(), i.width(), i.height()));
+    
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
+      if let Some((rgba, width, height)) = icon_data.clone() {
+        submenu.set_icon(Some(MudaIcon::from_rgba(rgba, width, height).unwrap()));
+      }
+      SubmenuInner {
+        id,
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
       if let Some((rgba, width, height)) = icon_data.clone() {
@@ -207,6 +288,7 @@ impl<R: Runtime> Submenu<R> {
         app_handle,
       }
     })?;
+    
     Ok(Self(Arc::new(submenu)))
   }
 
@@ -222,6 +304,21 @@ impl<R: Runtime> Submenu<R> {
     let app_handle = handle.clone();
     let id = id.into();
     let text = text.as_ref().to_owned();
+    
+    #[cfg(target_env = "ohos")]
+    let submenu = {
+      let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
+      if let Some(icon) = icon {
+        submenu.set_native_icon(Some(icon.into()));
+      }
+      SubmenuInner {
+        id,
+        inner: Some(submenu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let submenu = run_main_thread!(handle, || {
       let submenu = muda::Submenu::with_id(id.clone(), text, enabled);
       if let Some(icon) = icon {
@@ -233,6 +330,7 @@ impl<R: Runtime> Submenu<R> {
         app_handle,
       }
     })?;
+    
     Ok(Self(Arc::new(submenu)))
   }
 
@@ -279,10 +377,18 @@ impl<R: Runtime> Submenu<R> {
   /// Add a menu item to the end of this submenu.
   pub fn append(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().append(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().append(kind.inner().inner_muda())?;
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().append(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Add menu items to the end of this submenu. It calls [`Submenu::append`] in a loop internally.
@@ -297,10 +403,18 @@ impl<R: Runtime> Submenu<R> {
   /// Add a menu item to the beginning of this submenu.
   pub fn prepend(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().prepend(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().prepend(kind.inner().inner_muda())?;
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().prepend(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Add menu items to the beginning of this submenu. It calls [`Submenu::insert_items`] with position of `0` internally.
@@ -311,12 +425,22 @@ impl<R: Runtime> Submenu<R> {
   /// Insert a menu item at the specified `position` in this submenu.
   pub fn insert(&self, item: &dyn IsMenuItem<R>, position: usize) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0)
         .as_ref()
-        .insert(kind.inner().inner_muda(), position)
-    })?
-    .map_err(Into::into)
+        .insert(kind.inner().inner_muda(), position)?;
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0)
+          .as_ref()
+          .insert(kind.inner().inner_muda(), position)
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Insert menu items at the specified `position` in this submenu.
@@ -331,20 +455,38 @@ impl<R: Runtime> Submenu<R> {
   /// Remove a menu item from this submenu.
   pub fn remove(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().remove(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().remove(kind.inner().inner_muda())?;
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().remove(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Remove the menu item at the specified position from this submenu and returns it.
   pub fn remove_at(&self, position: usize) -> crate::Result<Option<MenuItemKind<R>>> {
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0)
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0)
         .as_ref()
         .remove_at(position)
-        .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
-    })
+        .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i)))
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0)
+          .as_ref()
+          .remove_at(position)
+          .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
+      })
+    }
   }
 
   /// Retrieves the menu item matching the given identifier.
@@ -362,37 +504,79 @@ impl<R: Runtime> Submenu<R> {
 
   /// Returns a list of menu items that has been added to this submenu.
   pub fn items(&self) -> crate::Result<Vec<MenuItemKind<R>>> {
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0)
-        .as_ref()
-        .items()
-        .into_iter()
-        .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
-        .collect::<Vec<_>>()
-    })
+    #[cfg(target_env = "ohos")]
+    {
+      Ok(
+        (*self.0)
+          .as_ref()
+          .items()
+          .into_iter()
+          .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i))
+          .collect::<Vec<_>>(),
+      )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0)
+          .as_ref()
+          .items()
+          .into_iter()
+          .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
+          .collect::<Vec<_>>()
+      })
+    }
   }
 
   /// Get the text for this submenu.
   pub fn text(&self) -> crate::Result<String> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().text())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    }
   }
 
-  /// Set the text for this submenu. `text` could optionally contain
-  /// an `&` before a character to assign this character as the mnemonic
-  /// for this submenu. To display a `&` without assigning a mnemonic, use `&&`.
+  /// Set the text for this submenu.
   pub fn set_text<S: AsRef<str>>(&self, text: S) -> crate::Result<()> {
     let text = text.as_ref().to_string();
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_text(text);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    }
   }
 
-  /// Get whether this submenu is enabled or not.
+  /// Get whether this submenu is enabled.
   pub fn is_enabled(&self) -> crate::Result<bool> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().is_enabled())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    }
   }
 
-  /// Enable or disable this submenu.
+  /// Set whether this submenu is enabled.
   pub fn set_enabled(&self, enabled: bool) -> crate::Result<()> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_enabled(enabled);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    }
   }
 
   /// Set this submenu as the Window menu for the application on macOS.
@@ -427,7 +611,15 @@ impl<R: Runtime> Submenu<R> {
       Some(i) => Some(i.try_into()?),
       None => None,
     };
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_icon(icon))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_icon(icon);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_icon(icon))
+    }
   }
 
   /// Change this submenu icon to a native image or remove it.

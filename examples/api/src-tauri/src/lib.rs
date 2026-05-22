@@ -44,7 +44,7 @@ pub struct AppMenu<R: Runtime>(pub std::sync::Mutex<Option<tauri::menu::Menu<R>>
 #[cfg(all(desktop, not(test)))]
 pub struct PopupMenu<R: Runtime>(tauri::menu::Menu<R>);
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg_attr(any(mobile, target_env = "ohos"), tauri::mobile_entry_point)]
 pub fn run() {
   #[cfg(target_env = "ohos")]
   std::panic::set_hook(Box::new(|info| {
@@ -93,6 +93,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     // tauri_plugin_log 已初始化 log facade，不再手动调用 ohos_log::init()
     log::info!("OHOS log initialized via tauri_plugin_log");
   };
+
 
   #[allow(unused_mut)]
   let mut builder = builder
@@ -242,19 +243,25 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
             let number = created_window_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-            let builder = WebviewWindowBuilder::new(
-              &app_,
-              format!("new-{number}"),
-              tauri::WebviewUrl::External("about:blank".parse().unwrap()),
-            )
-            .window_features(features)
-            .on_document_title_changed(|window, title| {
-              window.set_title(&title).unwrap();
-            })
-            .title(url.as_str());
+            #[cfg(not(target_env = "ohos"))]
+            {
+              let builder = WebviewWindowBuilder::new(
+                &app_,
+                format!("new-{number}"),
+                tauri::WebviewUrl::External("about:blank".parse().unwrap()),
+              )
+              .window_features(features)
+              .on_document_title_changed(|window, title| {
+                window.set_title(&title).unwrap();
+              })
+              .title(url.as_str());
 
-            let window = builder.build().unwrap();
-            tauri::webview::NewWindowResponse::Create { window }
+              let window = builder.build().unwrap();
+              tauri::webview::NewWindowResponse::Create { window }
+            }
+
+            #[cfg(target_env = "ohos")]
+            tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
           });
       }
 
@@ -369,6 +376,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::echo,
       cmd::spam,
       cmd::write_test_report,
+      cmd::clear_test_report,
+      cmd::append_test_result,
       cmd::console_log,
       cmd::flush_console_log,
       cmd::clear_console_log,

@@ -1,6 +1,7 @@
 #!/bin/bash
 # OHOS Rust 单元测试一键脚本
 # 交叉编译 → 推送设备 → 运行 → 输出结果
+# 支持 workspace 内 crate 和独立 crate（openharmony-ability, muda, tauri 等）
 
 set -e
 
@@ -11,9 +12,11 @@ source "$SCRIPT_DIR/../../ohos-build/scripts/env.sh"
 # ─── 参数 ───
 PACKAGE="${PACKAGE:-tauri}"
 TEST_FILTER="${TEST_FILTER:-}"       # 可选: 只跑匹配的测试 (e.g. "path::ohos")
+FEATURES="${FEATURES:-}"             # 可选: 启用的 features (e.g. "menu,webview")
 DEVICE_SN="${DEVICE_SN:-}"
 DEVICE_DIR="${DEVICE_DIR:-/data/local/tmp}"
 TARGET="aarch64-unknown-linux-ohos"
+DEVICE_TYPE="${TAURI_OHOS_DEVICE_TYPE:-mobile}"
 
 # 位置参数：第一个为 TEST_FILTER
 if [ -n "$1" ] && [[ "$1" != -* ]]; then
@@ -26,25 +29,100 @@ if [ -n "$DEVICE_SN" ]; then
     HDC_ARGS="-t $DEVICE_SN"
 fi
 
+# ─── 自动检测 WORKDIR ───
+# 根据 PACKAGE 名称动态扫描 Cargo.toml 查找对应的 workspace 根目录
+detect_workdir() {
+    local pkg="$1"
+    local repo_root="$(cd "$PROJECT_ROOT/.." && pwd)"
+
+    # 候选目录：PROJECT_ROOT 本身 + REPO_ROOT 下所有一级子目录
+    local candidates=("$PROJECT_ROOT")
+    for dir in "$repo_root"/*/; do
+        [ -d "$dir" ] && candidates+=("$dir")
+    done
+
+    for candidate in "${candidates[@]}"; do
+        local cargo_toml="$candidate/Cargo.toml"
+        [ ! -f "$cargo_toml" ] && continue
+
+        # 检查是否是 workspace
+        if grep -q '^\[workspace\]' "$cargo_toml" 2>/dev/null; then
+            # 提取 members 数组内容（支持单行和多行格式）
+            local members_str
+            members_str=$(sed -n '/^\[workspace\]/,/^\[/p' "$cargo_toml" | tr '\n' ' ' | sed 's/.*members\s*=\s*\[\s*\(.*\)\].*/\1/' | tr ',' '\n' | sed 's/["'\'' ]//g')
+
+            for member in $members_str; do
+                [ -z "$member" ] && continue
+                if [[ "$member" == *"*"* ]]; then
+                    # 通配符模式：展开匹配
+                    local member_dir
+                    member_dir=$(dirname "$candidate/$member")
+                    for actual_dir in "$member_dir"/*/; do
+                        [ ! -d "$actual_dir" ] && continue
+                        if [ -f "${actual_dir}Cargo.toml" ] && grep -q "name = \"$pkg\"" "${actual_dir}Cargo.toml" 2>/dev/null; then
+                            echo "$candidate"
+                            return 0
+                        fi
+                    done
+                else
+                    if [ -f "$candidate/$member/Cargo.toml" ] && grep -q "name = \"$pkg\"" "$candidate/$member/Cargo.toml" 2>/dev/null; then
+                        echo "$candidate"
+                        return 0
+                    fi
+                fi
+            done
+        else
+            # 非 workspace：直接检查 package name
+            if grep -q "name = \"$pkg\"" "$cargo_toml" 2>/dev/null; then
+                echo "$candidate"
+                return 0
+            fi
+        fi
+    done
+
+    # 回退到 PROJECT_ROOT
+    echo "$PROJECT_ROOT"
+}
+
+WORKDIR=$(detect_workdir "$PACKAGE")
+
 echo "=== OHOS Rust UT Runner ==="
 echo "Package:       $PACKAGE"
+echo "Features:      ${FEATURES:-<default>}"
 echo "Test filter:   ${TEST_FILTER:-<all>}"
+echo "Device type:   $DEVICE_TYPE"
 echo "Target:        $TARGET"
 echo "Device:        ${DEVICE_SN:-auto}"
+echo "Working dir:   $WORKDIR"
 echo ""
 
 # ─── Step 1: 交叉编译测试二进制 ───
 echo ">>> Step 1: Cross-compiling test binary..."
-cd "$PROJECT_ROOT"
+cd "$WORKDIR"
 
-# --no-run 只编译不执行；--message-format=json 便于解析产物路径
-COMPILE_OUTPUT=$(cargo test \
-    --target "$TARGET" \
-    -p "$PACKAGE" \
-    --lib \
-    ${TEST_FILTER:+$TEST_FILTER} \
-    --no-run \
-    --message-format=json 2>&1 || true)
+# 检查是否是 workspace（有 Cargo.toml 且包含 [workspace]）
+IS_WORKSPACE=false
+if grep -q '^\[workspace\]' Cargo.toml 2>/dev/null; then
+    IS_WORKSPACE=true
+fi
+
+# 构建 cargo test 命令
+# 注意：编译阶段不需要 TEST_FILTER，filter 只在设备端运行时使用
+CARGO_CMD="TAURI_OHOS_DEVICE_TYPE=$DEVICE_TYPE cargo test"
+CARGO_CMD="$CARGO_CMD --target $TARGET"
+
+if [ "$IS_WORKSPACE" = true ]; then
+    # workspace 模式：使用 -p 指定包
+    CARGO_CMD="$CARGO_CMD -p $PACKAGE"
+fi
+
+CARGO_CMD="$CARGO_CMD --lib --no-run --message-format=json"
+if [ -n "$FEATURES" ]; then
+    CARGO_CMD="$CARGO_CMD --features $FEATURES"
+fi
+
+# 执行编译
+COMPILE_OUTPUT=$(eval "$CARGO_CMD" 2>&1 || true)
 
 # 解析出 executable 路径（最后一个 profile.test=true 的 artifact）
 # 注意：不能用 python - <<HEREDOC，heredoc 会占用 stdin，导致 cargo 输出读不到

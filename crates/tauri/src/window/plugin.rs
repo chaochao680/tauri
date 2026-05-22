@@ -104,7 +104,7 @@ mod commands {
   setter!(set_enabled, bool);
 }
 
-#[cfg(any(desktop, target_env = "ohos"))]
+#[cfg(desktop)]
 mod desktop_commands {
   use super::*;
   use crate::{command, Monitor};
@@ -299,9 +299,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::set_background_color,
       commands::set_theme,
 
-      #[cfg(any(desktop, target_env = "ohos"))] desktop_commands::current_monitor,
-      #[cfg(any(desktop, target_env = "ohos"))] desktop_commands::primary_monitor,
-      #[cfg(any(desktop, target_env = "ohos"))] desktop_commands::available_monitors,
+      #[cfg(desktop)] desktop_commands::current_monitor,
+      #[cfg(desktop)] desktop_commands::primary_monitor,
+      #[cfg(desktop)] desktop_commands::available_monitors,
 
       #[cfg(desktop)] desktop_only_commands::is_fullscreen,
       #[cfg(desktop)] desktop_only_commands::is_minimized,

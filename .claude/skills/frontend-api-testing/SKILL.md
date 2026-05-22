@@ -100,7 +100,7 @@ import { currentMonitor } from '@tauri-apps/api/window';
 
 ### Console Log 自动捕获
 
-手动测试结果会自动保存到 `console-log.txt`（与 `test-report.json` 同目录），供 agent 自动拉取分析。
+手动测试结果会自动保存到 `console-log.txt`（与 `test-report.md` 同目录），供 agent 自动拉取分析。
 
 **拉取命令：**
 ```powershell
@@ -201,21 +201,34 @@ cargo tauri dev
 
 ## 测试报告
 
-```json
-{
-  "timestamp": "2026-05-13T01:50:30Z",
-  "total": 33,
-  "passed": 20,
-  "failed": 5,
-  "skipped": 8,
-  "results": [
-    { "name": "@tauri-apps/api/core.invoke", "status": "pass", "duration": 14 },
-    { "name": "@tauri-apps/plugin-fs.mkdir", "status": "fail", "error": "..." }
-  ]
-}
+报告以 Markdown 表格格式写入 `test-report.md`，每个用例执行完后自动追加：
+
+```markdown
+# Test Report
+
+*Generated: 2026-05-21T04:41:42.577002500+00:00*
+
+| # | Test | Status | Duration | Error |
+|---|------|--------|----------|-------|
+| 1 | @tauri-apps/api/app.getVersion | ✅ | 10ms |  |
+| 2 | @tauri-apps/api/core.invoke | ✅ | 13ms |  |
+| 3 | @tauri-apps/api/core.Channel | ❌ | 16ms | expected 1000 messages, got 66 |
+| 4 | @tauri-apps/plugin-fs.mkdir | ⏭️ | 0ms | skipped |
 ```
 
-Windows：Console 面板实时输出；ohos：写入设备 `test-report.json`。
+状态图标：`✅` = pass, `❌` = fail, `⏭️` = skip
+
+Windows：Console 面板实时输出；ohos：写入设备 `test-report.md`。
+
+### ohos 拉取报告
+
+```bash
+# 检查报告是否写完
+hdc shell "wc -l /data/app/el2/100/base/com.tauri.api/cache/test-report.md"
+
+# 读取报告内容
+hdc shell "cat /data/app/el2/100/base/com.tauri.api/cache/test-report.md"
+```
 
 ## 常见问题
 

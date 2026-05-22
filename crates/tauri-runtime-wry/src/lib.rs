@@ -4939,7 +4939,7 @@ You may have it installed on another user account, but it is not available for t
   }
 
   if let Some(new_window_handler) = pending.new_window_handler {
-    #[cfg(desktop)]
+    #[cfg(all(desktop, not(target_env = "ohos")))]
     let context = context.clone();
     webview_builder = webview_builder.with_new_window_req_handler(move |url, features| {
       let Ok(url) = url.parse() else {
@@ -4951,7 +4951,7 @@ You may have it installed on another user account, but it is not available for t
           features.size,
           features.position,
           tauri_runtime::webview::NewWindowOpener {
-            #[cfg(desktop)]
+            #[cfg(all(desktop, not(target_env = "ohos")))]
             webview: features.opener.webview,
             #[cfg(windows)]
             environment: features.opener.environment,
@@ -4962,7 +4962,7 @@ You may have it installed on another user account, but it is not available for t
       );
       match response {
         tauri_runtime::webview::NewWindowResponse::Allow => wry::NewWindowResponse::Allow,
-        #[cfg(desktop)]
+        #[cfg(all(desktop, not(target_env = "ohos")))]
         tauri_runtime::webview::NewWindowResponse::Create { window_id } => {
           let windows = &context.main_thread.windows.0;
           let webview = windows
@@ -4974,7 +4974,7 @@ You may have it installed on another user account, but it is not available for t
             .unwrap()
             .clone();
 
-              #[cfg(desktop)]
+              #[cfg(all(desktop, not(target_env = "ohos")))]
               wry::NewWindowResponse::Create {
                 #[cfg(target_os = "macos")]
                 webview: wry::WebViewExtMacOS::webview(&*webview).as_super().into(),
