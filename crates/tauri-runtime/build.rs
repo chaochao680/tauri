@@ -14,7 +14,15 @@ fn alias(alias: &str, has_feature: bool) {
 fn main() {
   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
   let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+
+  let mobile = if target_env == "ohos" {
+    let device_type = std::env::var("TAURI_OHOS_DEVICE_TYPE")
+      .unwrap_or_else(|_| "mobile".to_string());
+    device_type != "desktop"
+  } else {
+    target_os == "ios" || target_os == "android"
+  };
+
   alias("desktop", !mobile);
   alias("mobile", mobile);
 }

@@ -1,0 +1,2 @@
+1. 编译的时候使用git bash而不是wsl bash
+2. ohos可能有不同的产品形态，通过TAURI_OHOS_DEVICE_TYPE配置后可能会mobile或者desktop，而ohos这个feature本身用于所有设备形态通用的东西。所以说一个功能如果被desktop隔离，ohos只要配置TAURI_OHOS_DEVICE_TYPE=desktop就可以编译到。不要滥用ohos cfg隔离，因为ohos是所有设备形态通用的cfg

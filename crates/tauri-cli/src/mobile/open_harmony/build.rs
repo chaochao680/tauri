@@ -235,7 +235,7 @@ fn run_build(
   };
   let handle = write_options(&tauri_config, cli_options)?;
 
-  inject_resources(config, &*tauri_config)?;
+  inject_resources(config, &tauri_config)?;
 
   let hap_outputs = hap::build(config, env, noise_level, profile).context("failed to build hap")?;
 

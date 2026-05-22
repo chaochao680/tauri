@@ -1343,12 +1343,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu.inner().remove_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu.inner().remove_for_gtk_window(&gtk_window);
@@ -1375,12 +1378,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu_.inner().hide_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu_.inner().hide_for_gtk_window(&gtk_window);
@@ -1403,12 +1409,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu_.inner().show_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu_.inner().show_for_gtk_window(&gtk_window);
@@ -1432,12 +1441,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = tx.send(unsafe { menu_.inner().is_visible_on_hwnd(hwnd.0 as _) });
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = tx.send(menu_.inner().is_visible_on_gtk_window(&gtk_window));

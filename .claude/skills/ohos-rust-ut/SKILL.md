@@ -1,11 +1,29 @@
 ---
 name: ohos-rust-ut
-description: 在 OpenHarmony 设备上交叉编译并运行 Rust 单元测试。使用场景：(1) 为 ohos target 特有代码（#[cfg(target_env = "ohos")]）编写和验证单元测试，(2) 宿主机无法编译的 OHOS 平台逻辑需要 UT 覆盖，(3) 排查 ohos 目标的编译错误，(4) CI 中加入 ohos target 测试环节。
+description: 在 OpenHarmony 设备上交叉编译并运行 Rust 单元测试。支持 mobile/desktop 两种设备类型。使用场景：(1) 为 ohos target 特有代码（#[cfg(target_env = "ohos")]）编写和验证单元测试，(2) 宿主机无法编译的 OHOS 平台逻辑需要 UT 覆盖，(3) 排查 ohos 目标的编译错误，(4) CI 中加入 ohos target 测试环节。
 ---
 
 # ohos-rust-ut
 
 在鸿蒙设备上运行 Rust `#[cfg(test)]` 单元测试。用于覆盖 `#[cfg(target_env = "ohos")]` 门控的代码——这些代码在 Windows/Linux/macOS 宿主机上编译不到。
+
+## 设备类型（TAURI_OHOS_DEVICE_TYPE）
+
+OpenHarmony 设备分为多种类型，通过 `TAURI_OHOS_DEVICE_TYPE` 环境变量控制编译模式：
+
+| 值 | 说明 | 编译特性 |
+|---|------|---------|
+| `mobile` | 手机/平板（默认） | `cfg(mobile)` 生效 |
+| `desktop` | PC/桌面设备 | `cfg(desktop)` 生效 |
+
+设置方式：
+```bash
+# mobile 模式（默认）
+export TAURI_OHOS_DEVICE_TYPE=mobile
+
+# desktop 模式
+export TAURI_OHOS_DEVICE_TYPE=desktop
+```
 
 ## 环境要求
 
@@ -20,17 +38,48 @@ description: 在 OpenHarmony 设备上交叉编译并运行 Rust 单元测试。
 ## 一键运行
 
 ```bash
-# 跑某个 crate 的所有测试
+# 跑 tauri crate 的所有测试（默认 mobile 模式）
 bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
 
-# 用测试名过滤（推荐，测试二进制很大，过滤后更快）
-bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh path::ohos
+# 跑 openharmony-ability crate 的所有测试（含 menu feature）
+PACKAGE=openharmony-ability FEATURES=menu bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# 跑 muda crate 的所有测试
+PACKAGE=muda bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# desktop 模式 + 测试过滤
+TAURI_OHOS_DEVICE_TYPE=desktop PACKAGE=openharmony-ability FEATURES=menu bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh menu::
 
 # 指定设备
 DEVICE_SN=3QC0124C03000579 bash .../run-ut.sh path::ohos
+```
 
-# 指定 crate
-PACKAGE=tauri bash .../run-ut.sh path::ohos
+### 自动检测规则
+
+脚本会动态扫描 `REPO_ROOT` 下所有包含 `[workspace]` 的 `Cargo.toml`，自动匹配 `PACKAGE` 名称：
+
+1. 检查 workspace 的 `members` 列表中是否包含目标 package
+2. 检查 `crates/*` 等通配符模式下的子 crate
+3. 检查非 workspace 的单包 crate
+
+无需硬编码任何 package 名称，新增 crate 时脚本自动适配。
+
+### 独立 crate（muda、tray-icon 等）
+
+脚本会自动扫描 `D:/workspace/tauri/` 下所有子目录的 `Cargo.toml`，按 `PACKAGE` 名称匹配，无需手动指定路径。
+
+```bash
+# muda
+PACKAGE=muda bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# tray-icon
+PACKAGE=tray-icon bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# desktop 模式
+PACKAGE=tray-icon TAURI_OHOS_DEVICE_TYPE=desktop bash .../run-ut.sh
+
+# 测试过滤
+PACKAGE=muda bash .../run-ut.sh menu::tests
 ```
 
 ## 工作流程
@@ -107,14 +156,34 @@ mod tests {
 
 新增 ohos 特有 UT 时，**不需要**再改其他文件，只需在对应 `ohos.rs` 里加 `#[cfg(test)]` 模块。
 
+## Desktop 模式测试
+
+当 `TAURI_OHOS_DEVICE_TYPE=desktop` 时，`cfg(desktop)` 生效，`cfg(mobile)` 不生效。
+这意味着：
+- 可以测试 `#[cfg(all(target_env = "ohos", desktop))]` 门控的代码
+- `#[cfg(mobile)]` 门控的代码不会被编译
+
+**注意**：desktop 模式下，`supports_multiple_windows` 等桌面特有 API 会被排除（因为 ohos 不支持真正的桌面窗口管理）。
+
 ## 脚本参数
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PACKAGE` | `tauri` | cargo 包名 |
-| `TEST_FILTER` | `""` | 测试名过滤（位置参数 $1 亦可） |
+| `FEATURES` | `""` | 启用的 features (e.g. "menu,webview") |
 | `DEVICE_SN` | 空（自动） | 设备 SN，多设备时指定 |
 | `DEVICE_DIR` | `/data/local/tmp` | 设备上二进制临时目录 |
+| `TAURI_OHOS_DEVICE_TYPE` | `mobile` | 设备类型：`mobile` 或 `desktop` |
+
+### 自动检测逻辑
+
+脚本根据 `PACKAGE` 名称自动扫描 `Cargo.toml` 文件，动态查找对应的 workspace 根目录：
+
+1. 扫描 `REPO_ROOT` 下所有包含 `[workspace]` 的 `Cargo.toml`
+2. 检查 `members` 列表和 `crates/*` 通配符模式
+3. 匹配到后自动设置工作目录
+
+**无需手动配置**，新增 crate 时脚本自动适配。
 
 ## 输出示例
 
@@ -122,33 +191,14 @@ mod tests {
 === OHOS Rust UT Runner ===
 Package:       tauri
 Test filter:   path::ohos
+Device type:   desktop
 Target:        aarch64-unknown-linux-ohos
 Device:        auto
+Working dir:   /d/workspace/tauri/tauri
 
 >>> Step 1: Cross-compiling test binary...
     Binary: target/aarch64-unknown-linux-ohos/debug/deps/tauri-0d63b635557f5650
     Size:   123 MB
-
->>> Step 2: Pushing to device...
-FileTransfer finish, Size:129653696, File count = 1, time:7198ms
-
->>> Step 3: Running on device...
-
-running 9 tests
-test path::ohos::tests::base_path_returns_error_when_not_initialized ... ok
-test path::ohos::tests::cache_dir_appends_cache_subdir ... ok
-test path::ohos::tests::data_dir_appends_files_subdir ... ok
-test path::ohos::tests::file_name_returns_last_component ... ok
-test path::ohos::tests::log_and_temp_dirs ... ok
-test path::ohos::tests::media_dirs_under_files ... ok
-test path::ohos::tests::resource_dir_always_under_el1_and_ends_with_assets ... ok
-test path::ohos::tests::resource_dir_defaults_to_entry_module ... ok
-test path::ohos::tests::resource_dir_uses_custom_module_name ... ok
-
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out
-
-==========================================
-ALL TESTS PASSED
 ```
 
 ## 排错

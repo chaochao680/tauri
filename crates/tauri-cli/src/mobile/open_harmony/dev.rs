@@ -241,7 +241,7 @@ fn run_dev(
     use_network_address_for_dev_url(&mut tauri_config, &mut dev_options, options.force_ip_prompt, dirs.tauri)?;
   }
 
-  crate::dev::setup(&interface, &mut dev_options, &mut tauri_config, &dirs)?;
+  crate::dev::setup(&interface, &mut dev_options, &mut tauri_config, dirs)?;
 
   let interface_options = InterfaceOptions {
     debug: !dev_options.release_mode,
@@ -297,9 +297,9 @@ fn run_dev(
         }),
       };
 
-      let _handle = write_options(&tauri_config, cli_options)?;
+      let _handle = write_options(tauri_config, cli_options)?;
 
-      inject_resources(config, &tauri_config)?;
+      inject_resources(config, tauri_config)?;
 
       if open {
         open_and_wait(config, &env)

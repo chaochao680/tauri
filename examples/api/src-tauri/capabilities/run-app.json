@@ -18,6 +18,8 @@
     "allow-echo",
     "allow-spam",
     "allow-write-test-report",
+    "allow-clear-test-report",
+    "allow-append-test-result",
     "allow-console-log",
     "allow-flush-console-log",
     "allow-clear-console-log",

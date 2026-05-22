@@ -37,6 +37,17 @@ impl<R: Runtime> IconMenuItem<R> {
       None => None,
     };
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item = muda::IconMenuItem::new(text, enabled, icon, accelerator);
+      IconMenuItemInner {
+        id: item.id().clone(),
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item = muda::IconMenuItem::new(text, enabled, icon, accelerator);
       IconMenuItemInner {
@@ -78,6 +89,17 @@ impl<R: Runtime> IconMenuItem<R> {
       None => None,
     };
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item = muda::IconMenuItem::with_id(id.clone(), text, enabled, icon, accelerator);
+      IconMenuItemInner {
+        id,
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item = muda::IconMenuItem::with_id(id.clone(), text, enabled, icon, accelerator);
       IconMenuItemInner {
@@ -116,6 +138,17 @@ impl<R: Runtime> IconMenuItem<R> {
     let icon = native_icon.map(Into::into);
     let accelerator = accelerator.and_then(|s| s.as_ref().parse().ok());
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item = muda::IconMenuItem::with_native_icon(text, enabled, icon, accelerator);
+      IconMenuItemInner {
+        id: item.id().clone(),
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item = muda::IconMenuItem::with_native_icon(text, enabled, icon, accelerator);
       IconMenuItemInner {
@@ -157,6 +190,18 @@ impl<R: Runtime> IconMenuItem<R> {
     let icon = native_icon.map(Into::into);
     let accelerator = accelerator.and_then(|s| s.as_ref().parse().ok());
 
+    #[cfg(target_env = "ohos")]
+    let item = {
+      let item =
+        muda::IconMenuItem::with_id_and_native_icon(id.clone(), text, enabled, icon, accelerator);
+      IconMenuItemInner {
+        id,
+        inner: Some(item),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let item = run_main_thread!(handle, || {
       let item =
         muda::IconMenuItem::with_id_and_native_icon(id.clone(), text, enabled, icon, accelerator);
@@ -182,43 +227,87 @@ impl<R: Runtime> IconMenuItem<R> {
 
   /// Get the text for this menu item.
   pub fn text(&self) -> crate::Result<String> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().text())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().text())
+    }
   }
 
-  /// Set the text for this menu item. `text` could optionally contain
-  /// an `&` before a character to assign this character as the mnemonic
-  /// for this menu item. To display a `&` without assigning a mnemenonic, use `&&`.
+  /// Set the text for this icon menu item.
   pub fn set_text<S: AsRef<str>>(&self, text: S) -> crate::Result<()> {
     let text = text.as_ref().to_string();
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_text(text);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_text(text))
+    }
   }
 
-  /// Get whether this menu item is enabled or not.
+  /// Get whether this icon menu item is enabled.
   pub fn is_enabled(&self) -> crate::Result<bool> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    #[cfg(target_env = "ohos")]
+    {
+      Ok((*self.0).as_ref().is_enabled())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().is_enabled())
+    }
   }
 
-  /// Enable or disable this menu item.
+  /// Set whether this icon menu item is enabled.
   pub fn set_enabled(&self, enabled: bool) -> crate::Result<()> {
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_enabled(enabled);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_enabled(enabled))
+    }
   }
 
-  /// Set this menu item accelerator.
+  /// Set the accelerator for this icon menu item.
   pub fn set_accelerator<S: AsRef<str>>(&self, accelerator: Option<S>) -> crate::Result<()> {
     let accel = accelerator.and_then(|s| s.as_ref().parse().ok());
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().set_accelerator(accel)
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_accelerator(accel);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().set_accelerator(accel)
+      })?
+      .map_err(Into::into)
+    }
   }
 
-  /// Change this menu item icon or remove it.
+  /// Set the icon for this icon menu item.
   pub fn set_icon(&self, icon: Option<Image<'_>>) -> crate::Result<()> {
     let icon = match icon {
       Some(i) => Some(i.try_into()?),
       None => None,
     };
-    run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_icon(icon))
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_icon(icon);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0).as_ref().set_icon(icon))
+    }
   }
 
   /// Change this menu item icon to a native image or remove it.

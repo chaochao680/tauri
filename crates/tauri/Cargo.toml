@@ -84,13 +84,13 @@ specta = { version = "^2.0.0-rc.16", optional = true, default-features = false, 
 # WARNING: cookie::Cookie is re-exported so bumping this is a breaking change, documented to be done as a minor bump
 cookie = "0.18"
 
-# desktop
+# desktop (exclude ohos)
 [target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "windows", target_os = "macos"), not(target_env = "ohos")))'.dependencies]
-muda = { version = "0.17", default-features = false, features = [
+muda = { path = "../../../muda", default-features = false, features = [
   "serde",
   "gtk",
 ] }
-tray-icon = { version = "0.22", default-features = false, features = [
+tray-icon = { path = "../../../tray-icon", default-features = false, features = [
   "serde",
 ], optional = true }
 
@@ -151,7 +151,13 @@ rustls = { version = "0.23", default-features = false, features = [
 ], optional = true }
 
 [target.'cfg(target_env = "ohos")'.dependencies]
-openharmony-ability = { path = "../../../openharmony-ability/crates/ability", features = ["webview"] }
+muda = { path = "../../../muda", default-features = false, features = [
+  "serde",
+] }
+tray-icon = { path = "../../../tray-icon", default-features = false, features = [
+  "serde",
+], optional = true }
+openharmony-ability = { path = "../../../openharmony-ability/crates/ability", features = ["webview", "menu"] }
 openharmony-ability-derive = { path = "../../../openharmony-ability/crates/derive" }
 
 # android
