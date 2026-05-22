@@ -38,8 +38,9 @@ fn main() {
         "emit_test_event",
         "setup_app_listener",
         "test_async_spawn",
+        "clear_test_report",
+        "append-test-result"
       ])),
-
   )
   .expect("failed to run tauri-build");
 

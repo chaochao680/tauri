@@ -3,6 +3,7 @@ import { invoke, Channel, Resource } from '@tauri-apps/api/core';
 import { emit, listen, once } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { appCacheDir } from '@tauri-apps/api/path';
 
@@ -393,6 +394,53 @@ export const coreTests: TestCase[] = [
         assert(received === 'async done', `Expected 'async done', got ${received}`);
       } finally {
         unlisten();
+      }
+    },
+  },
+
+  // Test on_page_load (on_page_begin / on_page_end)
+  {
+    name: 'on_page_load events',
+    category: 'auto',
+    async fn() {
+      let startedUrl: string | null = null;
+      let finishedUrl: string | null = null;
+
+      const unlistenStart = await listen('page-load-started', (event) => {
+        startedUrl = event.payload as string;
+      });
+      const unlistenFinish = await listen('page-load-finished', (event) => {
+        finishedUrl = event.payload as string;
+      });
+
+      try {
+        // Trigger a page load by creating a new window
+        await invoke('create_isolated_window', {
+          windowId: 'test-page-load-window',
+          dataSuffix: 'test',
+          url: '/hello.html'
+        });
+
+        // Wait for events to propagate
+        await new Promise((r) => setTimeout(r, 1000));
+
+        // Verify events were received
+        assert(startedUrl !== null, 'Expected page-load-started event');
+        assert(finishedUrl !== null, 'Expected page-load-finished event');
+
+        // Optional: verify URL contains something expected (e.g. index.html)
+        assert(startedUrl!.length > 0, 'Started URL should not be empty');
+        assert(finishedUrl!.length > 0, 'Finished URL should not be empty');
+      } finally {
+        unlistenStart();
+        unlistenFinish();
+        // Clean up the created window
+        try {
+          const win = await WebviewWindow.getByLabel('test-page-load-window');
+          if (win) await win.close();
+        } catch (e) {
+          // Ignore if window already closed or not found
+        }
       }
     },
   },

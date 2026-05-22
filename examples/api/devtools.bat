@@ -7,6 +7,7 @@ set PID_LIST=
 set MAPPED_PID=
 
 :: Get the list of all forwarded ports and PIDs
+echo [CMD] hdc fport ls
 for /f "tokens=2,5 delims=:_" %%a in ('hdc fport ls') do (
     for /f "tokens=1 delims= " %%c in ("%%b") do (
         set PID_LIST=!PID_LIST! %%c
@@ -17,6 +18,7 @@ for /f "tokens=2,5 delims=:_" %%a in ('hdc fport ls') do (
 set SOCKET_COUNT=0
 set SOCKET_NAME=
 
+echo [CMD] hdc shell "cat /proc/net/unix | grep devtools"
 for /f "tokens=*" %%a in ('hdc shell "cat /proc/net/unix | grep devtools"') do (
     set /a SOCKET_COUNT=SOCKET_COUNT+1
     set SOCKET_NAME=%%a
@@ -48,24 +50,21 @@ echo !PID_LIST! | findstr /C:"!PID!" >nul
 if not errorlevel 1 (
     echo PID !PID! is already mapped to a port.
 ) else (
-    :: PID not mapped, clean up port 9222 and add new mapping
+    :: PID not mapped, clean up ALL port 9222 mappings and add new mapping
     echo PID !PID! is not mapped yet.
     
-    :: Check if port 9222 is already in use
-    hdc fport ls | findstr "tcp:!PORT!" >nul
-    if not errorlevel 1 (
-        echo Port !PORT! is currently in use. Cleaning up existing mapping...
-        hdc fport rm tcp:!PORT!
-        if errorlevel 1 (
-            echo Error: Failed to remove existing mapping on port !PORT!.
-            pause
-            exit /b 1
-        )
-        echo Existing mapping on port !PORT! removed.
+    :: Clean up ALL existing mappings on port 9222
+    echo Cleaning up all existing mappings on port 9222...
+    for /f "tokens=2,3 delims= " %%a in ('hdc fport ls ^| findstr "tcp:!PORT!"') do (
+        set MAPPING=%%a %%b
+        echo Removing mapping: !MAPPING!
+        hdc fport rm !MAPPING!
     )
     
     :: Add new mapping for the PID to port 9222
+    echo.
     echo Mapping PID !PID! to port !PORT!...
+    echo [CMD] hdc fport tcp:!PORT! localabstract:webview_devtools_remote_!PID!
     hdc fport tcp:!PORT! localabstract:webview_devtools_remote_!PID!
     if errorlevel 1 (
         echo Error: Failed to add mapping.
@@ -78,6 +77,7 @@ if not errorlevel 1 (
 :: Check current port forwarding status
 echo.
 echo Current port forwarding rules:
+echo [CMD] hdc fport ls
 hdc fport ls
 
 echo.
@@ -85,8 +85,10 @@ echo Script executed successfully.
 pause
 
 :: Try to open the page in Edge
+echo [CMD] start msedge chrome://inspect/#devices
 start msedge chrome://inspect/#devices
 if errorlevel 1 (
+    echo [CMD] start chrome chrome://inspect/#devices
     start chrome chrome://inspect/#devices
 )
 
