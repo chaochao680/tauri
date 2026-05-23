@@ -77,3 +77,10 @@ export PROJECT_ROOT
 # - mobile: 编译为移动端模式（默认）
 # - desktop: 编译为桌面端模式，启用 desktop cfg 功能
 export TAURI_OHOS_DEVICE_TYPE="${TAURI_OHOS_DEVICE_TYPE:-mobile}"
+
+# ─── OHOS NDK & SDK (ohrs/hvigorw 需要) ───
+# ohrs expects OHOS_NDK_HOME pointing to the SDK root (not /native subdirectory)
+# ohrs internally appends /native itself; double /native/native causes panics
+export OHOS_NDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH\\sdk\\default\\openharmony"
+# hvigorw expects DEVECO_SDK_HOME
+export DEVECO_SDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH"

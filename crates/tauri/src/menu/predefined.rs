@@ -630,6 +630,7 @@ impl<R: Runtime> PredefinedMenuItem<R> {
     #[cfg(target_env = "ohos")]
     {
       self.0.inner.as_ref().unwrap().set_text(text);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]

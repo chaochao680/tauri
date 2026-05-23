@@ -42,11 +42,51 @@ pub fn popup<R: tauri::Runtime>(
   window.popup_menu(&popup_menu.0).unwrap();
 }
 
+#[cfg(not(target_os = "macos"))]
+#[command]
+pub fn hide_menu<R: tauri::Runtime>(window: tauri::Window<R>) -> tauri::Result<()> {
+  window.hide_menu()
+}
+
+#[cfg(target_os = "macos")]
+#[command]
+pub fn hide_menu<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  app.hide_menu()
+}
+
+#[cfg(not(target_os = "macos"))]
+#[command]
+pub fn show_menu<R: tauri::Runtime>(window: tauri::Window<R>) -> tauri::Result<()> {
+  window.show_menu()
+}
+
+#[cfg(target_os = "macos")]
+#[command]
+pub fn show_menu<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  app.show_menu()
+}
+
+#[cfg(not(target_os = "macos"))]
+#[command]
+pub fn is_menu_visible<R: tauri::Runtime>(window: tauri::Window<R>) -> bool {
+  window.is_menu_visible().unwrap_or(true)
+}
+
+#[cfg(target_os = "macos")]
+#[command]
+pub fn is_menu_visible<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> bool {
+  app.is_menu_visible().unwrap_or(true)
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("app-menu")
     .invoke_handler(tauri::generate_handler![
       #![plugin(app_menu)]
-      popup, toggle
+      popup,
+      toggle,
+      hide_menu,
+      show_menu,
+      is_menu_visible
     ])
     .build()
 }

@@ -19,7 +19,7 @@ pub use builders::*;
 pub use menu::{HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
 use serde::{Deserialize, Serialize};
 
-use crate::{image::Image, AppHandle, Runtime};
+use crate::{image::Image, sealed::ManagerBase, AppHandle, Runtime};
 pub use muda::MenuId;
 
 macro_rules! run_item_main_thread {
@@ -778,5 +778,17 @@ pub(crate) fn map_to_menu_theme(theme: tauri_utils::Theme) -> muda::MenuTheme {
     tauri_utils::Theme::Light => muda::MenuTheme::Light,
     tauri_utils::Theme::Dark => muda::MenuTheme::Dark,
     _ => muda::MenuTheme::Auto,
+  }
+}
+
+#[cfg(all(target_env = "ohos", desktop))]
+fn auto_refresh_menubar<R: Runtime>(app_handle: &AppHandle<R>) {
+  for window in app_handle.manager().windows().values() {
+    if let Some(wm) = window.menu_lock().as_ref() {
+      wm.menu.refresh_menubar(window.label()).ok();
+    } else if let Some(menu) = app_handle.menu() {
+      // Fallback: if window has no menu, use app-level menu
+      menu.refresh_menubar(window.label()).ok();
+    }
   }
 }

@@ -463,6 +463,11 @@ tauri::Builder::default()
       let _ = app_manager.emit(event, EmitPayload::Serialize(&payload));
     });
 
+    #[cfg(target_env = "ohos")]
+    if let Some(window_menu) = &*window.menu_lock() {
+      window_menu.menu.inner().refresh_menubar(window.label()).ok();
+    }
+
     Ok(window)
   }
 }
@@ -1315,6 +1320,12 @@ tauri::Builder::default()
 
     self.manager.menu.insert_menu_into_stash(&menu);
 
+    #[cfg(target_env = "ohos")]
+    {
+      menu.inner().refresh_menubar(self.label()).ok();
+      openharmony_ability::menu::set_menubar_visible(true, self.label().to_string()).ok();
+    }
+
     let window = self.clone();
     let menu_ = menu.clone();
     self.run_on_main_thread(move || {
@@ -1361,6 +1372,12 @@ tauri::Builder::default()
   pub fn remove_menu(&self) -> crate::Result<Option<Menu<R>>> {
     let prev_menu = self.menu_lock().take().map(|m| m.menu);
 
+    #[cfg(target_env = "ohos")]
+    if let Some(_menu) = &prev_menu {
+      openharmony_ability::menu::set_menubar_visible(false, self.label().to_string()).ok();
+      openharmony_ability::menu::set_menu_json("[]".to_string(), self.label().to_string()).ok();
+    }
+
     // remove from the window
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(menu) = &prev_menu {
@@ -1396,7 +1413,13 @@ tauri::Builder::default()
 
   /// Hides the window menu.
   pub fn hide_menu(&self) -> crate::Result<()> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      openharmony_ability::menu::set_menubar_visible(false, self.label().to_string()).ok();
+      return Ok(());
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let window = self.clone();
@@ -1427,7 +1450,16 @@ tauri::Builder::default()
 
   /// Shows the window menu.
   pub fn show_menu(&self) -> crate::Result<()> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      if let Some(window_menu) = &*self.menu_lock() {
+        window_menu.menu.inner().refresh_menubar(self.label()).ok();
+      }
+      openharmony_ability::menu::set_menubar_visible(true, self.label().to_string()).ok();
+      return Ok(());
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let window = self.clone();
@@ -1458,7 +1490,12 @@ tauri::Builder::default()
 
   /// Shows the window menu.
   pub fn is_menu_visible(&self) -> crate::Result<bool> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      return Ok(openharmony_ability::menu::is_menubar_visible(self.label()));
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let (tx, rx) = std::sync::mpsc::channel();

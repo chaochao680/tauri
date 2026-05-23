@@ -176,6 +176,264 @@ Expected behavior:
     });
   }
 
+  // ─── Menu Bar Manual Tests ───
+  const MB_TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  async function manualMenuBarRestore() {
+    await wrapManual('menuBarRestore', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const fileSub = await Submenu.new({ text: 'File', items: [
+        await PredefinedMenuItem.new({ item: 'CloseWindow' }),
+        await PredefinedMenuItem.new({ item: 'Quit' }),
+      ]});
+      const editSub = await Submenu.new({ text: 'Edit', items: [
+        await PredefinedMenuItem.new({ item: 'Undo' }),
+        await PredefinedMenuItem.new({ item: 'Redo' }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        await PredefinedMenuItem.new({ item: 'Cut' }),
+        await PredefinedMenuItem.new({ item: 'Copy' }),
+        await PredefinedMenuItem.new({ item: 'Paste' }),
+        await PredefinedMenuItem.new({ item: 'SelectAll' }),
+      ]});
+      const windowSub = await Submenu.new({ text: 'Window', items: [
+        await PredefinedMenuItem.new({ item: 'Minimize' }),
+        await PredefinedMenuItem.new({ item: 'Maximize' }),
+        await PredefinedMenuItem.new({ item: 'CloseWindow' }),
+      ]});
+      const helpSub = await Submenu.new({ text: 'Help', items: [
+        await PredefinedMenuItem.new({ item: { About: { name: 'Tauri API Validation' } } }),
+      ]});
+      const menu = await Menu.new({ items: [fileSub, editSub, windowSub, helpSub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Default menu restored: File | Edit | Window | Help';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarVisible() {
+    await wrapManual('menuBarVisible', async () => {
+      const visible = await invoke('plugin:app-menu|is_menu_visible');
+      manualResult = `is_menu_visible() = ${visible}\nCheck: Top of window should show a menu bar with submenu labels.\nIf visible and ${visible} === true → PASS.\nTip: Click "Restore Default Menu" first if menu bar is missing.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarDropdown() {
+    await wrapManual('menuBarDropdown', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const sub = await Submenu.new({ text: 'Click Me', items: [
+        await MenuItem.new({ text: 'Item A' }),
+        await MenuItem.new({ text: 'Item B' }),
+      ]});
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Click Me" submenu.\nClick "Click Me" → dropdown should appear with "Item A" and "Item B".\nIf dropdown appears → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarNested() {
+    await wrapManual('menuBarNested', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const inner = await Submenu.new({ text: 'Inner', items: [
+        await MenuItem.new({ text: 'Deep Item' }),
+      ]});
+      const outer = await Submenu.new({ text: 'Outer', items: [
+        await MenuItem.new({ text: 'Top Item' }),
+        inner,
+      ]});
+      const menu = await Menu.new({ items: [outer] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Outer → Top Item + Inner → Deep Item".\nClick Outer → hover Inner → should show nested dropdown with "Deep Item".\nIf nested submenu works → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarHover() {
+    await wrapManual('menuBarHover', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const sub = await Submenu.new({ text: 'HoverTest', items: [
+        await MenuItem.new({ text: 'Item' }),
+      ]});
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "HoverTest".\nHover mouse over "HoverTest" → background should change color.\nMove away → background returns to normal.\nIf hover effect visible → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarDarkMode() {
+    await wrapManual('menuBarDarkMode', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const sub = await Submenu.new({ text: 'DarkTest', items: [
+        await MenuItem.new({ text: 'Item' }),
+      ]});
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Action: Switch system to dark mode (Settings → Display → Dark).\nCheck: Menu bar background → dark, text → light.\nSwitch back → background → light, text → dark.\nIf colors adapt → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarBarIcon() {
+    await wrapManual('menuBarBarIcon', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const sub = await Submenu.new({ text: 'IconMenu', icon: MB_TEST_ICON, items: [
+        await MenuItem.new({ text: 'Item' }),
+      ]});
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "IconMenu" submenu WITH icon.\nBar-level "IconMenu" should show a small icon next to the text.\nIf icon visible at bar level → PASS. If only text → FAIL.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarDisabledItem() {
+    await wrapManual('menuBarDisabledItem', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const sub = await Submenu.new({ text: 'DisTest', items: [
+        await MenuItem.new({ text: 'Disabled', enabled: false }),
+        await MenuItem.new({ text: 'Normal', enabled: true }),
+      ]});
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "DisTest → Disabled + Normal".\nClick DisTest → "Disabled" should appear grayed out + semi-transparent.\n"Normal" should appear with full color.\nIf disabled visual correct → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarHide() {
+    await wrapManual('menuBarHide', async () => {
+      await invoke('plugin:app-menu|hide_menu');
+      const visible = await invoke('plugin:app-menu|is_menu_visible');
+      manualResult = `hide_menu() called. is_menu_visible() = ${visible}\nCheck: Menu bar should disappear from top of window.\nIf disappeared and ${visible} === false → PASS.\nClick "Show" button to restore.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarShow() {
+    await wrapManual('menuBarShow', async () => {
+      await manualMenuBarRestore();
+      await invoke('plugin:app-menu|show_menu');
+      const visible = await invoke('plugin:app-menu|is_menu_visible');
+      manualResult = `show_menu() called (default menu restored). is_menu_visible() = ${visible}\nCheck: Menu bar should reappear at top of window.\nIf visible and ${visible} === true → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarIsMenuVisible() {
+    await wrapManual('menuBarIsMenuVisible', async () => {
+      const visible = await invoke('plugin:app-menu|is_menu_visible');
+      manualResult = `is_menu_visible() = ${visible}\nExpected: true (menu bar visible by default).\nIf true → PASS.\nTip: Click "Hide" first, then click this button → should return false.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarRemove() {
+    await wrapManual('menuBarRemove', async () => {
+      const { Menu } = await import('@tauri-apps/api/menu');
+      const emptyMenu = await Menu.new({ items: [] });
+      await emptyMenu.setAsWindowMenu();
+      manualResult = 'Empty menu set as window menu (remove_menu equivalent).\nCheck: Menu bar should disappear (no items to show).\nIf disappeared → PASS.\nClick "Restore Default Menu" to restore.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarAutoRefreshText() {
+    await wrapManual('menuBarAutoRefreshText', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const item = await MenuItem.new({ text: 'Original' });
+      const sub = await Submenu.new({ text: 'Refresh', items: [item] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      await new Promise(r => setTimeout(r, 500));
+      await item.setText('Updated!');
+      manualResult = 'Menu bar: "Refresh → Original".\nsetText("Updated!") called → auto_refresh should push update.\nClick "Refresh" dropdown → should show "Updated!" (not "Original").\nIf text updated → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarAutoRefreshChecked() {
+    await wrapManual('menuBarAutoRefreshChecked', async () => {
+      const { Menu, Submenu, CheckMenuItem } = await import('@tauri-apps/api/menu');
+      const check = await CheckMenuItem.new({ text: 'Check Me', checked: false });
+      const sub = await Submenu.new({ text: 'Refresh', items: [check] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      await new Promise(r => setTimeout(r, 500));
+      await check.setChecked(true);
+      manualResult = 'Menu bar: "Refresh → Check Me" (unchecked).\nsetChecked(true) called → auto_refresh should update.\nClick "Refresh" dropdown → "Check Me" should show a checkmark.\nIf checked state updated → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarAccelerator() {
+    await wrapManual('menuBarAccelerator', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const item = await MenuItem.new({
+        text: 'Accel Test',
+        action: (id) => {
+          console.log('[MenuBarTest] Accelerator fired! id:', id);
+          manualResult = `Accelerator Ctrl+O FIRED! id=${id}`;
+          onMessage(manualResult);
+        }
+      });
+      await item.setAccelerator('Ctrl+O');
+      const sub = await Submenu.new({ text: 'Accel', items: [item] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Accel → Accel Test" (Ctrl+O).\nPress Ctrl+O → should trigger action callback → show "FIRED" message.\nAlso try clicking "Accel Test" in dropdown → should also fire.\nIf Ctrl+O triggers → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarAcceleratorCopy() {
+    await wrapManual('menuBarAcceleratorCopy', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const copyItem = await PredefinedMenuItem.new({ item: 'Copy' });
+      const sub = await Submenu.new({ text: 'Edit', items: [copyItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Edit → Copy" (Ctrl+C built-in).\nType some text → select it → press Ctrl+C.\nThen try pasting → should paste the copied text.\nIf Ctrl+C copies → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarFullscreen() {
+    await wrapManual('menuBarFullscreen', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const fsItem = await PredefinedMenuItem.new({ item: 'Fullscreen' });
+      const sub = await Submenu.new({ text: 'View', items: [fsItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "View → Fullscreen".\nClick "View → Fullscreen" → window enters fullscreen, menu bar should disappear.\nPress Esc or click again → exit fullscreen, menu bar should recover.\nIf menu bar hides/recover → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarPredefinedHide() {
+    await wrapManual('menuBarPredefinedHide', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const hideItem = await PredefinedMenuItem.new({ item: 'Hide' });
+      const sub = await Submenu.new({ text: 'Window', items: [hideItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Window → Hide".\nClick "Window → Hide" → window should minimize.\nRestore window from taskbar → confirm it reappears.\nIf window minimizes on Hide → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarPopupRegression() {
+    await wrapManual('menuBarPopupRegression', async () => {
+      const { Menu, MenuItem } = await import('@tauri-apps/api/menu');
+      const item = await MenuItem.new({ text: 'Popup Test' });
+      const menu = await Menu.new({ items: [item] });
+      await menu.popup();
+      manualResult = 'Popup menu triggered at cursor position.\nCheck: Context menu should appear with "Popup Test".\nThis verifies AppStorage key renaming did not break popup.\nIf popup appears → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Tray Manual Tests ───
   async function manualTrayIconShow() {
     await wrapManual('trayIconShow', async () => {
@@ -291,6 +549,30 @@ Expected behavior:
         <button class="btn" onclick={manualTrayIconShow}>Tray Icon Show (check system tray)</button>
         <button class="btn" onclick={manualTrayEvent}>Tray Event (click icon to trigger)</button>
         <button class="btn" onclick={manualTrayMenu}>Tray Menu (right-click to see menu)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Menu Bar Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualMenuBarRestore}>Restore Default Menu</button>
+        <button class="btn" onclick={manualMenuBarVisible}>MenuBar Visible</button>
+        <button class="btn" onclick={manualMenuBarDropdown}>MenuBar Dropdown</button>
+        <button class="btn" onclick={manualMenuBarNested}>MenuBar Nested Submenu</button>
+        <button class="btn" onclick={manualMenuBarHover}>MenuBar Hover</button>
+        <button class="btn" onclick={manualMenuBarDarkMode}>MenuBar Dark Mode</button>
+        <button class="btn" onclick={manualMenuBarBarIcon}>MenuBar Bar-Level Icon</button>
+        <button class="btn" onclick={manualMenuBarDisabledItem}>MenuBar Disabled Item</button>
+        <button class="btn" onclick={manualMenuBarHide}>MenuBar Hide</button>
+        <button class="btn" onclick={manualMenuBarShow}>MenuBar Show</button>
+        <button class="btn" onclick={manualMenuBarIsMenuVisible}>MenuBar is_menu_visible</button>
+        <button class="btn" onclick={manualMenuBarRemove}>MenuBar Remove Menu</button>
+        <button class="btn" onclick={manualMenuBarAutoRefreshText}>MenuBar Auto Refresh Text</button>
+        <button class="btn" onclick={manualMenuBarAutoRefreshChecked}>MenuBar Auto Refresh Checked</button>
+        <button class="btn" onclick={manualMenuBarAccelerator}>MenuBar Accelerator Ctrl+O</button>
+        <button class="btn" onclick={manualMenuBarAcceleratorCopy}>MenuBar Accelerator Ctrl+C</button>
+        <button class="btn" onclick={manualMenuBarFullscreen}>MenuBar Fullscreen</button>
+        <button class="btn" onclick={manualMenuBarPredefinedHide}>MenuBar Predefined Hide</button>
+        <button class="btn" onclick={manualMenuBarPopupRegression}>MenuBar Popup Regression</button>
       </div>
     </div>
     {#if manualResult}
