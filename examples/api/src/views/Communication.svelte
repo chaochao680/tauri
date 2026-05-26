@@ -254,27 +254,25 @@
   function setLocalStorage() {
     try {
       const value = 'value_' + Date.now()
-      // 先用一个全局变量测试
-      window._test_value = value
-      const msg = '✅ Set test value: ' + value
+      localStorage.setItem('tauri_test_key', value)
+      const msg = '✅ localStorage.setItem: tauri_test_key = ' + value
       console.log(msg)
       onMessage(msg)
     } catch (e) {
-      const msg = '❌ Set error: ' + e
+      const msg = '❌ localStorage setItem error: ' + e
       console.error(msg)
       onMessage(msg)
     }
   }
 
-  // Test: Get the value
   function getLocalStorage() {
     try {
-      const value = window._test_value || '(not set yet)'
-      const msg = '📦 Test value = ' + value
+      const value = localStorage.getItem('tauri_test_key') || '(not set yet)'
+      const msg = '✅ localStorage.getItem: tauri_test_key = ' + value
       console.log(msg)
       onMessage(msg)
     } catch (e) {
-      const msg = '❌ Get error: ' + e
+      const msg = '❌ localStorage getItem error: ' + e
       console.error(msg)
       onMessage(msg)
     }
@@ -375,6 +373,21 @@
         onMessage(msg)
       })
   }
+
+  function testLocalStorageFromRust() {
+    console.log('Testing localStorage via Rust eval...')
+    invoke('test_local_storage')
+      .then(() => {
+        const msg = '✅ test_local_storage command called, check hilog for result'
+        console.log(msg)
+        onMessage(msg)
+      })
+      .catch((e) => {
+        const msg = '❌ test_local_storage error: ' + e
+        console.error(msg)
+        onMessage(msg)
+      })
+  }
 </script>
 
 <div>
@@ -404,6 +417,7 @@
   <button class="btn" id="create-window-b" onclick={createWindowB}> 🪟 Create Isolated Window B </button>
   <button class="btn" id="set-storage" onclick={setLocalStorage}> 💾 Set localStorage </button>
   <button class="btn" id="get-storage" onclick={getLocalStorage}> 📦 Get localStorage </button>
+  <button class="btn" id="test-local-storage-rust" onclick={testLocalStorageFromRust}> 🧪 Test localStorage (Rust eval) </button>
   <br><br>
   <button class="btn" id="custom-ua" onclick={createWindowWithCustomUA}> 🎭 Create Window with Custom User-Agent </button>
   <button class="btn" id="no-throttle" onclick={createWindowNoThrottle}> ⚡ Create Window with No Background Throttling </button>

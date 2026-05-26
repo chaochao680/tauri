@@ -1424,6 +1424,21 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
   }
 }
 
+/// OpenHarmony specific APIs
+#[cfg(target_env = "ohos")]
+impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
+  /// Sets the OHOS window kind for this window.
+  ///
+  /// - `UIAbility`: Main window that reuses the existing UIAbility container. Only one can exist (singleton).
+  /// - `Float`: Sub-window that creates a new OS-level floating window (TYPE_FLOAT).
+  ///
+  /// Default is `UIAbility` when not specified. Use `Float` for sub-windows.
+  pub fn ohos_window_kind(mut self, kind: crate::ohos::OHOSWindowKind) -> Self {
+    self.window_builder = self.window_builder.ohos_window_kind(kind);
+    self
+  }
+}
+
 /// iOS specific APIs
 #[cfg(target_os = "ios")]
 impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {

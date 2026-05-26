@@ -190,15 +190,20 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           .build()?,
       ));
 
+      let app_handle_nav = app.handle().clone();
+      let app_handle_title = app.handle().clone();
+      let app_handle_download = app.handle().clone();
+
       let mut window_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .initialization_script("document.addEventListener('DOMContentLoaded', () => { document.title = '✅ INIT SCRIPT WORKED!'; });")
-        .on_document_title_changed(|_window, title| {
+        .on_document_title_changed(move |_window, title| {
           log::info!("document title changed: {title}");
+          let _ = app_handle_title.emit("document-title-changed", &title);
         })
         // 2. Test navigation intercept (shouldOverrideUrlLoading)
-        .on_navigation(|url| {
+        .on_navigation(move |url| {
           log::info!("Navigation intercepted: {url}");
-          // Don't block navigation for our test
+          let _ = app_handle_nav.emit("navigation-intercepted", url.to_string());
           true
         })
         // 3. Test web resource request intercept (onLoadIntercept)
@@ -208,26 +213,23 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           response.headers_mut().insert("X-Tauri-Test", tauri::http::HeaderValue::from_static("intercepted"));
         })
         // 4. Test download intercept
-        .on_download(|_webview, event| {
+        .on_download(move |_webview, event| {
           log::info!("on_download event received");
           match event {
             tauri::webview::DownloadEvent::Requested { url, destination } => {
               log::info!("Download requested: {}", url);
-
-              // 打印默认保存路径
               log::info!("Default destination: {:?}", destination);
-
-              // 可以在这里修改保存路径
-              // *destination = "/custom/path".into();
+              let _ = app_handle_download.emit("download-requested", url.to_string());
             }
             tauri::webview::DownloadEvent::Finished { url, path, success } => {
               log::info!("Download finished: {}, success: {}, path: {:?}", url, success, path);
+              let _ = app_handle_download.emit("download-finished", (url.to_string(), success));
             }
             _ => {
               log::info!("Other download event");
             }
           }
-          true // 允许下载
+          true // allow download
         });
 
       #[cfg(all(desktop, not(test)))]
@@ -388,6 +390,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::flush_console_log,
       cmd::clear_console_log,
       cmd::test_eval,
+      cmd::test_local_storage,
+      cmd::test_eval_with_callback,
       cmd::test_navigate,
       cmd::test_reload,
       cmd::create_isolated_window,

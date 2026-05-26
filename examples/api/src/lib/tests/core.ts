@@ -276,6 +276,21 @@ export const coreTests: TestCase[] = [
     },
   },
 
+  // Web Storage: localStorage
+  {
+    name: 'localStorage set/get/remove',
+    category: 'auto',
+    async fn() {
+      const key = '__tauri_test_ls__';
+      localStorage.setItem(key, 'hello');
+      const val = localStorage.getItem(key);
+      assert(val === 'hello', `expected 'hello', got '${val}'`);
+      localStorage.removeItem(key);
+      const after = localStorage.getItem(key);
+      assert(after === null, `expected null after remove, got '${after}'`);
+    },
+  },
+
   // .on_window_event test
   {
     name: 'on_window_event',
@@ -332,6 +347,28 @@ export const coreTests: TestCase[] = [
 
       // Restore original title
       document.title = originalTitle;
+    },
+  },
+
+  // Test eval_with_callback: Rust evaluates JS and receives result back
+  {
+    name: 'webview.eval_with_callback',
+    category: 'auto',
+    async fn() {
+      const resultPromise = new Promise<string>((resolve) => {
+        const unlisten = listen('eval-with-callback-result', (event) => {
+          unlisten.then((fn) => fn());
+          resolve(event.payload as string);
+        });
+      });
+
+      await invoke('test_eval_with_callback');
+
+      const result = await resultPromise;
+      const parsed = JSON.parse(result);
+      assert(parsed.arithmetic === 3, `Expected arithmetic=3, got ${parsed.arithmetic}`);
+      assert(parsed.stringLen === 5, `Expected stringLen=5, got ${parsed.stringLen}`);
+      assert(parsed.bool === true, `Expected bool=true, got ${parsed.bool}`);
     },
   },
 
@@ -441,6 +478,64 @@ export const coreTests: TestCase[] = [
         } catch (e) {
           // Ignore if window already closed or not found
         }
+      }
+    },
+  },
+
+  // Test on_navigation interceptor
+  {
+    name: 'on_navigation interceptor',
+    category: 'auto',
+    async fn() {
+      let interceptedUrl: string | null = null;
+      const unlisten = await listen('navigation-intercepted', (event) => {
+        interceptedUrl = event.payload as string;
+      });
+
+      try {
+        // Create a new window to trigger on_navigation in that webview
+        await invoke('create_isolated_window', {
+          windowId: 'test-nav-window',
+          dataSuffix: 'nav',
+          url: '/hello.html'
+        });
+
+        // Wait for the window to load and trigger on_navigation
+        await new Promise((r) => setTimeout(r, 1500));
+
+        assert(interceptedUrl !== null, 'Expected navigation-intercepted event to fire when window loads');
+        assert(interceptedUrl!.length > 0, 'Intercepted URL should not be empty');
+      } finally {
+        unlisten();
+      }
+    },
+  },
+
+  // Test on_document_title_changed
+  {
+    name: 'on_document_title_changed',
+    category: 'auto',
+    async fn() {
+      let changedTitle: string | null = null;
+      const unlisten = await listen('document-title-changed', (event) => {
+        changedTitle = event.payload as string;
+      });
+
+      try {
+        // Create a new window with initialization script that sets a title
+        await invoke('create_isolated_window', {
+          windowId: 'test-title-window',
+          dataSuffix: 'title',
+          url: '/hello.html'
+        });
+
+        // Wait for the window to load and title change event
+        await new Promise((r) => setTimeout(r, 1500));
+
+        assert(changedTitle !== null, 'Expected document-title-changed event to fire');
+        assert(changedTitle!.length > 0, 'Title should not be empty');
+      } finally {
+        unlisten();
       }
     },
   },

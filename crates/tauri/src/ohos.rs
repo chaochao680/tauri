@@ -2,6 +2,7 @@ use std::sync::{Mutex, OnceLock};
 
 pub use openharmony_ability;
 pub use openharmony_ability_derive;
+pub use tauri_runtime::OHOSWindowKind;
 
 pub static APP: Mutex<Option<openharmony_ability::OpenHarmonyApp>> = Mutex::new(None);
 

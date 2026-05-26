@@ -23,6 +23,8 @@ fn main() {
         "flush_console_log",
         "clear_console_log",
         "test_eval",
+        "test_local_storage",
+        "test_eval_with_callback",
         "test_navigate",
         "test_reload",
         "create_isolated_window",

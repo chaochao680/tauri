@@ -10,6 +10,8 @@ use tauri_runtime::{
   dpi::{PhysicalPosition, PhysicalRect, PhysicalSize},
   webview::PendingWebview,
 };
+#[cfg(target_env = "ohos")]
+use tauri_runtime::OHOSWindowKind;
 pub use tauri_utils::{config::Color, WindowEffect as Effect, WindowEffectState as EffectState};
 
 #[cfg(desktop)]
@@ -131,6 +133,8 @@ unstable_struct!(
     created_by_activity_name_set: bool,
     #[cfg(target_os = "ios")]
     requested_by_scene_identifier_set: bool,
+    #[cfg(target_env = "ohos")]
+    ohos_window_kind: Option<OHOSWindowKind>,
   }
 );
 
@@ -221,6 +225,8 @@ async fn create_window(app: tauri::AppHandle) {
       created_by_activity_name_set: false,
       #[cfg(target_os = "ios")]
       requested_by_scene_identifier_set: false,
+      #[cfg(target_env = "ohos")]
+      ohos_window_kind: None,
     }
   }
 
@@ -260,6 +266,8 @@ async fn reopen_window(app: tauri::AppHandle) {
       created_by_activity_name_set: config.created_by_activity_name.is_some(),
       #[cfg(target_os = "ios")]
       requested_by_scene_identifier_set: config.requested_by_scene_identifier.is_some(),
+      #[cfg(target_env = "ohos")]
+      ohos_window_kind: Some(OHOSWindowKind::UIAbility),
       manager,
       label: config.label.clone(),
       window_effects: config.window_effects.clone(),
@@ -378,6 +386,11 @@ tauri::Builder::default()
           .window_builder
           .requested_by_scene_identifier(manager_window_scene_identifier?);
       }
+    }
+
+    #[cfg(target_env = "ohos")]
+    if let Some(kind) = self.ohos_window_kind {
+      self.window_builder = self.window_builder.ohos_window_kind(kind);
     }
 
     let mut pending = PendingWindow::new(self.window_builder, self.label)?;
@@ -959,6 +972,21 @@ impl<R: Runtime, M: Manager<R>> WindowBuilder<'_, R, M> {
   pub fn created_by_activity_name<S: Into<String>>(mut self, class_name: S) -> Self {
     self.created_by_activity_name_set = true;
     self.window_builder = self.window_builder.created_by_activity_name(class_name);
+    self
+  }
+}
+
+/// OpenHarmony specific APIs
+#[cfg(target_env = "ohos")]
+impl<R: Runtime, M: Manager<R>> WindowBuilder<'_, R, M> {
+  /// Sets the OHOS window kind for this window.
+  ///
+  /// - `UIAbility`: Main window that reuses the existing UIAbility container. Only one can exist (singleton).
+  /// - `Float`: Sub-window that creates a new OS-level floating window (TYPE_FLOAT).
+  ///
+  /// Default is `UIAbility` when not specified. Use `Float` for sub-windows.
+  pub fn ohos_window_kind(mut self, kind: OHOSWindowKind) -> Self {
+    self.ohos_window_kind = Some(kind);
     self
   }
 }

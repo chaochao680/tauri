@@ -497,6 +497,23 @@ pub trait WindowBuilder: WindowBuilderBase {
   /// By default the system uses the foreground scene.
   #[cfg(target_os = "ios")]
   fn requested_by_scene_identifier<S: Into<String>>(self, identifier: S) -> Self;
+
+  /// Sets the OHOS window kind for this window.
+  ///
+  /// - `UIAbility`: Main window (reuses existing UIAbility container). Only one can exist.
+  /// - `Float`: Sub-window (creates new OS-level floating window).
+  #[cfg(target_env = "ohos")]
+  fn ohos_window_kind(self, kind: OHOSWindowKind) -> Self;
+}
+
+/// The kind of window to create on OpenHarmony.
+#[cfg(target_env = "ohos")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OHOSWindowKind {
+  /// Main window — reuses the existing UIAbility container. Only one can exist per application.
+  UIAbility,
+  /// Sub-window — creates a new OS-level floating window (TYPE_FLOAT).
+  Float,
 }
 
 /// A window that has yet to be built.
