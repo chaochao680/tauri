@@ -45,6 +45,9 @@ use http::{
 /// Cookie extraction
 pub use cookie::Cookie;
 
+#[cfg(target_env = "ohos")]
+pub use window::OHOSWindowKind;
+
 pub type WindowEventId = u32;
 pub type WebviewEventId = u32;
 

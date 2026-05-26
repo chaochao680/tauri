@@ -2487,6 +2487,18 @@
           "markdownDescription": "Enables the test_eval command without any pre-configured scope."
         },
         {
+          "description": "Enables the test_eval_with_callback command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-test-eval-with-callback",
+          "markdownDescription": "Enables the test_eval_with_callback command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the test_local_storage command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-test-local-storage",
+          "markdownDescription": "Enables the test_local_storage command without any pre-configured scope."
+        },
+        {
           "description": "Enables the test_navigate command without any pre-configured scope.",
           "type": "string",
           "const": "allow-test-navigate",
@@ -2641,6 +2653,18 @@
           "type": "string",
           "const": "deny-test-eval",
           "markdownDescription": "Denies the test_eval command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the test_eval_with_callback command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-test-eval-with-callback",
+          "markdownDescription": "Denies the test_eval_with_callback command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the test_local_storage command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-test-local-storage",
+          "markdownDescription": "Denies the test_local_storage command without any pre-configured scope."
         },
         {
           "description": "Denies the test_navigate command without any pre-configured scope.",

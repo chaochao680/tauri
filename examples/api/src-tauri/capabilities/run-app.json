@@ -24,6 +24,8 @@
     "allow-flush-console-log",
     "allow-clear-console-log",
     "allow-test-eval",
+    "allow-test-local-storage",
+    "allow-test-eval-with-callback",
     "allow-test-navigate",
     "allow-test-reload",
     "allow-create-isolated-window",

@@ -129,6 +129,8 @@ pub use tao::platform::macos::{
 };
 #[cfg(target_env = "ohos")]
 pub use tao::platform::ohos::{EventLoopBuilderExtOpenHarmony, WindowBuilderExtOpenHarmony};
+#[cfg(target_env = "ohos")]
+pub use tauri_runtime::OHOSWindowKind;
 #[cfg(target_os = "macos")]
 use tauri_runtime::ActivationPolicy;
 
@@ -941,8 +943,10 @@ impl WindowBuilder for WindowBuilderWrapper {
 
     #[cfg(target_env = "ohos")]
     {
-      log::info!("windowbuilder::with_config label {}", config.label);
+      use tao::platform::ohos::WindowBuilderExtOpenHarmony;
       window.inner = window.inner.with_label(&config.label);
+      // Config windows are always the main (UIAbility) window
+      window.inner = window.inner.with_window_kind(tao::platform::ohos::OHOSWindowKind::UIAbility);
     }
 
     let mut constraints = WindowSizeConstraints::default();
@@ -1329,6 +1333,17 @@ impl WindowBuilder for WindowBuilderWrapper {
     self.inner = self
       .inner
       .with_requesting_scene_identifier(identifier.into());
+    self
+  }
+
+  #[cfg(target_env = "ohos")]
+  fn ohos_window_kind(mut self, kind: tauri_runtime::OHOSWindowKind) -> Self {
+    use tao::platform::ohos::WindowBuilderExtOpenHarmony;
+    let tao_kind = match kind {
+      tauri_runtime::OHOSWindowKind::UIAbility => tao::platform::ohos::OHOSWindowKind::UIAbility,
+      tauri_runtime::OHOSWindowKind::Float => tao::platform::ohos::OHOSWindowKind::Float,
+    };
+    self.inner = self.inner.with_window_kind(tao_kind);
     self
   }
 }

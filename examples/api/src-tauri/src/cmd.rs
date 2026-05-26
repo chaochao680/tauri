@@ -10,6 +10,7 @@ use tauri::{
   ipc::{Channel, CommandScope},
   Resource, ResourceId,
   Manager, Runtime, WebviewUrl, Emitter, Listener,
+  webview::PageLoadEvent,
 };
 
 // A simple Counter resource that lives in Rust
@@ -344,6 +345,42 @@ pub fn test_eval<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<(
 }
 
 #[command]
+pub fn test_local_storage<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  log::info!("test_local_storage called");
+
+  if let Some(window) = app.get_webview_window("main") {
+    // Test localStorage.setItem
+    window.eval_with_callback(
+      r#"(function() { try { localStorage.setItem('tauri_test_key', 'hello_from_rust'); return localStorage.getItem('tauri_test_key'); } catch(e) { return 'ERROR:' + e.message; } })()"#,
+      move |result| {
+        log::info!("localStorage test result from JS: {}", result);
+      },
+    )?;
+  }
+
+  Ok(())
+}
+
+/// Test eval_with_callback: evaluates JS and emits result as event for JS test verification
+#[command]
+pub fn test_eval_with_callback<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  log::info!("test_eval_with_callback called");
+
+  if let Some(window) = app.get_webview_window("main") {
+    let app_clone = app.clone();
+    window.eval_with_callback(
+      r#"(function() { return JSON.stringify({arithmetic: 1+2, stringLen: "hello".length, bool: true}); })()"#,
+      move |result| {
+        log::info!("eval_with_callback result from JS: {}", result);
+        let _ = app_clone.emit("eval-with-callback-result", &result);
+      },
+    )?;
+  }
+
+  Ok(())
+}
+
+#[command]
 pub fn test_navigate<R: tauri::Runtime>(
   window: tauri::WebviewWindow<R>,
   url: String,
@@ -394,10 +431,44 @@ pub fn create_isolated_window<R: tauri::Runtime>(
       }
   };
 
-  tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
+  let app_nav = app.clone();
+  let app_title = app.clone();
+  let app_page = app.clone();
+
+  let init_script = format!(
+      "document.addEventListener('DOMContentLoaded', () => {{ \
+        let num = {seq}; \
+        document.title = num <= 1 ? 'Hello World' : 'Hello World' + num; \
+        let h1 = document.querySelector('h1'); \
+        if (h1) {{ h1.textContent = num <= 1 ? 'Hello World' : 'Hello World' + num; }} \
+      }});"
+    );
+    tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
     .inner_size(800.0, 600.0)
+    .initialization_script(&init_script)
+    .on_navigation(move |nav_url| {
+      log::info!("Isolated window navigation intercepted: {}", nav_url);
+      let _ = app_nav.emit("navigation-intercepted", nav_url.to_string());
+      true
+    })
+    .on_document_title_changed(move |_window, title| {
+      log::info!("Isolated window title changed: {}", title);
+      let _ = app_title.emit("document-title-changed", &title);
+    })
+    .on_page_load(move |_webview, payload| {
+      log::info!("Isolated window on_page_load");
+      let url = payload.url().to_string();
+      match payload.event() {
+        PageLoadEvent::Started => {
+          let _ = app_page.emit("page-load-started", &url);
+        }
+        PageLoadEvent::Finished => {
+          let _ = app_page.emit("page-load-finished", &url);
+        }
+      }
+    })
     .build()?;
 
   Ok(())
