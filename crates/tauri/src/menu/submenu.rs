@@ -46,7 +46,8 @@ impl<R: Runtime> ContextMenuBase for Submenu<R> {
         Some(crate::Position::Physical(p)) => (Some(p.x as f64), Some(p.y as f64)),
         None => (None, None),
       };
-      (*self.0).as_ref().popup(x, y).map_err(Into::into)
+      let window_id = window.label();
+      (*self.0).as_ref().popup(x, y, window_id).map_err(Into::into)
     }
     #[cfg(not(target_env = "ohos"))]
     {
@@ -380,6 +381,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().append(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -393,11 +395,21 @@ impl<R: Runtime> Submenu<R> {
 
   /// Add menu items to the end of this submenu. It calls [`Submenu::append`] in a loop internally.
   pub fn append_items(&self, items: &[&dyn IsMenuItem<R>]) -> crate::Result<()> {
-    for item in items {
-      self.append(*item)?
+    #[cfg(target_env = "ohos")]
+    {
+      for item in items {
+        (*self.0).as_ref().append(item.kind().inner().inner_muda())?;
+      }
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
     }
-
-    Ok(())
+    #[cfg(not(target_env = "ohos"))]
+    {
+      for item in items {
+        self.append(*item)?
+      }
+      Ok(())
+    }
   }
 
   /// Add a menu item to the beginning of this submenu.
@@ -406,6 +418,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().prepend(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -430,6 +443,7 @@ impl<R: Runtime> Submenu<R> {
       (*self.0)
         .as_ref()
         .insert(kind.inner().inner_muda(), position)?;
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -445,11 +459,21 @@ impl<R: Runtime> Submenu<R> {
 
   /// Insert menu items at the specified `position` in this submenu.
   pub fn insert_items(&self, items: &[&dyn IsMenuItem<R>], position: usize) -> crate::Result<()> {
-    for (i, item) in items.iter().enumerate() {
-      self.insert(*item, position + i)?
+    #[cfg(target_env = "ohos")]
+    {
+      for (i, item) in items.iter().enumerate() {
+        (*self.0).as_ref().insert(item.kind().inner().inner_muda(), position + i)?;
+      }
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
     }
-
-    Ok(())
+    #[cfg(not(target_env = "ohos"))]
+    {
+      for (i, item) in items.iter().enumerate() {
+        self.insert(*item, position + i)?
+      }
+      Ok(())
+    }
   }
 
   /// Remove a menu item from this submenu.
@@ -458,6 +482,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().remove(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -473,10 +498,12 @@ impl<R: Runtime> Submenu<R> {
   pub fn remove_at(&self, position: usize) -> crate::Result<Option<MenuItemKind<R>>> {
     #[cfg(target_env = "ohos")]
     {
-      Ok((*self.0)
+      let result = (*self.0)
         .as_ref()
         .remove_at(position)
-        .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i)))
+        .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i));
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(result)
     }
     #[cfg(not(target_env = "ohos"))]
     {
@@ -546,6 +573,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_text(text);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -571,6 +599,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_enabled(enabled);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -614,6 +643,7 @@ impl<R: Runtime> Submenu<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_icon(icon);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]

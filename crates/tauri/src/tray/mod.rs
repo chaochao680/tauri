@@ -136,6 +136,14 @@ impl TrayIconEvent {
   }
 }
 
+// OHOS platform limitations (TrayIconEvent):
+  // - DoubleClick, Enter, Move, Leave events are never dispatched
+  // - All Click events have position (0,0) and rect Rect::default()
+  // - Only MouseButton::Left (icon click) and Right (menu click) are dispatched
+  // - All events have MouseButtonState::Up (no Down state)
+  // - rect() always returns None (StatusBar API has no tray icon position;
+  //   AvoidArea.topRect is the entire status bar area, not the tray icon itself)
+  // - NativeIcon is not supported (same as Windows/Linux)
 impl From<tray_icon::TrayIconEvent> for TrayIconEvent {
   fn from(value: tray_icon::TrayIconEvent) -> Self {
     match value {
@@ -193,7 +201,16 @@ impl From<tray_icon::TrayIconEvent> for TrayIconEvent {
           size: rect.size.into(),
         },
       },
-      _ => todo!(),
+      _ => {
+        log::warn!("Unhandled TrayIconEvent variant, falling back to Click");
+        TrayIconEvent::Click {
+          id: TrayIconId::new("unknown"),
+          position: PhysicalPosition::new(0.0, 0.0),
+          rect: Rect::default(),
+          button: MouseButton::Left,
+          button_state: MouseButtonState::Up,
+        }
+      },
     }
   }
 }
@@ -639,6 +656,10 @@ impl<R: Runtime> TrayIcon<R> {
   /// ## Platform-specific:
   ///
   /// - **Linux**: Unsupported, always returns `None`.
+  /// - **OHOS**: Unsupported, always returns `None`. StatusBar API does not provide
+  ///   tray icon position or dimensions. AvoidArea.topRect returns the entire status
+  ///   bar area, not the tray icon itself, so it cannot serve as a meaningful
+  ///   approximation.
   pub fn rect(&self) -> crate::Result<Option<crate::Rect>> {
     #[cfg(target_env = "ohos")]
     {
@@ -733,5 +754,26 @@ mod tests {
           }
       })
     );
+  }
+
+  #[test]
+  fn tray_icon_event_from_fallback_no_panic() {
+    let tray_event = tray_icon::TrayIconEvent::Click {
+      id: tray_icon::TrayIconId::new("test"),
+      position: tray_icon::dpi::PhysicalPosition::new(10.0, 20.0),
+      rect: tray_icon::Rect::default(),
+      button: tray_icon::MouseButton::Left,
+      button_state: tray_icon::MouseButtonState::Up,
+    };
+    let converted: TrayIconEvent = tray_event.into();
+    match converted {
+      TrayIconEvent::Click { id, position, button, button_state, .. } => {
+        assert_eq!(id.0, "test");
+        assert_eq!(position.x, 10.0);
+        assert_eq!(button, MouseButton::Left);
+        assert_eq!(button_state, MouseButtonState::Up);
+      }
+      _ => panic!("expected Click fallback"),
+    }
   }
 }

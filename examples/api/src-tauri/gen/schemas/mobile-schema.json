@@ -2349,10 +2349,10 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Enables the append-test-result command without any pre-configured scope.",
+          "description": "Allows appending a test result to the report file incrementally.",
           "type": "string",
           "const": "allow-append-test-result",
-          "markdownDescription": "Enables the append-test-result command without any pre-configured scope."
+          "markdownDescription": "Allows appending a test result to the report file incrementally."
         },
         {
           "description": "Enables the clear_console_log command without any pre-configured scope.",
@@ -2685,10 +2685,22 @@
           "markdownDescription": "Denies the write_test_report command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`",
           "type": "string",
           "const": "app-menu:default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`"
+        },
+        {
+          "description": "Enables the hide_menu command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:allow-hide-menu",
+          "markdownDescription": "Enables the hide_menu command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the is_menu_visible command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:allow-is-menu-visible",
+          "markdownDescription": "Enables the is_menu_visible command without any pre-configured scope."
         },
         {
           "description": "Enables the popup command without any pre-configured scope.",
@@ -2697,16 +2709,40 @@
           "markdownDescription": "Enables the popup command without any pre-configured scope."
         },
         {
+          "description": "Enables the show_menu command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:allow-show-menu",
+          "markdownDescription": "Enables the show_menu command without any pre-configured scope."
+        },
+        {
           "description": "Enables the toggle command without any pre-configured scope.",
           "type": "string",
           "const": "app-menu:allow-toggle",
           "markdownDescription": "Enables the toggle command without any pre-configured scope."
         },
         {
+          "description": "Denies the hide_menu command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:deny-hide-menu",
+          "markdownDescription": "Denies the hide_menu command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the is_menu_visible command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:deny-is-menu-visible",
+          "markdownDescription": "Denies the is_menu_visible command without any pre-configured scope."
+        },
+        {
           "description": "Denies the popup command without any pre-configured scope.",
           "type": "string",
           "const": "app-menu:deny-popup",
           "markdownDescription": "Denies the popup command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the show_menu command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:deny-show-menu",
+          "markdownDescription": "Denies the show_menu command without any pre-configured scope."
         },
         {
           "description": "Denies the toggle command without any pre-configured scope.",

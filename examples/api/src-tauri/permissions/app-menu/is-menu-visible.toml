@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-is-menu-visible"
+description = "Enables the is_menu_visible command without any pre-configured scope."
+commands.allow = ["is_menu_visible"]
+
+[[permission]]
+identifier = "deny-is-menu-visible"
+description = "Denies the is_menu_visible command without any pre-configured scope."
+commands.deny = ["is_menu_visible"]

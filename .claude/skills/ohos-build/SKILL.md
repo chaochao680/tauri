@@ -15,8 +15,8 @@ bash D:/workspace/tauri/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" 
 1. 检测 `openharmony-ability/` 源码变更，自动重建 HAR 包并 ohpm install
 2. 前端构建（pnpm + vite，VITE_AUTOTEST=true）
 3. Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
-4. 拷贝 .so → hvigorw assembleHap
-5. 签名（每次生成新证书）→ 卸载旧版 → 安装 → 启动
+4. 拷贝 .so → hvigorw assembleHap（自动禁用/恢复 tauriPlugin，使用 build-profile.json5 中的证书签名）
+5. 卸载旧版 → 安装已签名 HAP → 启动
 6. 等待 30s → 拉取 test-report → 分析结果
 
 ## 环境要求
@@ -45,17 +45,17 @@ echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > D:/workspace/tauri/tauri/.claude/ski
 |------|------|
 | `env.sh` | 环境配置：CC/linker/JAVA_HOME/PATH，必须在其他脚本前 source |
 | `run-tests.sh` | 一键全流程（含 HAR 自动重建、tauriPlugin 自动禁用/恢复） |
-| `build-ohos.sh` | 仅构建（前端 → Rust → .so → hvigorw），不签名安装 |
-| `sign-and-install.sh` | 仅签名安装启动，不构建 |
+| `build-ohos.sh` | 构建全流程（前端 → Rust → .so → hvigorw 签名打包），自动处理 tauriPlugin |
+| `sign-and-install.sh` | 仅安装启动（使用 hvigorw 已签名的 HAP），不构建不签名 |
 
 ## 关键注意事项
 
 1. **env.sh 必须先 source** — 设置 OHOS linker/CC/JAVA_HOME，否则 Rust 编译报 `cc not found`
 2. **prod feature** — 不加则 app 连接 localhost:1420 而非加载打包前端。脚本已自动包含。
 3. **hdc 路径转义** — Git Bash 把 `/data/...` 转为 Windows 路径。设备路径命令用 `hdc shell "cat ..."` 加引号。
-4. **签名每次不同** — 必须先卸载旧版再安装，脚本自动处理。
+4. **签名由 hvigorw 完成** — build-profile.json5 中配置了含 system_basic 权限的证书，hvigorw assembleHap 自动签名。无需手动签名。
 5. **HAR 缓存** — 修改了 openharmony-ability 后必须重建 HAR。`run-tests.sh` Step 0 自动检测并处理。
-6. **tauriPlugin** — hvigorfile.ts 中的 tauriPlugin 需要 TCP 回调 tauri CLI，独立构建时必须禁用。脚本自动处理。
+6. **tauriPlugin** — hvigorfile.ts 中的 tauriPlugin 需要 TCP 回调 tauri CLI，独立构建时必须禁用。`build-ohos.sh` 和 `run-tests.sh` 自动处理。
 
 ## 设备日志与故障诊断
 

@@ -44,12 +44,13 @@ if [ -d "$ABILITY_ROOT" ]; then
     if [ "$ABILITY_CHANGED" = true ]; then
         echo ">>> Step 0: Rebuilding openharmony-ability HAR..."
         pushd "$ABILITY_ROOT" > /dev/null
-        ohrs build --arch arm64 2>&1 | tail -5 || true
+        ohrs build --arch arm64 --skip-napi-check 2>&1 | tail -5 || true
         bash scripts/pack.sh 2>&1 | tail -3
         tar -czf ability.har package
         popd > /dev/null
-        cmd.exe /c "rmdir /s /q $(echo "$OHOS_ENTRY/oh_modules" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')" 2>/dev/null || true
-        cmd.exe /c "cd /d $(echo "$OHOS_ENTRY" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g') && ohpm install" 2>&1 | tail -3
+        # Windows EPERM: must fully delete oh_modules before reinstalling
+        cmd.exe /c "rmdir /s /q $(echo "$OHOS_PROJECT/oh_modules" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')" 2>/dev/null || true
+        (cd "$OHOS_PROJECT" && ohpm install --all) 2>&1 | tail -3
         echo "    HAR rebuilt and installed."
     else
         echo ">>> Step 0: openharmony-ability HAR is up-to-date, skipping."
@@ -101,58 +102,23 @@ echo ""
 echo "=== Test Report ==="
 echo ""
 
-python3 - "$REPORT_LOCAL" << 'PYTHON' 2>/dev/null || python - "$REPORT_LOCAL" << 'PYTHON'
-import json, sys
+cat "$REPORT_LOCAL"
+echo ""
 
-with open(sys.argv[1]) as f:
-    report = json.load(f)
+# Count pass/fail from markdown table (uses emoji markers)
+PASS_COUNT=$(grep -c '✅' "$REPORT_LOCAL" || true)
+FAIL_COUNT=$(grep -c '❌' "$REPORT_LOCAL" || true)
+: "${PASS_COUNT:=0}"
+: "${FAIL_COUNT:=0}"
 
-print(f"Timestamp: {report['timestamp']}")
-print(f"Total: {report['total']}, Passed: {report['passed']}, Failed: {report['failed']}, Skipped: {report['skipped']}")
-print("")
+echo "=================================================="
+echo "Summary: $PASS_COUNT passed, $FAIL_COUNT failed"
 
-passed = []
-failed = []
-skipped = []
-
-for r in report['results']:
-    if r['status'] == 'pass':
-        passed.append(r)
-    elif r['status'] == 'fail':
-        failed.append(r)
-    else:
-        skipped.append(r)
-
-if failed:
-    print("--- FAILED ---")
-    for r in failed:
-        print(f"  FAIL: {r['name']} ({r['duration']}ms)")
-        if r.get('error'):
-            print(f"        Error: {r['error']}")
-    print("")
-
-if passed:
-    print(f"--- PASSED ({len(passed)}) ---")
-    for r in passed:
-        print(f"  PASS: {r['name']} ({r['duration']}ms)")
-    print("")
-
-if skipped:
-    print(f"--- SKIPPED ({len(skipped)}) ---")
-    for r in skipped:
-        print(f"  SKIP: {r['name']}")
-    print("")
-
-# Summary
-print("=" * 50)
-if report['failed'] == 0:
-    print("ALL TESTS PASSED!")
-else:
-    print(f"FAILURES: {report['failed']} test(s) failed.")
-    print("")
-    print("Failed APIs (not yet adapted for OpenHarmony):")
-    for r in failed:
-        print(f"  - {r['name']}: {r.get('error', 'unknown')}")
-
-sys.exit(0 if report['failed'] == 0 else 1)
-PYTHON
+if [ "$FAIL_COUNT" -gt 0 ]; then
+    echo ""
+    echo "FAILED tests:"
+    grep '❌' "$REPORT_LOCAL" | sed 's/|/  /g'
+    exit 1
+else
+    echo "ALL TESTS PASSED!"
+fi

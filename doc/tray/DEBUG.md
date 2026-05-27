@@ -600,6 +600,8 @@ case 'fullscreen':
 | 23 | Menu Click 事件不触发 | 高 | ✅ 已修复 |
 | 24 | Predefined 窗口激活竞争 | 高 | ✅ 已修复 |
 | 25 | NAPI camelCase 命名导致回调未注册 | 高 | ✅ 已修复 |
+| 26 | Tray predefined actions 全部失效 | 高 | ✅ 已修复 |
+| 27 | Tray fullscreen 与 maximize 行为一致，未进入沉浸模式 | 中 | ✅ 已修复 |
 
 **编译验证**：`cargo check --target aarch64-unknown-linux-ohos` 通过
 
@@ -656,3 +658,87 @@ onPopupRequest?: (callback: ...) => void;
 - `openharmony-ability/native_ability/src/main/ets/ability/type.ets`
 - `openharmony-ability/native_ability/src/main/ets/helper/menu.ets`
 - `tauri/examples/api/src-tauri/src/lib.rs`（hilog 初始化）
+
+---
+
+## Fix 26: Tray predefined actions 全部失效 (OHOS sceneboard PID 注册表溢出)
+
+**现象**: Tray 菜单的所有 predefined action（minimize, hide, close, maximize, fullscreen, quit, about）点击后无效果。Phase 8 完成时这些功能正常工作，menubar commits 后失效。
+
+**调试过程**:
+
+1. 通过 hilog 确认 sceneboard **确实收到了菜单点击事件**: `menuCode: 134, notifyOnly: true` + `AppClientNotifier: Notify client menu clicked start`
+2. 但应用进程中 `_onMenuClick` 回调**从不被调用**
+3. hilog 中持续出现系统级错误: `AppClientNotifier: Register client pid fail: out of range`
+4. 通过 `git diff 1dd56b7..dd6d3fe` 对比 phase 8 完成时的代码与 menubar commits 后的代码，确认 **menubar commits 对 statusbar 代码的影响为零**（无任何 statusbar 相关文件被修改）
+
+**已排除的假设**:
+- ❌ menubar commits 引入的代码回归 → git diff 证明 statusbar 代码未被修改
+- ❌ `updateStatusBarMenu` 激活 notifyOnly → 尝试后 PID 注册仍失败
+- ❌ `removeFromStatusBar` 清理残留注册 → 尝试后 PID 注册仍失败
+- ❌ 不设置 `menuAction.abilityName` → OHOS API 文档表明是必填字段
+
+**根因**: OHOS sceneboard 的 `AppClientNotifier` 进程注册表（PID table）溢出。
+
+OHOS StatusBar 菜单点击通过两种机制投递:
+1. **Emitter 机制** (`rightMenuClick`): `menuAction.notifyOnly=true` + `menuCode` 时，sceneboard 通过 IPC (`AppClientNotifier`) 投递 emitter 事件到应用进程
+2. **Ability Start 机制** (`onNewWant`): 通过 Ability lifecycle 投递，但 Want 参数**不含 menuCode**
+
+当 `statusBarManager.on('rightMenuClick', callback)` 注册时，sceneboard 在 `AppClientNotifier` 中为应用 PID 建立 IPC 映射。该注册表有容量限制，反复的 debug 部署（install/uninstall/crash）在表中留下残留条目且不会自动清理。表满后 PID 注册失败 → IPC 通知无法投递 → `_onMenuClick` 永远不被调用。
+
+**为何看起来像 menubar commits 导致**: 时间巧合。menubar 开发期间反复部署测试，累积了足够多的残留条目使注册表溢出。
+
+**修复**: 重启 OHOS 设备。设备重启时 sceneboard 服务重新初始化，PID 注册表清空，新的注册请求成功。重启后 predefined actions 立即恢复正常。
+
+**关键教训**:
+1. `AppClientNotifier: Register client pid fail: out of range` 是 OHOS 系统级错误，不是应用代码问题
+2. 反复 debug 部署可能导致 sceneboard 进程表溢出，重启设备即可恢复
+3. 排查此类问题时，先通过 git diff 确认代码是否真的有变更，避免在代码层面做无用修改
+
+**文件**:
+- `openharmony-ability/.../DefaultXComponent.ets` (addToStatusBar + emitter 注册)
+- `openharmony-ability/.../statusbar/event.rs` (_onMenuClick NAPI 闭包)
+- `tray-icon/.../event.rs` (execute_predefined_action 路径)
+
+---
+
+## Fix 27: Tray fullscreen 与 maximize 行为一致，未进入沉浸模式
+
+**现象**: Tray 菜单的 "Fullscreen" 和 "Maximize" 行为完全一致，都只是最大化窗口。Fullscreen 后 menubar 仍然显示，说明没有进入沉浸模式。Menu predefined 的 Fullscreen 则正常进入沉浸模式且 menubar 消失。
+
+**根因**: Tray 的 `executePredefinedAction('fullscreen')` (DefaultXComponent.ets) 调用了 `maximize(ENTER_IMMERSIVE)` 但**没有设置 menubar 可见性状态为 false**。
+
+Menubar 渲染条件 (MainPage.ets:310):
+```typescript
+if (this.isDesktop && this.menubarItems.length > 0 && this.menubarVisible)
+```
+
+`menubarVisible` 由 `@StorageProp("__openharmony_ability_menubar_visible__::main")` 驱动，默认 `true`。Menu 版本在进入沉浸模式前显式设置为 `false`，tray 版本遗漏了这一步，导致 menubar 继续渲染在沉浸窗口上方。
+
+**修复**: 在 tray 的 fullscreen case 中添加 AppStorage 状态设置：
+```typescript
+case 'fullscreen': {
+  AppStorage.setOrCreate("__openharmony_ability_menubar_visible__::main", false);
+  AppStorage.setOrCreate("__openharmony_ability_menu_shown__::main", false);
+  const fullscreenWin = context.windowStage.getMainWindowSync();
+  fullscreenWin.maximize(window.MaximizePresentation.ENTER_IMMERSIVE);
+  break;
+}
+```
+
+退出沉浸模式时，`windowRectChange` 事件的 `RECOVER` reason 会自动恢复 `menubarVisible = true` (NativeAbility.ets:222-226)。
+
+**文件**:
+- `openharmony-ability/.../DefaultXComponent.ets` (executePredefinedAction fullscreen case)
+
+---
+
+## OHOS 系统级错误汇总
+
+开发调试过程中遇到的 OHOS 平台级错误，非应用代码问题：
+
+| 错误 | 说明 | 解决方案 |
+|------|------|----------|
+| `AppClientNotifier: Register client pid fail: out of range` | sceneboard PID 注册表溢出，反复 debug 部署累积残留条目 | 重启设备 |
+| `Multi-instance is not supported` (16000078) | 重复调用 addToStatusBar | 先 removeFromStatusBar |
+| `The size of the pixelmap exceeds the limit` (1010710001) | PixelMap 尺寸超限（疑似 OHOS bug，24×24 也触发） | 可忽略，不影响功能 |

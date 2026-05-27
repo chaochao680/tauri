@@ -131,6 +131,7 @@ impl<R: Runtime> MenuItem<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_text(text);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -156,6 +157,7 @@ impl<R: Runtime> MenuItem<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_enabled(enabled);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
@@ -170,6 +172,7 @@ impl<R: Runtime> MenuItem<R> {
     #[cfg(target_env = "ohos")]
     {
       (*self.0).as_ref().set_accelerator(accel);
+      super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
     #[cfg(not(target_env = "ohos"))]
