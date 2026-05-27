@@ -54,7 +54,7 @@ pub trait WindowExt {
   );
 }
 
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 impl WindowExt for tao::window::Window {
   fn set_enabled(&self, _: bool) {}
   fn is_enabled(&self) -> bool {

@@ -76,6 +76,8 @@ cargo-mobile2 = { path = "../cargo-mobile2" }
 wry = { path = "../wry" }
 #tao = { git = "https://github.com/richerfu/tao", branch = "feat-ohos-webview" }
 tao = { path = "../tao" }
+muda = { path = "../muda" }
+tray-icon = { path = "../tray-icon" }
 
 [patch."https://github.com/harmony-contrib/openharmony-ability.git"]
 openharmony-ability = { path = "../openharmony-ability/crates/ability" }

@@ -29,7 +29,7 @@ pub trait MonitorExt {
   fn work_area(&self) -> PhysicalRect<i32, u32>;
 }
 
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 impl MonitorExt for tao::monitor::MonitorHandle {
   fn work_area(&self) -> PhysicalRect<i32, u32> {
     PhysicalRect {

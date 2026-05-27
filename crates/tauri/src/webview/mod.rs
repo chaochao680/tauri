@@ -242,6 +242,7 @@ impl PlatformWebview {
 }
 
 /// Response for the new window request handler.
+#[cfg(not(target_env = "ohos"))]
 pub enum NewWindowResponse<R: Runtime> {
   /// Allow the window to be opened with the default implementation.
   Allow,
@@ -256,6 +257,14 @@ pub enum NewWindowResponse<R: Runtime> {
     /// Window that was created.
     window: crate::WebviewWindow<R>,
   },
+  /// Deny the window from being opened.
+  Deny,
+}
+
+#[cfg(target_env = "ohos")]
+pub enum NewWindowResponse<R: Runtime> {
+  /// Allow the window to be opened with the default implementation.
+  Allow(std::marker::PhantomData<R>),
   /// Deny the window from being opened.
   Deny,
 }
@@ -709,12 +718,15 @@ tauri::Builder::default()
     pending.new_window_handler = self.new_window_handler.take().map(|handler| {
       Box::new(
         move |url, features: NewWindowFeatures| match handler(url, features) {
+          #[cfg(not(target_env = "ohos"))]
           NewWindowResponse::Allow => tauri_runtime::webview::NewWindowResponse::Allow,
-          #[cfg(mobile)]
+          #[cfg(target_env = "ohos")]
+          NewWindowResponse::Allow(_) => tauri_runtime::webview::NewWindowResponse::Allow,
+          #[cfg(all(mobile, not(target_env = "ohos")))]
           NewWindowResponse::Create { window: _ } => {
             tauri_runtime::webview::NewWindowResponse::Allow
           }
-          #[cfg(desktop)]
+          #[cfg(all(desktop, not(target_env = "ohos")))]
           NewWindowResponse::Create { window } => {
             tauri_runtime::webview::NewWindowResponse::Create {
               window_id: window.window.window.id,

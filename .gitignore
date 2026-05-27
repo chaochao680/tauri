@@ -20,6 +20,7 @@ node_modules/
 package-lock.json
 yarn.lock
 bun.lockb
+Cargo.lock
 
 # rust compiled folders
 target/
@@ -32,6 +33,7 @@ streaming_example_test_video.mp4
 
 # examples /gen directory
 /examples/**/src-tauri/gen/
+!/examples/api/src-tauri/gen/
 /bench/**/src-tauri/gen/
 
 # logs
@@ -59,3 +61,11 @@ TODO.md
 
 # ai data
 .omc
+.sisyphus
+
+#ohos build data
+.hvigor
+oh_modules
+.cxx
+ohos/entry/build
+ohos/entry/libs

@@ -11,12 +11,12 @@ use crate::{
   sealed::{ManagerBase, RuntimeOrDispatch},
 };
 
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 use std::sync::atomic::AtomicI32;
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 #[allow(unused_imports)]
 use std::sync::atomic::Ordering;
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 use tokio::sync::oneshot;
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -32,7 +32,7 @@ type PluginResponse = Result<serde_json::Value, serde_json::Value>;
 #[allow(dead_code)]
 type PendingPluginCallHandler = Box<dyn FnOnce(PluginResponse) + Send + 'static>;
 
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 #[allow(dead_code)]
 static PENDING_PLUGIN_CALLS_ID: AtomicI32 = AtomicI32::new(0);
 #[allow(dead_code)]

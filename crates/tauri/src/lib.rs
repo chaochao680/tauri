@@ -53,6 +53,7 @@
   html_favicon_url = "https://github.com/tauri-apps/tauri/raw/dev/.github/icon.png"
 )]
 #![warn(missing_docs, rust_2018_idioms)]
+#![cfg_attr(target_env = "ohos", allow(unused_imports, unused_macros, unused_variables, dead_code))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Setups the binding that initializes an iOS plugin.
@@ -75,7 +76,7 @@ pub use resources::{Resource, ResourceId, ResourceTable};
 #[doc(hidden)]
 pub use swift_rs;
 pub use tauri_macros::include_image;
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 pub use tauri_macros::mobile_entry_point;
 pub use tauri_macros::{command, generate_handler};
 
@@ -1142,7 +1143,7 @@ const _: () = {
   }
 };
 
-#[cfg(test)]
+#[cfg(all(test, not(target_env = "ohos")))]
 mod tests {
   use cargo_toml::Manifest;
   use std::{env::var, fs::read_to_string, path::PathBuf, sync::OnceLock};

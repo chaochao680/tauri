@@ -10,6 +10,8 @@ use tauri_runtime::{
   dpi::{PhysicalPosition, PhysicalRect, PhysicalSize},
   webview::PendingWebview,
 };
+#[cfg(target_env = "ohos")]
+use tauri_runtime::OHOSWindowKind;
 pub use tauri_utils::{config::Color, WindowEffect as Effect, WindowEffectState as EffectState};
 
 #[cfg(desktop)]
@@ -131,6 +133,8 @@ unstable_struct!(
     created_by_activity_name_set: bool,
     #[cfg(target_os = "ios")]
     requested_by_scene_identifier_set: bool,
+    #[cfg(target_env = "ohos")]
+    ohos_window_kind: Option<OHOSWindowKind>,
   }
 );
 
@@ -221,6 +225,8 @@ async fn create_window(app: tauri::AppHandle) {
       created_by_activity_name_set: false,
       #[cfg(target_os = "ios")]
       requested_by_scene_identifier_set: false,
+      #[cfg(target_env = "ohos")]
+      ohos_window_kind: None,
     }
   }
 
@@ -260,6 +266,8 @@ async fn reopen_window(app: tauri::AppHandle) {
       created_by_activity_name_set: config.created_by_activity_name.is_some(),
       #[cfg(target_os = "ios")]
       requested_by_scene_identifier_set: config.requested_by_scene_identifier.is_some(),
+      #[cfg(target_env = "ohos")]
+      ohos_window_kind: Some(OHOSWindowKind::UIAbility),
       manager,
       label: config.label.clone(),
       window_effects: config.window_effects.clone(),
@@ -380,6 +388,11 @@ tauri::Builder::default()
       }
     }
 
+    #[cfg(target_env = "ohos")]
+    if let Some(kind) = self.ohos_window_kind {
+      self.window_builder = self.window_builder.ohos_window_kind(kind);
+    }
+
     let mut pending = PendingWindow::new(self.window_builder, self.label)?;
     if let Some(webview) = webview {
       pending.set_webview(webview);
@@ -449,6 +462,11 @@ tauri::Builder::default()
       });
       let _ = app_manager.emit(event, EmitPayload::Serialize(&payload));
     });
+
+    #[cfg(target_env = "ohos")]
+    if let Some(window_menu) = &*window.menu_lock() {
+      window_menu.menu.inner().refresh_menubar(window.label()).ok();
+    }
 
     Ok(window)
   }
@@ -963,6 +981,21 @@ impl<R: Runtime, M: Manager<R>> WindowBuilder<'_, R, M> {
   }
 }
 
+/// OpenHarmony specific APIs
+#[cfg(target_env = "ohos")]
+impl<R: Runtime, M: Manager<R>> WindowBuilder<'_, R, M> {
+  /// Sets the OHOS window kind for this window.
+  ///
+  /// - `UIAbility`: Main window that reuses the existing UIAbility container. Only one can exist (singleton).
+  /// - `Float`: Sub-window that creates a new OS-level floating window (TYPE_FLOAT).
+  ///
+  /// Default is `UIAbility` when not specified. Use `Float` for sub-windows.
+  pub fn ohos_window_kind(mut self, kind: OHOSWindowKind) -> Self {
+    self.ohos_window_kind = Some(kind);
+    self
+  }
+}
+
 /// iOS specific APIs
 #[cfg(target_os = "ios")]
 impl<R: Runtime, M: Manager<R>> WindowBuilder<'_, R, M> {
@@ -1290,6 +1323,12 @@ tauri::Builder::default()
 
     self.manager.menu.insert_menu_into_stash(&menu);
 
+    #[cfg(target_env = "ohos")]
+    {
+      menu.inner().refresh_menubar(self.label()).ok();
+      openharmony_ability::menu::set_menubar_visible(true, self.label().to_string()).ok();
+    }
+
     let window = self.clone();
     let menu_ = menu.clone();
     self.run_on_main_thread(move || {
@@ -1336,6 +1375,12 @@ tauri::Builder::default()
   pub fn remove_menu(&self) -> crate::Result<Option<Menu<R>>> {
     let prev_menu = self.menu_lock().take().map(|m| m.menu);
 
+    #[cfg(target_env = "ohos")]
+    if let Some(_menu) = &prev_menu {
+      openharmony_ability::menu::set_menubar_visible(false, self.label().to_string()).ok();
+      openharmony_ability::menu::set_menu_json("[]".to_string(), self.label().to_string()).ok();
+    }
+
     // remove from the window
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(menu) = &prev_menu {
@@ -1346,12 +1391,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu.inner().remove_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu.inner().remove_for_gtk_window(&gtk_window);
@@ -1368,7 +1416,13 @@ tauri::Builder::default()
 
   /// Hides the window menu.
   pub fn hide_menu(&self) -> crate::Result<()> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      openharmony_ability::menu::set_menubar_visible(false, self.label().to_string()).ok();
+      return Ok(());
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let window = self.clone();
@@ -1378,12 +1432,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu_.inner().hide_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu_.inner().hide_for_gtk_window(&gtk_window);
@@ -1396,7 +1453,16 @@ tauri::Builder::default()
 
   /// Shows the window menu.
   pub fn show_menu(&self) -> crate::Result<()> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      if let Some(window_menu) = &*self.menu_lock() {
+        window_menu.menu.inner().refresh_menubar(self.label()).ok();
+      }
+      openharmony_ability::menu::set_menubar_visible(true, self.label().to_string()).ok();
+      return Ok(());
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let window = self.clone();
@@ -1406,12 +1472,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = unsafe { menu_.inner().show_for_hwnd(hwnd.0 as _) };
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = menu_.inner().show_for_gtk_window(&gtk_window);
@@ -1424,7 +1493,12 @@ tauri::Builder::default()
 
   /// Shows the window menu.
   pub fn is_menu_visible(&self) -> crate::Result<bool> {
-    // remove from the window
+    #[cfg(target_env = "ohos")]
+    {
+      return Ok(openharmony_ability::menu::is_menubar_visible(self.label()));
+    }
+
+    #[cfg(not(target_env = "ohos"))]
     #[cfg_attr(target_os = "macos", allow(unused_variables))]
     if let Some(window_menu) = &*self.menu_lock() {
       let (tx, rx) = std::sync::mpsc::channel();
@@ -1435,12 +1509,15 @@ tauri::Builder::default()
         if let Ok(hwnd) = window.hwnd() {
           let _ = tx.send(unsafe { menu_.inner().is_visible_on_hwnd(hwnd.0 as _) });
         }
-        #[cfg(any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
         ))]
         if let Ok(gtk_window) = window.gtk_window() {
           let _ = tx.send(menu_.inner().is_visible_on_gtk_window(&gtk_window));

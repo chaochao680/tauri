@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+// OHOS: Menu is displayed only as a transient popup via ContextMenu::popup().
+// Desktop mode optionally renders a persistent top menu bar via
+// Navigation.toolbar() + ToolBarItem (see Phase 8 design doc).
+
 use std::sync::Arc;
 
 use super::run_item_main_thread;
@@ -46,41 +50,54 @@ impl<R: Runtime> ContextMenuBase for Menu<R> {
     position: Option<P>,
   ) -> crate::Result<()> {
     let position = position.map(Into::into);
-    run_item_main_thread!(self, move |self_: Self| {
-      #[cfg(target_os = "macos")]
-      if let Ok(view) = window.ns_view() {
-        unsafe {
+    #[cfg(target_env = "ohos")]
+    {
+      let (x, y) = match position {
+        Some(crate::Position::Logical(p)) => (Some(p.x), Some(p.y)),
+        Some(crate::Position::Physical(p)) => (Some(p.x as f64), Some(p.y as f64)),
+        None => (None, None),
+      };
+      let window_id = window.label();
+      (*self.0).as_ref().popup(x, y, window_id).map_err(Into::into)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, move |self_: Self| {
+        #[cfg(target_os = "macos")]
+        if let Ok(view) = window.ns_view() {
+          unsafe {
+            self_
+              .inner()
+              .show_context_menu_for_nsview(view as _, position);
+          }
+        }
+
+        #[cfg(all(
+          any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+          ),
+          not(target_env = "ohos")
+        ))]
+        if let Ok(w) = window.gtk_window() {
           self_
             .inner()
-            .show_context_menu_for_nsview(view as _, position);
+            .show_context_menu_for_gtk_window(w.as_ref(), position);
         }
-      }
 
-      #[cfg(all(
-        any(
-          target_os = "linux",
-          target_os = "dragonfly",
-          target_os = "freebsd",
-          target_os = "netbsd",
-          target_os = "openbsd"
-        ),
-        not(target_env = "ohos")
-      ))]
-      if let Ok(w) = window.gtk_window() {
-        self_
-          .inner()
-          .show_context_menu_for_gtk_window(w.as_ref(), position);
-      }
-
-      #[cfg(windows)]
-      if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-          self_
-            .inner()
-            .show_context_menu_for_hwnd(hwnd.0 as _, position);
+        #[cfg(windows)]
+        if let Ok(hwnd) = window.hwnd() {
+          unsafe {
+            self_
+              .inner()
+              .show_context_menu_for_hwnd(hwnd.0 as _, position);
+          }
         }
-      }
-    })
+      })
+    }
   }
   fn inner_context(&self) -> &dyn muda::ContextMenu {
     (*self.0).as_ref()
@@ -97,6 +114,17 @@ impl<R: Runtime> Menu<R> {
     let handle = manager.app_handle();
     let app_handle = handle.clone();
 
+    #[cfg(target_env = "ohos")]
+    let menu = {
+      let menu = muda::Menu::new();
+      MenuInner {
+        id: menu.id().clone(),
+        inner: Some(menu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let menu = run_main_thread!(handle, || {
       let menu = muda::Menu::new();
       MenuInner {
@@ -115,6 +143,17 @@ impl<R: Runtime> Menu<R> {
     let app_handle = handle.clone();
 
     let id = id.into();
+    #[cfg(target_env = "ohos")]
+    let menu = {
+      let menu = muda::Menu::with_id(id.clone());
+      MenuInner {
+        id,
+        inner: Some(menu),
+        app_handle,
+      }
+    };
+
+    #[cfg(not(target_env = "ohos"))]
     let menu = run_main_thread!(handle, || {
       let menu = muda::Menu::with_id(id.clone());
       MenuInner {
@@ -274,10 +313,19 @@ impl<R: Runtime> Menu<R> {
   /// [`Submenu`]: super::Submenu
   pub fn append(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().append(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().append(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().append(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Add menu items to the end of this menu. It calls [`Menu::append`] in a loop internally.
@@ -288,11 +336,22 @@ impl<R: Runtime> Menu<R> {
   ///
   /// [`Submenu`]: super::Submenu
   pub fn append_items(&self, items: &[&dyn IsMenuItem<R>]) -> crate::Result<()> {
-    for item in items {
-      self.append(*item)?
+    #[cfg(target_env = "ohos")]
+    {
+      for item in items {
+        let kind = item.kind();
+        (*self.0).as_ref().append(kind.inner().inner_muda())?;
+      }
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
     }
-
-    Ok(())
+    #[cfg(not(target_env = "ohos"))]
+    {
+      for item in items {
+        self.append(*item)?
+      }
+      Ok(())
+    }
   }
 
   /// Add a menu item to the beginning of this menu.
@@ -304,10 +363,19 @@ impl<R: Runtime> Menu<R> {
   /// [`Submenu`]: super::Submenu
   pub fn prepend(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().prepend(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().prepend(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().prepend(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Add menu items to the beginning of this menu. It calls [`Menu::insert_items`] with position of `0` internally.
@@ -318,7 +386,19 @@ impl<R: Runtime> Menu<R> {
   ///
   /// [`Submenu`]: super::Submenu
   pub fn prepend_items(&self, items: &[&dyn IsMenuItem<R>]) -> crate::Result<()> {
-    self.insert_items(items, 0)
+    #[cfg(target_env = "ohos")]
+    {
+      for (i, item) in items.iter().enumerate() {
+        let kind = item.kind();
+        (*self.0).as_ref().insert(kind.inner().inner_muda(), i)?;
+      }
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      self.insert_items(items, 0)
+    }
   }
 
   /// Insert a menu item at the specified `position` in the menu.
@@ -330,10 +410,19 @@ impl<R: Runtime> Menu<R> {
   /// [`Submenu`]: super::Submenu
   pub fn insert(&self, item: &dyn IsMenuItem<R>, position: usize) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| (*self_.0)
-      .as_ref()
-      .insert(kind.inner().inner_muda(), position))?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().insert(kind.inner().inner_muda(), position)?;
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| (*self_.0)
+        .as_ref()
+        .insert(kind.inner().inner_muda(), position))?
+      .map_err(Into::into)
+    }
   }
 
   /// Insert menu items at the specified `position` in the menu.
@@ -344,30 +433,62 @@ impl<R: Runtime> Menu<R> {
   ///
   /// [`Submenu`]: super::Submenu
   pub fn insert_items(&self, items: &[&dyn IsMenuItem<R>], position: usize) -> crate::Result<()> {
-    for (i, item) in items.iter().enumerate() {
-      self.insert(*item, position + i)?
+    #[cfg(target_env = "ohos")]
+    {
+      for (i, item) in items.iter().enumerate() {
+        let kind = item.kind();
+        (*self.0).as_ref().insert(kind.inner().inner_muda(), position + i)?;
+      }
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
     }
-
-    Ok(())
+    #[cfg(not(target_env = "ohos"))]
+    {
+      for (i, item) in items.iter().enumerate() {
+        self.insert(*item, position + i)?
+      }
+      Ok(())
+    }
   }
 
   /// Remove a menu item from this menu.
   pub fn remove(&self, item: &dyn IsMenuItem<R>) -> crate::Result<()> {
     let kind = item.kind();
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0).as_ref().remove(kind.inner().inner_muda())
-    })?
-    .map_err(Into::into)
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().remove(kind.inner().inner_muda())?;
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0).as_ref().remove(kind.inner().inner_muda())
+      })?
+      .map_err(Into::into)
+    }
   }
 
   /// Remove the menu item at the specified position from this menu and returns it.
   pub fn remove_at(&self, position: usize) -> crate::Result<Option<MenuItemKind<R>>> {
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0)
+    #[cfg(target_env = "ohos")]
+    {
+      let result = (*self.0)
         .as_ref()
         .remove_at(position)
-        .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
-    })
+        .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i));
+      super::auto_refresh_menubar(&self.0.app_handle);
+      Ok(result)
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0)
+          .as_ref()
+          .remove_at(position)
+          .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
+      })
+    }
   }
 
   /// Retrieves the menu item matching the given identifier.
@@ -385,14 +506,28 @@ impl<R: Runtime> Menu<R> {
 
   /// Returns a list of menu items that has been added to this menu.
   pub fn items(&self) -> crate::Result<Vec<MenuItemKind<R>>> {
-    run_item_main_thread!(self, |self_: Self| {
-      (*self_.0)
-        .as_ref()
-        .items()
-        .into_iter()
-        .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
-        .collect::<Vec<_>>()
-    })
+    #[cfg(target_env = "ohos")]
+    {
+      Ok(
+        (*self.0)
+          .as_ref()
+          .items()
+          .into_iter()
+          .map(|i| MenuItemKind::from_muda(self.0.app_handle.clone(), i))
+          .collect::<Vec<_>>(),
+      )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      run_item_main_thread!(self, |self_: Self| {
+        (*self_.0)
+          .as_ref()
+          .items()
+          .into_iter()
+          .map(|i| MenuItemKind::from_muda(self_.0.app_handle.clone(), i))
+          .collect::<Vec<_>>()
+      })
+    }
   }
 
   /// Set this menu as the application menu.
@@ -407,5 +542,19 @@ impl<R: Runtime> Menu<R> {
   /// This is an alias for [`Window::set_menu`].
   pub fn set_as_window_menu(&self, window: &Window<R>) -> crate::Result<Option<Menu<R>>> {
     window.set_menu(self.clone())
+  }
+
+  /// Refresh the menu bar UI after modifying menu items.
+  ///
+  /// Call this after changing menu item text, enabled state, etc.
+  /// to update the persistent menu bar display on desktop platforms.
+  ///
+  /// ## Platform-specific
+  ///
+  /// - **OHOS desktop**: Sends the updated menu JSON to ArkTS for re-rendering.
+  /// - **Other platforms**: No-op (menu bar updates automatically).
+#[cfg(all(target_env = "ohos", desktop))]
+  pub fn refresh_menubar(&self, window_id: &str) -> crate::Result<()> {
+    (*self.0).as_ref().refresh_menubar(window_id).map_err(Into::into)
   }
 }

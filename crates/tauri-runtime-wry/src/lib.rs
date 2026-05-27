@@ -62,6 +62,8 @@ use wry::WebViewBuilderExtIos;
 use wry::WebViewBuilderExtMacos;
 #[cfg(windows)]
 use wry::WebViewBuilderExtWindows;
+#[cfg(target_env = "ohos")]
+use wry::WebViewBuilderExtOhos;
 #[cfg(target_vendor = "apple")]
 use wry::{WebViewBuilderExtDarwin, WebViewExtDarwin};
 
@@ -127,7 +129,9 @@ pub use tao::platform::macos::{
   ActivationPolicy as TaoActivationPolicy, EventLoopExtMacOS, WindowExtMacOS,
 };
 #[cfg(target_env = "ohos")]
-pub use tao::platform::ohos::EventLoopBuilderExtOpenHarmony;
+pub use tao::platform::ohos::{EventLoopBuilderExtOpenHarmony, WindowBuilderExtOpenHarmony};
+#[cfg(target_env = "ohos")]
+pub use tauri_runtime::OHOSWindowKind;
 #[cfg(target_os = "macos")]
 use tauri_runtime::ActivationPolicy;
 
@@ -939,6 +943,14 @@ impl WindowBuilder for WindowBuilderWrapper {
       .minimizable(config.minimizable)
       .shadow(config.shadow);
 
+    #[cfg(target_env = "ohos")]
+    {
+      use tao::platform::ohos::WindowBuilderExtOpenHarmony;
+      window.inner = window.inner.with_label(&config.label);
+      // Config windows are always the main (UIAbility) window
+      window.inner = window.inner.with_window_kind(tao::platform::ohos::OHOSWindowKind::UIAbility);
+    }
+
     let mut constraints = WindowSizeConstraints::default();
 
     if let Some(min_width) = config.min_width {
@@ -1323,6 +1335,17 @@ impl WindowBuilder for WindowBuilderWrapper {
     self.inner = self
       .inner
       .with_requesting_scene_identifier(identifier.into());
+    self
+  }
+
+  #[cfg(target_env = "ohos")]
+  fn ohos_window_kind(mut self, kind: tauri_runtime::OHOSWindowKind) -> Self {
+    use tao::platform::ohos::WindowBuilderExtOpenHarmony;
+    let tao_kind = match kind {
+      tauri_runtime::OHOSWindowKind::UIAbility => tao::platform::ohos::OHOSWindowKind::UIAbility,
+      tauri_runtime::OHOSWindowKind::Float => tao::platform::ohos::OHOSWindowKind::Float,
+    };
+    self.inner = self.inner.with_window_kind(tao_kind);
     self
   }
 }
@@ -4657,6 +4680,12 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
     }
   };
 
+  #[cfg(target_env = "ohos")]
+  {
+    use tao::platform::ohos::WindowBuilderExtOpenHarmony;
+    window_builder.inner = window_builder.inner.with_label(&label);
+  }
+
   let window = window_builder
     .inner
     .build(event_loop)
@@ -4874,6 +4903,15 @@ You may have it installed on another user account, but it is not available for t
     webview_builder = webview_builder.with_https_scheme(webview_attributes.use_https_scheme);
   }
 
+  #[cfg(target_env = "ohos")]
+  {
+    use tao::platform::ohos::WindowExtOpenHarmony;
+    use wry::WebViewBuilderExtOhos;
+    if let Some(window_id) = window.window_id() {
+      webview_builder = webview_builder.with_window_id(window_id);
+    }
+  }
+
   if let Some(background_throttling) = webview_attributes.background_throttling {
     webview_builder = webview_builder.with_background_throttling(match background_throttling {
       tauri_utils::config::BackgroundThrottlingPolicy::Disabled => {
@@ -4943,7 +4981,7 @@ You may have it installed on another user account, but it is not available for t
   }
 
   if let Some(new_window_handler) = pending.new_window_handler {
-    #[cfg(desktop)]
+    #[cfg(all(desktop, not(target_env = "ohos")))]
     let context = context.clone();
     webview_builder = webview_builder.with_new_window_req_handler(move |url, features| {
       let Ok(url) = url.parse() else {
@@ -4955,7 +4993,7 @@ You may have it installed on another user account, but it is not available for t
           features.size,
           features.position,
           tauri_runtime::webview::NewWindowOpener {
-            #[cfg(desktop)]
+            #[cfg(all(desktop, not(target_env = "ohos")))]
             webview: features.opener.webview,
             #[cfg(windows)]
             environment: features.opener.environment,
@@ -4966,7 +5004,7 @@ You may have it installed on another user account, but it is not available for t
       );
       match response {
         tauri_runtime::webview::NewWindowResponse::Allow => wry::NewWindowResponse::Allow,
-        #[cfg(desktop)]
+        #[cfg(all(desktop, not(target_env = "ohos")))]
         tauri_runtime::webview::NewWindowResponse::Create { window_id } => {
           let windows = &context.main_thread.windows.0;
           let webview = windows
@@ -4978,27 +5016,27 @@ You may have it installed on another user account, but it is not available for t
             .unwrap()
             .clone();
 
-          #[cfg(desktop)]
-          wry::NewWindowResponse::Create {
-            #[cfg(target_os = "macos")]
-            webview: wry::WebViewExtMacOS::webview(&*webview).as_super().into(),
-            #[cfg(all(
-              any(
-                target_os = "linux",
-                target_os = "dragonfly",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd"
-              ),
-              not(target_env = "ohos")
-            ))]
-            webview: webview.webview(),
-            #[cfg(windows)]
-            webview: webview.webview(),
+              #[cfg(all(desktop, not(target_env = "ohos")))]
+              wry::NewWindowResponse::Create {
+                #[cfg(target_os = "macos")]
+                webview: wry::WebViewExtMacOS::webview(&*webview).as_super().into(),
+                #[cfg(all(
+                  any(
+                    target_os = "linux",
+                    target_os = "dragonfly",
+                    target_os = "freebsd",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                  ),
+                  not(target_env = "ohos")
+                ))]
+                webview: webview.webview(),
+                #[cfg(windows)]
+                webview: webview.webview(),
+              }
+            }
+            tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
           }
-        }
-        tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
-      }
     });
   }
 

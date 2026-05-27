@@ -71,3 +71,16 @@ export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_RUSTFLAGS="-C link-arg=--target=a
 # ─── 推导项目根目录（skill 在 .claude/skills/ohos-build/scripts/ 下）───
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 export PROJECT_ROOT
+
+# ─── 设备类型配置 ───
+# TAURI_OHOS_DEVICE_TYPE: mobile 或 desktop
+# - mobile: 编译为移动端模式（默认）
+# - desktop: 编译为桌面端模式，启用 desktop cfg 功能
+export TAURI_OHOS_DEVICE_TYPE="${TAURI_OHOS_DEVICE_TYPE:-mobile}"
+
+# ─── OHOS NDK & SDK (ohrs/hvigorw 需要) ───
+# ohrs expects OHOS_NDK_HOME pointing to the SDK root (not /native subdirectory)
+# ohrs internally appends /native itself; double /native/native causes panics
+export OHOS_NDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH\\sdk\\default\\openharmony"
+# hvigorw expects DEVECO_SDK_HOME
+export DEVECO_SDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH"

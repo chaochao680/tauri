@@ -3,11 +3,76 @@
 // SPDX-License-Identifier: MIT
 
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::{
   command,
   ipc::{Channel, CommandScope},
-  Manager, Runtime, WebviewUrl,
+  Resource, ResourceId,
+  Manager, Runtime, WebviewUrl, Emitter, Listener,
+  webview::PageLoadEvent,
 };
+
+// A simple Counter resource that lives in Rust
+struct Counter {
+  value: AtomicU32,
+}
+
+impl Resource for Counter {
+  fn name(&self) -> std::borrow::Cow<'_, str> {
+    "Counter".into()
+  }
+}
+
+#[command]
+pub fn create_counter<R: Runtime>(app: tauri::AppHandle<R>) -> ResourceId {
+  let counter = Counter {
+    value: AtomicU32::new(0),
+  };
+  app.resources_table().add(counter)
+}
+
+#[command]
+pub fn increment_counter<R: Runtime>(app: tauri::AppHandle<R>, rid: ResourceId) -> tauri::Result<u32> {
+  let counter = app.resources_table().get::<Counter>(rid)?;
+  let new_value = counter.value.fetch_add(1, Ordering::SeqCst) + 1;
+  Ok(new_value)
+}
+
+#[command]
+pub fn get_counter_value<R: Runtime>(app: tauri::AppHandle<R>, rid: ResourceId) -> tauri::Result<u32> {
+  let counter = app.resources_table().get::<Counter>(rid)?;
+  Ok(counter.value.load(Ordering::SeqCst))
+}
+
+// Event tracking for testing
+#[derive(Default)]
+pub struct EventTracker {
+  pub window_events: Mutex<Vec<String>>,
+  pub menu_events: Mutex<Vec<String>>,
+}
+
+#[command]
+pub fn get_tracked_window_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<Vec<String>> {
+  let tracker = app.state::<EventTracker>();
+  let events = tracker.window_events.lock().unwrap().clone();
+  Ok(events)
+}
+
+#[command]
+pub fn get_tracked_menu_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<Vec<String>> {
+  let tracker = app.state::<EventTracker>();
+  let events = tracker.menu_events.lock().unwrap().clone();
+  Ok(events)
+}
+
+#[command]
+pub fn clear_tracked_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  let tracker = app.state::<EventTracker>();
+  tracker.window_events.lock().unwrap().clear();
+  tracker.menu_events.lock().unwrap().clear();
+  Ok(())
+}
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
@@ -82,6 +147,101 @@ pub fn write_test_report<R: Runtime>(
   Ok(())
 }
 
+/// Clear the test report file before starting a new test run.
+#[command]
+pub fn clear_test_report<R: Runtime>(
+  #[allow(unused_variables)] app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+  #[cfg(target_env = "ohos")]
+  let dir = std::path::PathBuf::from("/data/storage/el2/base/cache");
+  #[cfg(not(target_env = "ohos"))]
+  let dir = {
+    use tauri::Manager;
+    app.path().app_cache_dir().map_err(|e| e.to_string())?
+  };
+
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let path = dir.join("test-report.md");
+
+  // Write report header with timestamp
+  let timestamp = chrono::Utc::now().to_rfc3339();
+  let header = format!(
+    "# Test Report\n\n*Generated: {}*\n\n| # | Test | Status | Duration | Error |\n|---|------|--------|----------|-------|\n",
+    timestamp
+  );
+  std::fs::write(&path, header).map_err(|e| e.to_string())?;
+
+  Ok(())
+}
+
+/// Append a single test result directly to the test-report.md file.
+/// Each call reads the existing markdown, appends the result as a table row, and writes back.
+/// This ensures the report is always up-to-date even if the app freezes later.
+#[command]
+pub fn append_test_result<R: Runtime>(
+  #[allow(unused_variables)] app: tauri::AppHandle<R>,
+  name: String,
+  status: String,
+  duration: u64,
+  error: Option<String>,
+  index: usize,
+  total: usize,
+) -> Result<(), String> {
+  #[cfg(target_env = "ohos")]
+  let dir = std::path::PathBuf::from("/data/storage/el2/base/cache");
+  #[cfg(not(target_env = "ohos"))]
+  let dir = {
+    use tauri::Manager;
+    app.path().app_cache_dir().map_err(|e| e.to_string())?
+  };
+
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let path = dir.join("test-report.md");
+
+  // Read existing report
+  let content = std::fs::read_to_string(&path).unwrap_or_default();
+
+  // If this is the first result, write header + table header
+  let mut output = if content.is_empty() || content.contains("_No tests run yet._") {
+    format!(
+      "# Test Report\n\n| # | Test | Status | Duration | Error |\n|---|------|--------|----------|-------|\n"
+    )
+  } else {
+    content
+  };
+
+  // Format status emoji
+  let status_icon = match status.as_str() {
+    "pass" => "✅",
+    "fail" => "❌",
+    "skip" => "⏭️",
+    _ => "❓",
+  };
+
+  // Format error column
+  let error_col = error.unwrap_or_default();
+
+  // Append row
+  output.push_str(&format!(
+    "| {} | {} | {} | {}ms | {} |\n",
+    index + 1,
+    name,
+    status_icon,
+    duration,
+    error_col
+  ));
+
+  // If this is the last result, append summary
+  if index + 1 == total {
+    output.push_str("\n---\n\n*Report generated at end of test run.*\n");
+  }
+
+  std::fs::write(&path, &output).map_err(|e| e.to_string())?;
+
+  Ok(())
+}
+
+static WINDOW_SEQ: AtomicU32 = AtomicU32::new(1);
 static CONSOLE_LOG_BUFFER: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 #[command]
@@ -185,6 +345,42 @@ pub fn test_eval<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<(
 }
 
 #[command]
+pub fn test_local_storage<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  log::info!("test_local_storage called");
+
+  if let Some(window) = app.get_webview_window("main") {
+    // Test localStorage.setItem
+    window.eval_with_callback(
+      r#"(function() { try { localStorage.setItem('tauri_test_key', 'hello_from_rust'); return localStorage.getItem('tauri_test_key'); } catch(e) { return 'ERROR:' + e.message; } })()"#,
+      move |result| {
+        log::info!("localStorage test result from JS: {}", result);
+      },
+    )?;
+  }
+
+  Ok(())
+}
+
+/// Test eval_with_callback: evaluates JS and emits result as event for JS test verification
+#[command]
+pub fn test_eval_with_callback<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  log::info!("test_eval_with_callback called");
+
+  if let Some(window) = app.get_webview_window("main") {
+    let app_clone = app.clone();
+    window.eval_with_callback(
+      r#"(function() { return JSON.stringify({arithmetic: 1+2, stringLen: "hello".length, bool: true}); })()"#,
+      move |result| {
+        log::info!("eval_with_callback result from JS: {}", result);
+        let _ = app_clone.emit("eval-with-callback-result", &result);
+      },
+    )?;
+  }
+
+  Ok(())
+}
+
+#[command]
 pub fn test_navigate<R: tauri::Runtime>(
   window: tauri::WebviewWindow<R>,
   url: String,
@@ -213,18 +409,66 @@ pub fn create_isolated_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
   window_id: String,
   data_suffix: String,
+  url: String,
 ) -> tauri::Result<()> {
-  log::info!("Creating isolated window: {}", window_id);
+  // Append a unique sequence number to ensure window name is always unique
+  let seq = WINDOW_SEQ.fetch_add(1, Ordering::SeqCst);
+  let unique_window_id = format!("{}_{}", window_id, seq);
+  log::info!("[Rust] create_isolated_window called. window_id={} (unique={}), url={}", window_id, unique_window_id, url);
 
   let mut data_dir = app.path().app_data_dir()?;
-  data_dir.push(format!("webview_data_{}", data_suffix));
+  data_dir.push(format!("webview_data_{}_{}", data_suffix, seq));
 
-  log::info!("Data directory: {:?}", data_dir);
+  // Try to parse as external URL (supports http, https, data, etc.)
+  let webview_url = match url::Url::parse(&url) {
+      Ok(parsed) => {
+          log::info!("[Rust] Parsed as External URL: {}", parsed);
+          WebviewUrl::External(parsed)
+      }
+      Err(e) => {
+          log::info!("[Rust] Failed to parse as External, using App URL: {}. Error: {}", url, e);
+          WebviewUrl::App(url.into())
+      }
+  };
 
-  tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
+  let app_nav = app.clone();
+  let app_title = app.clone();
+  let app_page = app.clone();
+
+  let init_script = format!(
+      "document.addEventListener('DOMContentLoaded', () => {{ \
+        let num = {seq}; \
+        document.title = num <= 1 ? 'Hello World' : 'Hello World' + num; \
+        let h1 = document.querySelector('h1'); \
+        if (h1) {{ h1.textContent = num <= 1 ? 'Hello World' : 'Hello World' + num; }} \
+      }});"
+    );
+    tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
     .inner_size(800.0, 600.0)
+    .initialization_script(&init_script)
+    .on_navigation(move |nav_url| {
+      log::info!("Isolated window navigation intercepted: {}", nav_url);
+      let _ = app_nav.emit("navigation-intercepted", nav_url.to_string());
+      true
+    })
+    .on_document_title_changed(move |_window, title| {
+      log::info!("Isolated window title changed: {}", title);
+      let _ = app_title.emit("document-title-changed", &title);
+    })
+    .on_page_load(move |_webview, payload| {
+      log::info!("Isolated window on_page_load");
+      let url = payload.url().to_string();
+      match payload.event() {
+        PageLoadEvent::Started => {
+          let _ = app_page.emit("page-load-started", &url);
+        }
+        PageLoadEvent::Finished => {
+          let _ = app_page.emit("page-load-finished", &url);
+        }
+      }
+    })
     .build()?;
 
   Ok(())
@@ -334,5 +578,32 @@ pub fn create_transparent_window<R: tauri::Runtime>(
     )
     .build()?;
 
+  Ok(())
+}
+
+/// Test command for app_handle.emit
+#[command]
+pub fn emit_test_event<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  app.emit("test-emit-event", "hello from rust")
+}
+
+/// Test command for app_handle.listen
+#[command]
+pub fn setup_app_listener<R: Runtime + 'static>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  let app_clone = app.clone();
+  app.listen("app-listen-test", move |_event| {
+    log::info!("Received app-listen-test via app.listen");
+    let _ = app_clone.emit("app-listen-response", "heard you");
+  });
+  Ok(())
+}
+
+/// Test command for tauri::async_runtime::spawn
+#[command]
+pub fn test_async_spawn<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  tauri::async_runtime::spawn(async move {
+    // Simulate some async work
+    let _ = app.emit("spawn-completed", "async done");
+  });
   Ok(())
 }

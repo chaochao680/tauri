@@ -1116,7 +1116,7 @@ macro_rules! shared_app_impl {
       }
 
       /// Whether the application supports multiple windows.
-      #[cfg(desktop)]
+      #[cfg(all(desktop, not(target_env = "ohos")))]
       pub fn supports_multiple_windows(&self) -> bool {
         true
       }
@@ -2313,6 +2313,10 @@ tauri::Builder::default()
           .expect("OpenHarmony app instance not initialized");
         crate::ohos::BASE_PATH.set(ohos_app.base_path()).ok();
         crate::ohos::MODULE_NAME.set(ohos_app.module_name()).ok();
+        #[cfg(feature = "tray-icon")]
+        {
+          tray_icon::set_ohos_app(ohos_app.clone());
+        }
         ohos_app
       },
     };

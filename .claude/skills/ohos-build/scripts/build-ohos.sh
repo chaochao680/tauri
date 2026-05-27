@@ -1,6 +1,6 @@
 #!/bin/bash
-# Tauri OpenHarmony Build Script (手动流程)
-# 编译 Rust + 前端，生成未签名 HAP
+# Tauri OpenHarmony Build Script
+# 编译 Rust + 前端，生成已签名 HAP（hvigorw 使用 build-profile.json5 中的证书自动签名）
 
 set -e
 
@@ -10,26 +10,15 @@ source "$SCRIPT_DIR/env.sh"
 API_DIR="$PROJECT_ROOT/examples/api"
 SRC_TAURI="$API_DIR/src-tauri"
 OHOS_PROJECT="$SRC_TAURI/gen/ohos"
-UNSIGNED_HAP="$OHOS_PROJECT/entry/build/default/outputs/default/entry-default-unsigned.hap"
+SIGNED_HAP="$OHOS_PROJECT/entry/build/default/outputs/default/entry-default-signed.hap"
 SO_FILE="$PROJECT_ROOT/target/aarch64-unknown-linux-ohos/release/libapi_lib.so"
+HVIGORFILE="$OHOS_PROJECT/entry/hvigorfile.ts"
 
 echo "=== Tauri OpenHarmony Build ==="
 echo "DEVECO_HOME=$DEVECO_HOME"
 echo "PROJECT_ROOT=$PROJECT_ROOT"
+echo "TAURI_OHOS_DEVICE_TYPE=$TAURI_OHOS_DEVICE_TYPE"
 echo ""
-
-# ─── 设置 Windows 格式环境变量 ───
-DEVECO_SDK_HOME_WIN=$(echo "$DEVECO_HOME/sdk" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-JAVA_HOME_WIN=$(echo "$DEVECO_HOME/jbr" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-HVIGORW_BAT_WIN=$(echo "$DEVECO_HOME/tools/hvigor/bin/hvigorw.bat" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-OHOS_PROJECT_WIN=$(echo "$OHOS_PROJECT" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-
-export DEVECO_SDK_HOME="$DEVECO_SDK_HOME_WIN"
-export JAVA_HOME="$JAVA_HOME_WIN"
-
-echo "JAVA_HOME=$JAVA_HOME"
-echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
-echo "HVIGORW_BAT=$HVIGORW_BAT_WIN"
 
 # ─── Step 1: 安装前端依赖 ───
 if [ ! -d "$API_DIR/node_modules" ]; then
@@ -53,9 +42,9 @@ export VITE_AUTOTEST="${VITE_AUTOTEST:-false}"
 
 # ─── Step 4: Rust 编译 ───
 echo ""
-echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release)..."
+echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release, device_type=$TAURI_OHOS_DEVICE_TYPE)..."
 rm -f "$SO_FILE"
-(cd "$SRC_TAURI" && cargo build --target aarch64-unknown-linux-ohos --release --features prod)
+(cd "$SRC_TAURI" && TAURI_OHOS_DEVICE_TYPE="$TAURI_OHOS_DEVICE_TYPE" cargo build --target aarch64-unknown-linux-ohos --release --features prod)
 
 if [ ! -f "$SO_FILE" ]; then
     echo "ERROR: Rust compilation failed - .so not found"
@@ -69,24 +58,39 @@ echo ">>> Step 5: Copying .so to ohos project..."
 mkdir -p "$OHOS_PROJECT/entry/libs/arm64-v8a"
 cp "$SO_FILE" "$OHOS_PROJECT/entry/libs/arm64-v8a/libapi_lib.so"
 
-# ─── Step 6: hvigorw 打包 ───
+# ─── Step 6: hvigorw 打包（自动禁用/恢复 tauriPlugin）───
 echo ""
 echo ">>> Step 6: Running hvigorw assembleHap..."
-echo "    NOTE: Before running this, you must manually disable tauriPlugin in hvigorfile.ts"
-echo "    See SKILL.md for instructions."
-rm -f "$UNSIGNED_HAP"
 
-# 使用 cmd.exe 设置环境变量并调用 hvigorw.bat（PATH 必须包含 jbr/bin 否则 spawn java ENOENT）
-JAVA_BIN_WIN=$(echo "$DEVECO_HOME/jbr/bin" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-cmd.exe /c "set DEVECO_SDK_HOME=$DEVECO_SDK_HOME_WIN&& set JAVA_HOME=$JAVA_HOME_WIN&& set PATH=$JAVA_BIN_WIN;%PATH%&& cd /d $OHOS_PROJECT_WIN&& \"$HVIGORW_BAT_WIN\" assembleHap --no-daemon"
+# 禁用 tauriPlugin（独立构建时不需要 TCP 回调 tauri CLI）
+if grep -q 'plugins:\[tauriPlugin()\]' "$HVIGORFILE"; then
+    sed -i 's/plugins:\[tauriPlugin()\]/plugins:[]/' "$HVIGORFILE"
+    RESTORE_PLUGIN=true
+else
+    RESTORE_PLUGIN=false
+fi
+
+rm -f "$SIGNED_HAP"
+(cd "$OHOS_PROJECT" && hvigorw --no-daemon -p product=default -p module=entry@default assembleHap --analyze=normal --parallel --incremental) || HVIGOR_EXIT=$?
+HVIGOR_EXIT=${HVIGOR_EXIT:-0}
+
+# 恢复 tauriPlugin
+if [ "$RESTORE_PLUGIN" = true ]; then
+    sed -i 's/plugins:\[\]/plugins:[tauriPlugin()]/' "$HVIGORFILE"
+fi
+
+if [ $HVIGOR_EXIT -ne 0 ]; then
+    echo "ERROR: hvigorw assembleHap failed"
+    exit 1
+fi
 
 # ─── 验证产物 ───
-if [ ! -f "$UNSIGNED_HAP" ]; then
-    echo "ERROR: Build failed - unsigned HAP not found at:"
-    echo "  $UNSIGNED_HAP"
+if [ ! -f "$SIGNED_HAP" ]; then
+    echo "ERROR: Build failed - signed HAP not found at:"
+    echo "  $SIGNED_HAP"
     exit 1
 fi
 
 echo ""
 echo "=== Build Complete ==="
-echo "HAP: $UNSIGNED_HAP"
+echo "HAP: $SIGNED_HAP"

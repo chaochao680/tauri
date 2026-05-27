@@ -30,7 +30,7 @@ use std::{
 };
 
 /// Mobile APIs.
-#[cfg(mobile)]
+#[cfg(any(mobile, target_env = "ohos"))]
 pub mod mobile;
 
 /// The plugin interface.

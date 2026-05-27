@@ -8,22 +8,59 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/env.sh"
 
 DEVICE_SN="${DEVICE_SN:-$1}"
+OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-$2}"
 OHOS_PROJECT="$PROJECT_ROOT/examples/api/src-tauri/gen/ohos"
 APP_JSON="$OHOS_PROJECT/AppScope/app.json5"
 BUNDLE_NAME=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' "$APP_JSON" | head -1 | sed 's/.*"bundleName"[[:space:]]*:[[:space:]]*"//;s/"//')
-REPORT_DEVICE_PATH="/data/app/el2/100/base/$BUNDLE_NAME/cache/test-report.json"
-REPORT_LOCAL="$PROJECT_ROOT/examples/api/test-report.json"
+REPORT_DEVICE_PATH="/data/app/el2/100/base/$BUNDLE_NAME/cache/test-report.md"
+REPORT_LOCAL="$PROJECT_ROOT/examples/api/test-report.md"
 REPORT_LOCAL_WIN=$(echo "$REPORT_LOCAL" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-WAIT_SECONDS="${WAIT_SECONDS:-15}"
+WAIT_SECONDS="${WAIT_SECONDS:-30}"
 
 echo "=== Tauri OpenHarmony Auto Test ==="
 echo "Bundle: $BUNDLE_NAME"
 echo "Device: ${DEVICE_SN:-auto-detect}"
+echo "Device Type: ${OHOS_DEVICE_TYPE:-desktop}"
 echo ""
 
-# Step 1: Build with VITE_AUTOTEST=true
-echo ">>> Step 1: Building (autotest mode)..."
+# Step 0: Rebuild openharmony-ability HAR if sources changed
+ABILITY_ROOT="$PROJECT_ROOT/../openharmony-ability"
+ABILITY_HAR="$ABILITY_ROOT/ability.har"
+OHOS_ENTRY="$OHOS_PROJECT/entry"
+
+if [ -d "$ABILITY_ROOT" ]; then
+    ABILITY_CHANGED=false
+    if [ ! -f "$ABILITY_HAR" ]; then
+        ABILITY_CHANGED=true
+    else
+        HAR_MTIME=$(stat -c %Y "$ABILITY_HAR" 2>/dev/null || stat -f %m "$ABILITY_HAR" 2>/dev/null || echo 0)
+        # Check if any source file is newer than the HAR
+        NEWER=$(find "$ABILITY_ROOT/native_ability/src" "$ABILITY_ROOT/crates" -newer "$ABILITY_HAR" -type f 2>/dev/null | head -1)
+        if [ -n "$NEWER" ]; then
+            ABILITY_CHANGED=true
+        fi
+    fi
+
+    if [ "$ABILITY_CHANGED" = true ]; then
+        echo ">>> Step 0: Rebuilding openharmony-ability HAR..."
+        pushd "$ABILITY_ROOT" > /dev/null
+        ohrs build --arch arm64 --skip-napi-check 2>&1 | tail -5 || true
+        bash scripts/pack.sh 2>&1 | tail -3
+        tar -czf ability.har package
+        popd > /dev/null
+        # Windows EPERM: must fully delete oh_modules before reinstalling
+        cmd.exe /c "rmdir /s /q $(echo "$OHOS_PROJECT/oh_modules" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')" 2>/dev/null || true
+        (cd "$OHOS_PROJECT" && ohpm install --all) 2>&1 | tail -3
+        echo "    HAR rebuilt and installed."
+    else
+        echo ">>> Step 0: openharmony-ability HAR is up-to-date, skipping."
+    fi
+fi
+
+# Step 1: Build with VITE_AUTOTEST=true and TAURI_OHOS_DEVICE_TYPE
+echo ">>> Step 1: Building (autotest mode, device_type=${OHOS_DEVICE_TYPE:-desktop})..."
 export VITE_AUTOTEST=true
+export TAURI_OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-desktop}"
 bash "$SCRIPT_DIR/build-ohos.sh"
 
 # Step 2: Sign & Install
@@ -65,58 +102,23 @@ echo ""
 echo "=== Test Report ==="
 echo ""
 
-python3 - "$REPORT_LOCAL" << 'PYTHON' 2>/dev/null || python - "$REPORT_LOCAL" << 'PYTHON'
-import json, sys
+cat "$REPORT_LOCAL"
+echo ""
 
-with open(sys.argv[1]) as f:
-    report = json.load(f)
+# Count pass/fail from markdown table (uses emoji markers)
+PASS_COUNT=$(grep -c '✅' "$REPORT_LOCAL" || true)
+FAIL_COUNT=$(grep -c '❌' "$REPORT_LOCAL" || true)
+: "${PASS_COUNT:=0}"
+: "${FAIL_COUNT:=0}"
 
-print(f"Timestamp: {report['timestamp']}")
-print(f"Total: {report['total']}, Passed: {report['passed']}, Failed: {report['failed']}, Skipped: {report['skipped']}")
-print("")
+echo "=================================================="
+echo "Summary: $PASS_COUNT passed, $FAIL_COUNT failed"
 
-passed = []
-failed = []
-skipped = []
-
-for r in report['results']:
-    if r['status'] == 'pass':
-        passed.append(r)
-    elif r['status'] == 'fail':
-        failed.append(r)
-    else:
-        skipped.append(r)
-
-if failed:
-    print("--- FAILED ---")
-    for r in failed:
-        print(f"  FAIL: {r['name']} ({r['duration']}ms)")
-        if r.get('error'):
-            print(f"        Error: {r['error']}")
-    print("")
-
-if passed:
-    print(f"--- PASSED ({len(passed)}) ---")
-    for r in passed:
-        print(f"  PASS: {r['name']} ({r['duration']}ms)")
-    print("")
-
-if skipped:
-    print(f"--- SKIPPED ({len(skipped)}) ---")
-    for r in skipped:
-        print(f"  SKIP: {r['name']}")
-    print("")
-
-# Summary
-print("=" * 50)
-if report['failed'] == 0:
-    print("ALL TESTS PASSED!")
-else:
-    print(f"FAILURES: {report['failed']} test(s) failed.")
-    print("")
-    print("Failed APIs (not yet adapted for OpenHarmony):")
-    for r in failed:
-        print(f"  - {r['name']}: {r.get('error', 'unknown')}")
-
-sys.exit(0 if report['failed'] == 0 else 1)
-PYTHON
+if [ "$FAIL_COUNT" -gt 0 ]; then
+    echo ""
+    echo "FAILED tests:"
+    grep '❌' "$REPORT_LOCAL" | sed 's/|/  /g'
+    exit 1
+else
+    echo "ALL TESTS PASSED!"
+fi

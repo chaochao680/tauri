@@ -252,7 +252,7 @@ fn run_build(
   };
   let handle = write_options(&tauri_config, cli_options)?;
 
-  inject_resources(config, &*tauri_config)?;
+  inject_resources(config, &tauri_config)?;
 
   if !plugin_metadata.is_empty() {
     let project_dir = config.project_dir();

@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 export type TestStatus = 'pass' | 'fail' | 'skip';
 export type TestCategory = 'auto' | 'side-effect' | 'manual';
 
@@ -43,6 +45,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   });
 }
 
+/**
+ * Append a test result to the report file on the device.
+ * Called automatically by runTests after each test completes.
+ * Fire-and-forget: does not block test execution if the invoke hangs.
+ */
+function appendResult(result: TestResult, index: number, total: number): void {
+  invoke('append_test_result', {
+    name: result.name,
+    status: result.status,
+    duration: result.duration,
+    error: result.error || null,
+    index,
+    total,
+  }).catch(() => {});
+}
+
 export async function runTests(
   tests: TestCase[],
   onProgress?: (result: TestResult, index: number, total: number) => void
@@ -61,6 +79,7 @@ export async function runTests(
       };
       results.push(result);
       onProgress?.(result, i, tests.length);
+      await appendResult(result, i, tests.length);
       continue;
     }
 
@@ -87,6 +106,7 @@ export async function runTests(
 
     results.push(result);
     onProgress?.(result, i, tests.length);
+    await appendResult(result, i, tests.length);
   }
 
   return {

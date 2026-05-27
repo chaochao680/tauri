@@ -8,6 +8,8 @@ mod menu_plugin;
 #[cfg(desktop)]
 mod tray;
 
+use cmd::EventTracker;
+
 #[cfg(target_env = "ohos")]
 mod ohos_log {
   pub fn init() {
@@ -24,10 +26,10 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{
   webview::{PageLoadEvent, WebviewWindowBuilder},
-  App, Emitter, Listener, Runtime, WebviewUrl,
+  App, Emitter, Listener, Manager, Runtime, WebviewUrl,
 };
 #[allow(unused)]
-use tauri::{Manager, RunEvent};
+use tauri::RunEvent;
 #[cfg(not(target_env = "ohos"))]
 use tauri_plugin_sample::{PingRequest, SampleExt};
 
@@ -42,7 +44,7 @@ pub struct AppMenu<R: Runtime>(pub std::sync::Mutex<Option<tauri::menu::Menu<R>>
 #[cfg(all(desktop, not(test)))]
 pub struct PopupMenu<R: Runtime>(tauri::menu::Menu<R>);
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg_attr(any(mobile, target_env = "ohos"), tauri::mobile_entry_point)]
 pub fn run() {
   #[cfg(target_env = "ohos")]
   std::panic::set_hook(Box::new(|info| {
@@ -72,7 +74,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_env = "ohos")]
   let builder = builder
-    .plugin(
+     /*.plugin(
       tauri_plugin_log::Builder::default()
         .level(log::LevelFilter::Info)
         .clear_targets()
@@ -80,7 +82,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           tauri_plugin_log::TargetKind::Stdout,
         ))
         .build(),
-    )
+    )*/
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_http::init())
@@ -90,33 +92,82 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_env = "ohos")]
   {
-    // tauri_plugin_log 已初始化 log facade，不再手动调用 ohos_log::init()
+    // 当前pulgin_log尚未对接hilog，因此需要调用 ohos_log::init()
+    ohos_log::init();
+    
     log::info!("OHOS log initialized via tauri_plugin_log");
   };
 
+
   #[allow(unused_mut)]
   let mut builder = builder
-    // 1. Test custom URI scheme protocol
+    // Test append_invoke_initialization_script
+    .append_invoke_initialization_script(r#"
+      window.__TAURI_TEST_INIT_SCRIPT_RAN = true;
+      window.__TAURI_INTERNALS__.__TEST_INVOKE_INIT_SCRIPT__ = 'executed';
+    "#)
+    // 1. Test custom URI scheme protocol (sync)
     .register_uri_scheme_protocol("myapp", |_ctx, request| {
       log::info!("Custom scheme request: {:?}", request.uri());
 
-      // Return a simple response
-      let body = r#"
+      // Return HTML that posts message to parent
+      let path = request.uri().path().to_string();
+      let body = format!(r#"
         <!DOCTYPE html>
         <html>
         <body>
-          <h1>✅ Custom Scheme Works!</h1>
-          <p>Requested: <span id="url"></span></p>
-          <script>document.getElementById('url').textContent = location.href;</script>
+          <script>
+            window.parent.postMessage({{
+              status: 'ok',
+              path: '{}',
+              protocol: 'myapp'
+            }}, '*');
+          </script>
         </body>
         </html>
-      "#.as_bytes().to_vec();
+      "#, path).into_bytes();
 
       tauri::http::Response::builder()
         .header("Content-Type", "text/html")
         .status(200)
         .body(body)
         .unwrap()
+    })
+    // 2. Test custom URI scheme protocol (async)
+    .register_asynchronous_uri_scheme_protocol("myapp-async", |_ctx, request, responder| {
+      log::info!("Async scheme request: {:?}", request.uri());
+
+      // Spawn a thread to simulate async work
+      std::thread::spawn(move || {
+        // Simulate some async work
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Return HTML that posts message to parent
+        let path = request.uri().path().to_string();
+        let body = format!(r#"
+          <!DOCTYPE html>
+          <html>
+          <body>
+            <script>
+              window.parent.postMessage({{
+                status: 'ok',
+                path: '{}',
+                protocol: 'myapp-async',
+                async: true
+              }}, '*');
+            </script>
+          </body>
+          </html>
+        "#, path).into_bytes();
+
+        responder.respond(
+          tauri::http::Response::builder()
+            .header("Content-Type", "text/html")
+            .status(200)
+            .body(body)
+            .unwrap()
+        );
+      });
     })
     .setup(move |app| {
       #[cfg(all(desktop, not(test)))]
@@ -129,6 +180,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(target_os = "macos")]
       app.manage(AppMenu::<R>(Default::default()));
 
+      // Manage event tracker for testing
+      app.manage(EventTracker::default());
+
       #[cfg(all(desktop, not(test)))]
       app.manage(PopupMenu(
         tauri::menu::MenuBuilder::new(app)
@@ -138,15 +192,20 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           .build()?,
       ));
 
+      let app_handle_nav = app.handle().clone();
+      let app_handle_title = app.handle().clone();
+      let app_handle_download = app.handle().clone();
+
       let mut window_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .initialization_script("document.addEventListener('DOMContentLoaded', () => { document.title = '✅ INIT SCRIPT WORKED!'; });")
-        .on_document_title_changed(|_window, title| {
+        .on_document_title_changed(move |_window, title| {
           log::info!("document title changed: {title}");
+          let _ = app_handle_title.emit("document-title-changed", &title);
         })
         // 2. Test navigation intercept (shouldOverrideUrlLoading)
-        .on_navigation(|url| {
+        .on_navigation(move |url| {
           log::info!("Navigation intercepted: {url}");
-          // Don't block navigation for our test
+          let _ = app_handle_nav.emit("navigation-intercepted", url.to_string());
           true
         })
         // 3. Test web resource request intercept (onLoadIntercept)
@@ -156,26 +215,23 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           response.headers_mut().insert("X-Tauri-Test", tauri::http::HeaderValue::from_static("intercepted"));
         })
         // 4. Test download intercept
-        .on_download(|_webview, event| {
+        .on_download(move |_webview, event| {
           log::info!("on_download event received");
           match event {
             tauri::webview::DownloadEvent::Requested { url, destination } => {
               log::info!("Download requested: {}", url);
-
-              // 打印默认保存路径
               log::info!("Default destination: {:?}", destination);
-
-              // 可以在这里修改保存路径
-              // *destination = "/custom/path".into();
+              let _ = app_handle_download.emit("download-requested", url.to_string());
             }
             tauri::webview::DownloadEvent::Finished { url, path, success } => {
               log::info!("Download finished: {}, success: {}, path: {:?}", url, success, path);
+              let _ = app_handle_download.emit("download-finished", (url.to_string(), success));
             }
             _ => {
               log::info!("Other download event");
             }
           }
-          true // 允许下载
+          true // allow download
         });
 
       #[cfg(all(desktop, not(test)))]
@@ -193,23 +249,37 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
             let number = created_window_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-            let builder = WebviewWindowBuilder::new(
-              &app_,
-              format!("new-{number}"),
-              tauri::WebviewUrl::External("about:blank".parse().unwrap()),
-            )
-            .window_features(features)
-            .on_document_title_changed(|window, title| {
-              window.set_title(&title).unwrap();
-            })
-            .title(url.as_str());
+            #[cfg(not(target_env = "ohos"))]
+            {
+              let builder = WebviewWindowBuilder::new(
+                &app_,
+                format!("new-{number}"),
+                tauri::WebviewUrl::External("about:blank".parse().unwrap()),
+              )
+              .window_features(features)
+              .on_document_title_changed(|window, title| {
+                window.set_title(&title).unwrap();
+              })
+              .title(url.as_str());
 
-            let window = builder.build().unwrap();
-            tauri::webview::NewWindowResponse::Create { window }
+              let window = builder.build().unwrap();
+              tauri::webview::NewWindowResponse::Create { window }
+            }
+
+            #[cfg(target_env = "ohos")]
+            tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
           });
       }
 
       let webview = window_builder.build()?;
+
+      // Setup window event tracking
+      let app_handle = app.handle().clone();
+      webview.on_window_event(move |event| {
+        log::info!("on_window_event");
+        let tracker = app_handle.state::<EventTracker>();
+        tracker.window_events.lock().unwrap().push(format!("{:?}", event));
+      });
 
       #[cfg(debug_assertions)]
       webview.open_devtools();
@@ -280,12 +350,16 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       Ok(())
     })
     .on_page_load(|webview, payload| {
+      let app_handle = webview.app_handle().clone();
+      let url = payload.url().to_string();
       match payload.event() {
         PageLoadEvent::Started => {
-          log::info!("Page Begin: {}", payload.url());
+          log::info!("Page Begin: {}", url);
+          let _ = app_handle.emit("page-load-started", &url);
         }
         PageLoadEvent::Finished => {
-          log::info!("Page End: {}", payload.url());
+          log::info!("Page End: {}", url);
+          let _ = app_handle.emit("page-load-finished", &url);
         }
       }
 
@@ -312,10 +386,14 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::echo,
       cmd::spam,
       cmd::write_test_report,
+      cmd::clear_test_report,
+      cmd::append_test_result,
       cmd::console_log,
       cmd::flush_console_log,
       cmd::clear_console_log,
       cmd::test_eval,
+      cmd::test_local_storage,
+      cmd::test_eval_with_callback,
       cmd::test_navigate,
       cmd::test_reload,
       cmd::create_isolated_window,
@@ -323,6 +401,15 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::create_window_with_custom_ua,
       cmd::create_window_no_throttle,
       cmd::create_transparent_window,
+      cmd::create_counter,
+      cmd::increment_counter,
+      cmd::get_counter_value,
+      cmd::emit_test_event,
+      cmd::setup_app_listener,
+      cmd::test_async_spawn,
+      cmd::get_tracked_window_events,
+      cmd::get_tracked_menu_events,
+      cmd::clear_tracked_events,
     ])
     .build(tauri::tauri_build_context!())
     .expect("error while building tauri application");

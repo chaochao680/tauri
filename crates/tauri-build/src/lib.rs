@@ -482,7 +482,7 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
   println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
   println!("cargo:rerun-if-env-changed=OHOS_TAURI_DEVICE_TYPE");
   let mobile = if target_env == "ohos" {
-    let device_type = env::var("OHOS_TAURI_DEVICE_TYPE").unwrap_or_default();
+    let device_type = env::var("OHOS_TAURI_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
     device_type != "desktop"
   } else {
     target_os == "ios" || target_os == "android"
