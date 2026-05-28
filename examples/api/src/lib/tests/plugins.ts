@@ -267,6 +267,113 @@ export const pluginTests: TestCase[] = [
       await writeImage(png);
     },
   },
+  // writeImage with number[] — verifies visit_seq deserialization path
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(number[])',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const png = [
+        137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+        0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,
+        222,0,0,0,12,73,68,65,84,120,156,99,248,207,192,0,
+        0,3,1,1,0,201,254,146,239,0,0,0,0,73,69,78,
+        68,174,66,96,130
+      ];
+      await writeImage(png);
+    },
+  },
+  // writeImage with Image object — verifies Resource/rid path
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(Image)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const { Image } = await import('@tauri-apps/api/image');
+      const rgba = new Uint8Array([255, 0, 0, 255]);
+      const img = await Image.new(rgba, 1, 1);
+      await writeImage(img);
+    },
+  },
+  // writeImage with larger RGBA — verifies non-trivial data size through TSFN
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(4x4)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const rgba = new Uint8Array([
+        255,0,0,255,    0,255,0,255,    0,0,255,255,    255,255,0,255,
+        128,0,0,128,    0,128,0,128,    0,0,128,128,    128,128,0,128,
+        64,0,0,64,      0,64,0,64,      0,0,64,64,      64,64,0,64,
+        32,0,0,32,      0,32,0,32,      0,0,32,32,      32,32,0,32,
+      ]);
+      const { Image } = await import('@tauri-apps/api/image');
+      const img = await Image.new(rgba, 4, 4);
+      await writeImage(img);
+    },
+  },
+  // writeImage with { rgba, width, height } object — verifies visit_map → JsImage::Rgba
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(rgba-object)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const rgba = new Uint8Array([255, 0, 0, 255]);
+      await writeImage({ rgba, width: 1, height: 1 });
+    },
+  },
+  // writeImage with data URI string — verifies visit_str → JsImage::DataUri
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(data-uri)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      // Valid 1x1 red pixel PNG (color type 2 = RGB) as data URI
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+      await writeImage(dataUri);
+    },
+  },
+  // writeImage with file path string — verifies visit_str → JsImage::Path
+  // Uses fs plugin + path API to create the file, no custom Rust command needed.
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(path)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const { cacheDir, join } = await import('@tauri-apps/api/path');
+      const png = new Uint8Array([
+        137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+        0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,
+        222,0,0,0,12,73,68,65,84,120,156,99,248,207,192,0,
+        0,3,1,1,0,201,254,146,239,0,0,0,0,73,69,78,
+        68,174,66,96,130
+      ]);
+      const dir = await cacheDir();
+      const filePath = await join(dir, `test-clipboard-${Date.now()}.png`);
+      await writeFile(filePath, png);
+      await writeImage(filePath);
+      // Clean up temp file after test
+      const { remove } = await import('@tauri-apps/plugin-fs');
+      await remove(filePath);
+    },
+  },
+  // writeImage with ArrayBuffer — verifies visit_seq → JsImage::Bytes (IPC: buffer → sequence)
+  {
+    name: '@tauri-apps/plugin-clipboard-manager.writeImage(ArrayBuffer)',
+    category: 'side-effect',
+    async fn() {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const png = new Uint8Array([
+        137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+        0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,
+        222,0,0,0,12,73,68,65,84,120,156,99,248,207,192,0,
+        0,3,1,1,0,201,254,146,239,0,0,0,0,73,69,78,
+        68,174,66,96,130
+      ]);
+      await writeImage(png.buffer.slice(0));
+    },
+  },
 
   // @tauri-apps/plugin-process (manual — kills the process, can't assert)
   {

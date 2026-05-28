@@ -58,7 +58,7 @@ function appendResult(result: TestResult, index: number, total: number): void {
     error: result.error || null,
     index,
     total,
-  }).catch(() => {});
+  }).catch((e) => { console.error('append_test_result failed:', e, 'name:', result.name); });
 }
 
 export async function runTests(
@@ -106,6 +106,7 @@ export async function runTests(
 
     results.push(result);
     onProgress?.(result, i, tests.length);
+    console.log(`TEST ${result.status}: ${result.name} (${result.duration}ms)${result.error ? ' - ' + result.error : ''}`);
     await appendResult(result, i, tests.length);
   }
 

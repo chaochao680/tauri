@@ -242,6 +242,17 @@ impl<'de> serde::Deserialize<'de> for JsImage {
         Ok(JsImage::Bytes(value))
       }
 
+      fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+      where
+        A: de::SeqAccess<'de>,
+      {
+        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+        while let Some(byte) = seq.next_element::<u8>()? {
+          bytes.push(byte);
+        }
+        Ok(JsImage::Bytes(bytes))
+      }
+
       fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
       where
         E: de::Error,
@@ -256,16 +267,35 @@ impl<'de> serde::Deserialize<'de> for JsImage {
         let mut rgba: Option<Vec<u8>> = None;
         let mut width: Option<u32> = None;
         let mut height: Option<u32> = None;
+        // Defense in depth: when JS transformImage uses duck-typing to extract
+        // image.rid, the IPC sends the rid as a number (handled by visit_u64).
+        // But if duck-typing fails (e.g. old bundled code still uses instanceof),
+        // the entire Image object may be serialized as a JSON map. If that map
+        // contains a "rid" key, we can still recover by treating it as a
+        // JsImage::Resource, avoiding the "missing field rgba" error.
+        let mut rid: Option<ResourceId> = None;
 
         while let Some(key) = map.next_key::<String>()? {
           match key.as_str() {
             "rgba" => rgba = Some(map.next_value()?),
             "width" => width = Some(map.next_value()?),
             "height" => height = Some(map.next_value()?),
+            "rid" => rid = Some(map.next_value()?),
             _ => {
               let _: serde::de::IgnoredAny = map.next_value()?;
             }
           }
+        }
+
+        // If a rid was found in the map, treat this as a Resource reference.
+        // This handles the case where an Image object was serialized as a map
+        // (instead of just its rid number) due to transformImage failing to
+        // extract the rid on the JS side.
+        if let Some(rid) = rid {
+          if rgba.is_some() {
+            log::debug!("JsImage::visit_map: both rid and rgba present, using rid={}", rid);
+          }
+          return Ok(JsImage::Resource(rid));
         }
 
         let rgba = rgba.ok_or_else(|| de::Error::missing_field("rgba"))?;
