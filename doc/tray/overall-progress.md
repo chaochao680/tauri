@@ -1,7 +1,7 @@
 # Tray 模块 OHOS 适配 - 总体进度
 
-> 版本：v7.0
-> 更新时间：2026-05-20
+> 版本：v8.0
+> 更新时间：2026-05-27
 > 目标：追踪整体 tray 模块 OHOS 适配进度
 
 ---
@@ -18,6 +18,8 @@
 | Phase 5 | 端到端测试 | ✅ Done (100%) Auto + Manual 全部通过 | [impl/phase5-tray-testing-progress.md](./impl/phase5-tray-testing-progress.md) |
 | Phase 6 | StatusBar TSFN 数据传递重构 | ✅ Done (100%) | [impl/phase6-statusbar-tsfn-refactor-progress.md](./impl/phase6-statusbar-tsfn-refactor-progress.md) |
 | Phase 7 | Predefined/Check/Icon 支持 | ✅ Done (100%) | [impl/phase7-predefined-check-icon-progress.md](./impl/phase7-predefined-check-icon-progress.md) |
+| Phase 8 | 能力缺口审计与替代方案 | ✅ Done (70%) | [impl/phase8-gap-analysis-progress.md](./impl/phase8-gap-analysis-progress.md) |
+| Phase 9 | QuickOperation 左键弹窗 | 🔄 In Progress (5%) | [impl/phase9-quick-operation-progress.md](./impl/phase9-quick-operation-progress.md) |
 | Integration | 集成测试 | ⬜ Not Started | 本文档 §四 |
 
 **整体进度**：`100%` ✅ 全部功能实现完成，Auto + Manual 测试全部通过。剩余：集成测试自动化。
@@ -183,7 +185,19 @@ Phase 3 (TrayIconEvent) ✅
 Phase 4 (StatusBar API 修正) ✅ P0-P3
     │
     ▼
-Phase 5 (端到端测试) ⬜ 设计完成
+Phase 5 (端到端测试) ✅ 全部通过
+    │
+    ▼
+Phase 6 (TSFN 重构) ✅
+    │
+    ▼
+Phase 7 (Predefined/Check/Icon) ✅
+    │
+    ▼
+Phase 8 (能力缺口审计) ✅ 70%
+    │
+    ▼
+Phase 9 (QuickOperation) 🔄 5%
     │
     ▼
 Integration Test ⬜ 待执行
@@ -266,3 +280,5 @@ Integration Test ⬜ 待执行
 | 2026-05-20 | **Phase 7 设备验证通过**：修复 menu click 事件不触发（Function::call 静默失败）、修复 predefined minimize/hide/close 窗口激活竞争（setTimeout 300ms）、close 改为 minimize（OHOS 平台限制）|
 | 2026-05-20 | **Phase 6 设备验证通过**：TSFN 数据传递重构完成，15 个 DATA_* Mutex 删除，tray autotest #108-#122 全部通过 |
 | 2026-05-20 | **文档审计**：更新所有 phase 进度文档，修复 README.md 索引，更新 overall-progress.md 为 v6.0 |
+| 2026-05-23 | **Phase 8 完成**：能力缺口审计（Accelerator 序列化、TrayIconEvent fallback、About AlertDialog、CloseWindow/Fullscreen 修复、文档注释），Menu Bar deferred to Phase 10 |
+| 2026-05-27 | **Phase 9 设计完成**：QuickOperation 左键弹窗设计文档 + 进度文档 + 用户使用指南文档创建，源码待实现 |

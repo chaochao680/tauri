@@ -28,7 +28,7 @@ if [ ! -d "$API_DIR/node_modules" ]; then
 fi
 
 # ─── Step 2: 构建 @tauri-apps/api ───
-if [ ! -d "$PROJECT_ROOT/packages/api/dist" ]; then
+if [ ! -d "$PROJECT_ROOT/packages/api/dist" ] || [ ! -f "$PROJECT_ROOT/crates/tauri/scripts/bundle.global.js" ]; then
     echo ""
     echo ">>> Step 2: Building @tauri-apps/api..."
     (cd "$PROJECT_ROOT" && pnpm build:api)

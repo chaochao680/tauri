@@ -283,7 +283,7 @@ impl<R: Runtime> IconMenuItem<R> {
     let accel = accelerator.and_then(|s| s.as_ref().parse().ok());
     #[cfg(target_env = "ohos")]
     {
-      (*self.0).as_ref().set_accelerator(accel);
+      let _ = (*self.0).as_ref().set_accelerator(accel);
       super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
@@ -320,6 +320,12 @@ impl<R: Runtime> IconMenuItem<R> {
   ///
   /// - **Windows / Linux**: Unsupported.
   pub fn set_native_icon(&self, _icon: Option<NativeIcon>) -> crate::Result<()> {
+    #[cfg(target_env = "ohos")]
+    {
+      (*self.0).as_ref().set_native_icon(_icon.map(Into::into));
+      super::auto_refresh_menubar(&self.0.app_handle);
+      return Ok(());
+    }
     #[cfg(target_os = "macos")]
     return run_item_main_thread!(self, |self_: Self| {
       (*self_.0).as_ref().set_native_icon(_icon.map(Into::into))

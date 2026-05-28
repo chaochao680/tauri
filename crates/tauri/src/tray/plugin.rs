@@ -18,7 +18,7 @@ use crate::{
   AppHandle, Manager, Runtime, Webview,
 };
 
-use super::{TrayIcon, TrayIconEvent};
+use super::{QuickOperationConfig, TrayIcon, TrayIconEvent};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +32,29 @@ struct TrayIconOptions {
   icon_as_template: Option<bool>,
   menu_on_left_click: Option<bool>,
   show_menu_on_left_click: Option<bool>,
+  quick_operation: Option<QuickOperationConfigDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuickOperationConfigDto {
+  title: String,
+  height: u32,
+  ability_name: String,
+  module_name: Option<String>,
+  loading_status: Option<bool>,
+}
+
+impl From<QuickOperationConfigDto> for QuickOperationConfig {
+  fn from(dto: QuickOperationConfigDto) -> Self {
+    QuickOperationConfig {
+      title: dto.title,
+      height: dto.height,
+      ability_name: dto.ability_name,
+      module_name: dto.module_name,
+      loading_status: dto.loading_status,
+    }
+  }
 }
 
 #[command(root = "crate")]
@@ -86,6 +109,9 @@ fn new<R: Runtime>(
   }
   if let Some(show_menu_on_left_click) = options.show_menu_on_left_click {
     builder = builder.show_menu_on_left_click(show_menu_on_left_click);
+  }
+  if let Some(quick_operation) = options.quick_operation {
+    builder = builder.quick_operation(quick_operation.into());
   }
 
   let (tray, rid) = builder.build_inner(webview.app_handle())?;
@@ -214,6 +240,17 @@ fn set_show_menu_on_left_click<R: Runtime>(
   tray.set_show_menu_on_left_click(on_left)
 }
 
+#[command(root = "crate")]
+fn set_quick_operation<R: Runtime>(
+  app: AppHandle<R>,
+  rid: ResourceId,
+  config: Option<QuickOperationConfigDto>,
+) -> crate::Result<()> {
+  let resources_table = app.resources_table();
+  let tray = resources_table.get::<TrayIcon<R>>(rid)?;
+  tray.set_quick_operation(config.map(Into::into))
+}
+
 pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("tray")
     .invoke_handler(crate::generate_handler![
@@ -229,6 +266,7 @@ pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
       set_temp_dir_path,
       set_icon_as_template,
       set_show_menu_on_left_click,
+      set_quick_operation,
     ])
     .build()
 }

@@ -46,6 +46,12 @@
             "resource": "$profile:backup_config"
           }
         ]
+      },
+      {
+        "name": "TestTrayAbility",
+        "srcEntry": "./ets/testtrayability/TestTrayAbility.ets",
+        "type": "statusBarView",
+        "exported": true
       }
     ],
     "requestPermissions": [

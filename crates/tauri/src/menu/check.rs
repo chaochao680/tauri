@@ -173,7 +173,7 @@ impl<R: Runtime> CheckMenuItem<R> {
     let accel = accelerator.and_then(|s| s.as_ref().parse().ok());
     #[cfg(target_env = "ohos")]
     {
-      (*self.0).as_ref().set_accelerator(accel);
+      let _ = (*self.0).as_ref().set_accelerator(accel);
       super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
