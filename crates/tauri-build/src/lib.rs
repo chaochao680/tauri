@@ -472,10 +472,7 @@ pub fn try_build(attributes: Attributes) -> Result<()> {
   let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
   let target_env = env::var_os("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
-  println!("cargo:warning=[tauri-build] target_env = {:?}", target_env);
-
   if target_env == "ohos" {
-    println!("cargo:warning=[tauri-build] calling napi_build_ohos::setup()");
     napi_build_ohos::setup();
   }
 

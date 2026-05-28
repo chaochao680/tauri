@@ -88,7 +88,9 @@ impl<R: Runtime> PathResolver<R> {
 
   /// Returns the path to the resource directory.
   pub fn resource_dir(&self) -> Result<PathBuf> {
-    let module_name = crate::ohos::MODULE_NAME.get().and_then(|m| m.as_deref());
+    let module_name = crate::ohos::MODULE_NAME
+        .get()
+        .and_then(|m| m.as_deref());
     Ok(compute_resource_dir(module_name))
   }
 
@@ -166,43 +168,19 @@ mod tests {
   #[test]
   fn media_dirs_under_files() {
     let base = mock_base();
-    assert_eq!(
-      base.join("files").join("Audio"),
-      PathBuf::from("/data/storage/el2/base/files/Audio")
-    );
-    assert_eq!(
-      base.join("files").join("Documents"),
-      PathBuf::from("/data/storage/el2/base/files/Documents")
-    );
-    assert_eq!(
-      base.join("files").join("Download"),
-      PathBuf::from("/data/storage/el2/base/files/Download")
-    );
-    assert_eq!(
-      base.join("files").join("Pictures"),
-      PathBuf::from("/data/storage/el2/base/files/Pictures")
-    );
-    assert_eq!(
-      base.join("files").join("Videos"),
-      PathBuf::from("/data/storage/el2/base/files/Videos")
-    );
-    assert_eq!(
-      base.join("files").join("Public"),
-      PathBuf::from("/data/storage/el2/base/files/Public")
-    );
+    assert_eq!(base.join("files").join("Audio"), PathBuf::from("/data/storage/el2/base/files/Audio"));
+    assert_eq!(base.join("files").join("Documents"), PathBuf::from("/data/storage/el2/base/files/Documents"));
+    assert_eq!(base.join("files").join("Download"), PathBuf::from("/data/storage/el2/base/files/Download"));
+    assert_eq!(base.join("files").join("Pictures"), PathBuf::from("/data/storage/el2/base/files/Pictures"));
+    assert_eq!(base.join("files").join("Videos"), PathBuf::from("/data/storage/el2/base/files/Videos"));
+    assert_eq!(base.join("files").join("Public"), PathBuf::from("/data/storage/el2/base/files/Public"));
   }
 
   #[test]
   fn log_and_temp_dirs() {
     let base = mock_base();
-    assert_eq!(
-      base.join("log"),
-      PathBuf::from("/data/storage/el2/base/log")
-    );
-    assert_eq!(
-      base.join("temp"),
-      PathBuf::from("/data/storage/el2/base/temp")
-    );
+    assert_eq!(base.join("log"), PathBuf::from("/data/storage/el2/base/log"));
+    assert_eq!(base.join("temp"), PathBuf::from("/data/storage/el2/base/temp"));
   }
 
   #[test]
@@ -233,14 +211,10 @@ mod tests {
   #[test]
   fn file_name_returns_last_component() {
     // Pure logic test — does not need a PathResolver instance
-    let name = Path::new("/a/b/c.txt")
-      .file_name()
-      .map(|n| n.to_string_lossy().into_owned());
+    let name = Path::new("/a/b/c.txt").file_name().map(|n| n.to_string_lossy().into_owned());
     assert_eq!(name, Some("c.txt".to_string()));
 
-    let none = Path::new("/a/b/..")
-      .file_name()
-      .map(|n| n.to_string_lossy().into_owned());
+    let none = Path::new("/a/b/..").file_name().map(|n| n.to_string_lossy().into_owned());
     assert_eq!(none, None);
   }
 
@@ -248,7 +222,9 @@ mod tests {
   fn base_path_returns_error_when_not_initialized() {
     // Simulates the `.ok_or(Error::UnknownPath)` branch when OnceLock is empty
     let empty: Option<&String> = None;
-    let result: Result<PathBuf> = empty.map(|p| PathBuf::from(p)).ok_or(Error::UnknownPath);
+    let result: Result<PathBuf> = empty
+        .map(|p| PathBuf::from(p))
+        .ok_or(Error::UnknownPath);
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), Error::UnknownPath));
   }
