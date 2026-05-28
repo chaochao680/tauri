@@ -229,6 +229,41 @@ export const trayTests: TestCase[] = [
       await sharedTray.setMenu(null);
     },
   },
+  // ─── QuickOperation 测试（OHOS only，其他平台 no-op） ───
+  {
+    name: '@tauri-apps/api/tray.TrayIcon.setQuickOperation',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setQuickOperation({
+        title: 'Test Panel',
+        height: 250,
+        abilityName: 'TestTrayAbility',
+        moduleName: 'entry',
+      });
+    },
+  },
+  {
+    name: '@tauri-apps/api/tray.TrayIcon.setQuickOperation_null',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setQuickOperation(null);
+    },
+  },
+  {
+    name: '@tauri-apps/api/tray.TrayIcon.setQuickOperation_update',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setQuickOperation({
+        title: 'Updated Panel',
+        height: 350,
+        abilityName: 'TestTrayAbility',
+      });
+      await sharedTray.setQuickOperation(null);
+    },
+  },
   {
     name: '@tauri-apps/api/tray.TrayIcon.event_handler_register',
     category: 'auto',

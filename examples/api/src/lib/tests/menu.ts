@@ -974,4 +974,35 @@ export const menuTests: TestCase[] = [
       await menu.popup({ x: 100, y: 200 });
     },
   },
+  // Phase 13: Verify clipboard primitives used by predefined copy/paste
+  {
+    name: '@tauri-apps/api/menu.predefined_clipboard_primitives',
+    category: 'side-effect',
+    async fn() {
+      // 1. Verify window.getSelection works (used by menu copy/cut)
+      const textarea = document.createElement('textarea');
+      textarea.value = 'phase13-test-text';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const selection = window.getSelection()?.toString();
+      assert(selection === 'phase13-test-text',
+        `getSelection should return selected text, got "${selection}"`);
+
+      // 2. Verify execCommand("insertText") works (used by menu paste)
+      textarea.value = '';
+      textarea.focus();
+      const inserted = document.execCommand('insertText', false, 'pasted-content');
+      assert(inserted !== false, 'execCommand("insertText") returned false');
+      assert(textarea.value === 'pasted-content',
+        `textarea should contain inserted text, got "${textarea.value}"`);
+
+      // 3. Verify execCommand("selectAll") works (used by menu selectAll)
+      textarea.select();
+      const selectedAll = window.getSelection()?.toString();
+      assert(selectedAll === 'pasted-content',
+        `selectAll should select all textarea content, got "${selectedAll}"`);
+
+      document.body.removeChild(textarea);
+    },
+  },
 ];

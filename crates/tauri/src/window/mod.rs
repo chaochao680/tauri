@@ -463,7 +463,7 @@ tauri::Builder::default()
       let _ = app_manager.emit(event, EmitPayload::Serialize(&payload));
     });
 
-    #[cfg(target_env = "ohos")]
+    #[cfg(all(target_env = "ohos", desktop))]
     if let Some(window_menu) = &*window.menu_lock() {
       window_menu.menu.inner().refresh_menubar(window.label()).ok();
     }
@@ -1448,6 +1448,7 @@ tauri::Builder::default()
       })?;
     }
 
+    #[cfg(not(target_env = "ohos"))]
     Ok(())
   }
 
@@ -1488,6 +1489,7 @@ tauri::Builder::default()
       })?;
     }
 
+    #[cfg(not(target_env = "ohos"))]
     Ok(())
   }
 
@@ -1527,6 +1529,7 @@ tauri::Builder::default()
       return Ok(rx.recv().unwrap_or(false));
     }
 
+    #[cfg(not(target_env = "ohos"))]
     Ok(false)
   }
 

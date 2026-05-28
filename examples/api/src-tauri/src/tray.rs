@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
   include_image,
   menu::{Menu, MenuItem},
-  tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+  tray::{MouseButton, MouseButtonState, QuickOperationConfig, TrayIconBuilder, TrayIconEvent},
   Manager, Runtime, WebviewUrl,
 };
 
@@ -20,6 +20,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
   #[cfg(target_os = "macos")]
   let set_title_i = MenuItem::with_id(app, "set-title", "Set Title", true, None::<&str>)?;
   let switch_i = MenuItem::with_id(app, "switch-menu", "Switch Menu", true, None::<&str>)?;
+  let toggle_qo_i = MenuItem::with_id(app, "toggle-qo", "Toggle QuickOp", true, None::<&str>)?;
   let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
   let remove_tray_i =
     MenuItem::with_id(app, "remove-tray", "Remove Tray icon", true, None::<&str>)?;
@@ -33,13 +34,14 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
       #[cfg(target_os = "macos")]
       &set_title_i,
       &switch_i,
+      &toggle_qo_i,
       &quit_i,
       &remove_tray_i,
     ],
   )?;
   let menu2 = Menu::with_items(
     app,
-    &[&toggle_i, &new_window_i, &switch_i, &quit_i, &remove_tray_i],
+    &[&toggle_i, &new_window_i, &switch_i, &toggle_qo_i, &quit_i, &remove_tray_i],
   )?;
 
   let is_menu1 = AtomicBool::new(true);
@@ -49,6 +51,14 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     .icon(app.default_window_icon().unwrap().clone())
     .menu(&menu1)
     .show_menu_on_left_click(false)
+    // OHOS: enable QuickOperation left-click popup (no-op on other platforms)
+    .quick_operation(QuickOperationConfig {
+      title: "Tauri API".into(),
+      height: 300,
+      ability_name: "TestTrayAbility".into(),
+      module_name: Some("entry".into()),
+      loading_status: None,
+    })
     .on_menu_event(move |app, event| match event.id.as_ref() {
       "quit" => {
         app.exit(0);
@@ -104,6 +114,12 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
           let _ = tray.set_tooltip(Some(tooltip));
         }
         is_menu1.store(!flag, Ordering::Relaxed);
+      }
+      "toggle-qo" => {
+        if let Some(tray) = app.tray_by_id("tray-1") {
+          // Toggle QuickOperation off (demonstrates runtime update)
+          let _ = tray.set_quick_operation(None);
+        }
       }
 
       _ => {}

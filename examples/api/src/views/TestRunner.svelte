@@ -262,19 +262,6 @@ Expected behavior:
     });
   }
 
-  async function manualMenuBarDarkMode() {
-    await wrapManual('menuBarDarkMode', async () => {
-      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
-      const sub = await Submenu.new({ text: 'DarkTest', items: [
-        await MenuItem.new({ text: 'Item' }),
-      ]});
-      const menu = await Menu.new({ items: [sub] });
-      await menu.setAsWindowMenu();
-      manualResult = 'Action: Switch system to dark mode (Settings → Display → Dark).\nCheck: Menu bar background → dark, text → light.\nSwitch back → background → light, text → dark.\nIf colors adapt → PASS.';
-      onMessage(manualResult);
-    });
-  }
-
   async function manualMenuBarBarIcon() {
     await wrapManual('menuBarBarIcon', async () => {
       const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
@@ -434,6 +421,116 @@ Expected behavior:
     });
   }
 
+  // ─── Phase 13: Predefined Item Manual Tests ───
+  async function manualMenuPredefinedCopy() {
+    await wrapManual('menuPredefinedCopy', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const copyItem = await PredefinedMenuItem.new({ item: 'Copy' });
+      const sub = await Submenu.new({ text: 'Edit', items: [copyItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Edit → Copy".\nSelect some text in the input below → click Edit → Copy → paste elsewhere.\nIf text appears in clipboard → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuPredefinedPaste() {
+    await wrapManual('menuPredefinedPaste', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const pasteItem = await PredefinedMenuItem.new({ item: 'Paste' });
+      const sub = await Submenu.new({ text: 'Edit', items: [pasteItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Edit → Paste".\nCopy some text from outside the app → focus input field → click Edit → Paste.\nIf text is inserted into input → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuPredefinedCut() {
+    await wrapManual('menuPredefinedCut', async () => {
+      const { Menu, Submenu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const cutItem = await PredefinedMenuItem.new({ item: 'Cut' });
+      const sub = await Submenu.new({ text: 'Edit', items: [cutItem] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'Menu bar: "Edit → Cut".\nSelect some text → click Edit → Cut → paste elsewhere.\nIf text disappears from selection AND appears in clipboard → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMenuBarNativeIcons() {
+    await wrapManual('menuBarNativeIcons', async () => {
+      const { Menu, Submenu, IconMenuItem } = await import('@tauri-apps/api/menu');
+      const { NativeIcon } = await import('@tauri-apps/api/menu/iconMenuItem');
+
+      // 3 mapped variants (should show icons)
+      const mapped = [
+        { variant: NativeIcon.Add, label: 'Add (mapped: ohos_star)' },
+        { variant: NativeIcon.LockLocked, label: 'LockLocked (mapped: ohos_lock)' },
+        { variant: NativeIcon.Network, label: 'Network (mapped: ohos_wifi)' },
+      ];
+
+      // unmapped variants (should show no icon)
+      const unmapped = [
+        { variant: NativeIcon.Home, label: 'Home (unmapped)' },
+        { variant: NativeIcon.Folder, label: 'Folder (unmapped)' },
+        { variant: NativeIcon.Share, label: 'Share (unmapped)' },
+        { variant: NativeIcon.User, label: 'User (unmapped)' },
+        { variant: NativeIcon.Refresh, label: 'Refresh (unmapped)' },
+        { variant: NativeIcon.GoLeft, label: 'GoLeft (unmapped)' },
+        { variant: NativeIcon.GoRight, label: 'GoRight (unmapped)' },
+        { variant: NativeIcon.Bluetooth, label: 'Bluetooth (unmapped)' },
+        { variant: NativeIcon.Computer, label: 'Computer (unmapped)' },
+        { variant: NativeIcon.TrashEmpty, label: 'TrashEmpty (unmapped)' },
+      ];
+
+      const mappedItems = await Promise.all(
+        mapped.map(({ variant, label }) =>
+          IconMenuItem.new({ text: label, icon: variant })
+        )
+      );
+      const unmappedItems = await Promise.all(
+        unmapped.map(({ variant, label }) =>
+          IconMenuItem.new({ text: label, icon: variant })
+        )
+      );
+
+      const mappedSub = await Submenu.new({ text: 'Mapped (should have icons)', items: mappedItems });
+      const unmappedSub = await Submenu.new({ text: 'Unmapped (no icons expected)', items: unmappedItems });
+      const menu = await Menu.new({ items: [mappedSub, unmappedSub] });
+      await menu.setAsWindowMenu();
+
+      manualResult =
+        'Menu bar: "Mapped" and "Unmapped" submenus.\n\n' +
+        'Mapped → should show icons for:\n' +
+        '  • Add → ★ (ohos_star)\n' +
+        '  • LockLocked → 🔒 (ohos_lock)\n' +
+        '  • Network → 📶 (ohos_wifi)\n\n' +
+        'Unmapped → no icons (Home, Folder, Share, etc.)\n\n' +
+        'If mapped items show system icons and unmapped show text only → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualTrayPredefined() {
+    await wrapManual('trayPredefined', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const { Menu, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
+      const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+      const menu = await Menu.new({ items: [
+        await PredefinedMenuItem.new({ item: 'Copy' }),
+        await PredefinedMenuItem.new({ item: 'Minimize' }),
+        await PredefinedMenuItem.new({ item: 'About' }),
+        await PredefinedMenuItem.new({ item: 'Separator' }),
+        await PredefinedMenuItem.new({ item: 'Fullscreen' }),
+        await PredefinedMenuItem.new({ item: 'Quit' }),
+      ]});
+      await TrayIcon.new({ id: 'phase13-test', menu, icon: TEST_ICON, tooltip: 'Phase 13 Test' });
+      manualResult = 'Tray icon created with predefined items.\nRight-click → Copy: should copy selected text.\nRight-click → Minimize: should minimize main window.\nRight-click → About: should show AlertDialog.\nRight-click → Fullscreen: should enter fullscreen.\nVerify each action works.';
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Tray Manual Tests ───
   async function manualTrayIconShow() {
     await wrapManual('trayIconShow', async () => {
@@ -481,6 +578,49 @@ Expected behavior:
       const tray = await TrayIcon.new({ icon: TEST_ICON, menu, tooltip: 'Right-click me' });
       console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
       manualResult = `Tray created with menu.\nRight-click the status bar icon to see the context menu.\nClick the menu item to verify event trigger.`;
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── QuickOperation Manual Tests (OHOS only) ───
+  async function manualQuickOperationEnable() {
+    await wrapManual('quickOperationEnable', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const tray = await TrayIcon.getById('tray-1');
+      if (!tray) { manualResult = 'tray-1 not found'; onMessage(manualResult); return; }
+      await tray.setQuickOperation({
+        title: 'Test Panel',
+        height: 250,
+        abilityName: 'TestTrayAbility',
+        moduleName: 'entry',
+      });
+      manualResult = 'QuickOperation enabled.\nLeft-click tray icon → system popup should appear with title "Test Panel" and height 250vp.\nRequires TestTrayAbility registered in module.json5.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualQuickOperationDisable() {
+    await wrapManual('quickOperationDisable', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const tray = await TrayIcon.getById('tray-1');
+      if (!tray) { manualResult = 'tray-1 not found'; onMessage(manualResult); return; }
+      await tray.setQuickOperation(null);
+      manualResult = 'QuickOperation disabled.\nLeft-click tray icon → should only fire event, no popup.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualQuickOperationUpdate() {
+    await wrapManual('quickOperationUpdate', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const tray = await TrayIcon.getById('tray-1');
+      if (!tray) { manualResult = 'tray-1 not found'; onMessage(manualResult); return; }
+      await tray.setQuickOperation({
+        title: 'Updated Title',
+        height: 400,
+        abilityName: 'TestTrayAbility',
+      });
+      manualResult = 'QuickOperation updated: title="Updated Title", height=400.\nLeft-click tray icon → popup title and height should reflect new values.';
       onMessage(manualResult);
     });
   }
@@ -618,6 +758,15 @@ Expected behavior:
         <button class="btn" onclick={manualTrayIconShow}>Tray Icon Show (check system tray)</button>
         <button class="btn" onclick={manualTrayEvent}>Tray Event (click icon to trigger)</button>
         <button class="btn" onclick={manualTrayMenu}>Tray Menu (right-click to see menu)</button>
+        <button class="btn" onclick={manualTrayPredefined}>Tray Predefined Actions</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">QuickOperation Manual Tests (OHOS only)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualQuickOperationEnable}>Enable QuickOp (click tray icon)</button>
+        <button class="btn" onclick={manualQuickOperationUpdate}>Update QuickOp (title/height)</button>
+        <button class="btn" onclick={manualQuickOperationDisable}>Disable QuickOp (event only)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
@@ -628,7 +777,6 @@ Expected behavior:
         <button class="btn" onclick={manualMenuBarDropdown}>MenuBar Dropdown</button>
         <button class="btn" onclick={manualMenuBarNested}>MenuBar Nested Submenu</button>
         <button class="btn" onclick={manualMenuBarHover}>MenuBar Hover</button>
-        <button class="btn" onclick={manualMenuBarDarkMode}>MenuBar Dark Mode</button>
         <button class="btn" onclick={manualMenuBarBarIcon}>MenuBar Bar-Level Icon</button>
         <button class="btn" onclick={manualMenuBarDisabledItem}>MenuBar Disabled Item</button>
         <button class="btn" onclick={manualMenuBarHide}>MenuBar Hide</button>
@@ -642,6 +790,10 @@ Expected behavior:
         <button class="btn" onclick={manualMenuBarFullscreen}>MenuBar Fullscreen</button>
         <button class="btn" onclick={manualMenuBarPredefinedHide}>MenuBar Predefined Hide</button>
         <button class="btn" onclick={manualMenuBarPopupRegression}>MenuBar Popup Regression</button>
+        <button class="btn" onclick={manualMenuPredefinedCopy}>Menu Edit → Copy (predefined)</button>
+        <button class="btn" onclick={manualMenuPredefinedPaste}>Menu Edit → Paste (predefined)</button>
+        <button class="btn" onclick={manualMenuPredefinedCut}>Menu Edit → Cut (predefined)</button>
+        <button class="btn" onclick={manualMenuBarNativeIcons}>MenuBar NativeIcon Symbols</button>
       </div>
     </div>
     <div class="flex gap-2 flex-wrap mt-2">

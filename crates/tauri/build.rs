@@ -223,6 +223,7 @@ const PLUGINS: &[(&str, &[(&str, bool)])] = &[
       ("set_temp_dir_path", true),
       ("set_icon_as_template", true),
       ("set_show_menu_on_left_click", true),
+      ("set_quick_operation", true),
     ],
   ),
 ];

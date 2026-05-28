@@ -16,7 +16,7 @@ use crate::{
 use crate::{ResourceId, UnsafeSend};
 use serde::Serialize;
 use std::path::Path;
-pub use tray_icon::TrayIconId;
+pub use tray_icon::{QuickOperationConfig, TrayIconId};
 
 /// Describes the mouse button state.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Serialize)]
@@ -338,6 +338,18 @@ impl<R: Runtime> TrayIconBuilder<R> {
     self
   }
 
+  /// Set QuickOperation for left-click popup. **OHOS only**.
+  ///
+  /// On OHOS, configures the system popup panel shown when the user left-clicks
+  /// the tray icon. The popup is rendered by a `StatusBarViewExtensionAbility`
+  /// that the application registers in `module.json5`.
+  ///
+  /// On other platforms, this is silently ignored.
+  pub fn quick_operation(mut self, config: QuickOperationConfig) -> Self {
+    self.inner = self.inner.with_quick_operation(config);
+    self
+  }
+
   /// Set a handler for menu events.
   ///
   /// Note that this handler is called for any menu event,
@@ -648,6 +660,20 @@ impl<R: Runtime> TrayIcon<R> {
     run_item_main_thread!(self, |self_: Self| {
       self_.inner.set_show_menu_on_left_click(enable)
     })?;
+    Ok(())
+  }
+
+  /// Set QuickOperation for left-click popup. **OHOS only**.
+  ///
+  /// On OHOS, configures the system popup panel shown when the user left-clicks
+  /// the tray icon. Pass `None` to disable the popup (left-click will only fire events).
+  ///
+  /// On other platforms, this is silently ignored.
+  pub fn set_quick_operation(&self, #[allow(unused)] config: Option<QuickOperationConfig>) -> crate::Result<()> {
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_quick_operation(config);
+    }
     Ok(())
   }
 
