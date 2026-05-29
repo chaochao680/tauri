@@ -120,6 +120,7 @@
     "clipboard-manager:allow-write-image",
     "process:default",
     "process:allow-restart",
+    "updater:default",
     "autostart:default",
     "autostart:allow-enable",
     "autostart:allow-disable",

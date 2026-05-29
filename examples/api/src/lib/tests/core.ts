@@ -322,9 +322,11 @@ export const coreTests: TestCase[] = [
     name: 'on_menu_event_infrastructure',
     category: 'auto',
     async fn() {
-      // Just verify we can call the menu event tracking command
+      // 1. Verify we can call the menu event tracking command
+      await invoke('clear_tracked_events');
       const events = await invoke('get_tracked_menu_events') as string[];
       assert(Array.isArray(events), 'Should receive array of events');
+      assert(events.length === 0, `Should be empty after clear, got ${events.length}`);
     },
   },
 

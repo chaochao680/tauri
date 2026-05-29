@@ -53,6 +53,9 @@ importers:
       '@tauri-apps/plugin-shell':
         specifier: file:../../../plugins-workspace/plugins/shell
         version: file:../plugins-workspace/plugins/shell
+      '@tauri-apps/plugin-updater':
+        specifier: file:../../../plugins-workspace/plugins/updater
+        version: file:../plugins-workspace/plugins/updater
     devDependencies:
       '@iconify-json/codicon':
         specifier: ^1.2.49
@@ -1622,6 +1625,9 @@ packages:
 
   '@tauri-apps/plugin-shell@file:../plugins-workspace/plugins/shell':
     resolution: {directory: ../plugins-workspace/plugins/shell, type: directory}
+
+  '@tauri-apps/plugin-updater@file:../plugins-workspace/plugins/updater':
+    resolution: {directory: ../plugins-workspace/plugins/updater, type: directory}
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -3878,6 +3884,10 @@ snapshots:
       '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-shell@file:../plugins-workspace/plugins/shell':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-updater@file:../plugins-workspace/plugins/updater':
     dependencies:
       '@tauri-apps/api': 2.11.0
 

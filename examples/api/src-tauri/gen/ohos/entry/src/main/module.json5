@@ -22,6 +22,7 @@
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        "recoverable": true,
         "skills": [
           {
             "entities": [
@@ -60,6 +61,9 @@
       },
       {
         "name": "ohos.permission.SYSTEM_FLOAT_WINDOW"
+      },
+      {
+        "name": "ohos.permission.GET_BUNDLE_INFO"
       }
     ]
   }

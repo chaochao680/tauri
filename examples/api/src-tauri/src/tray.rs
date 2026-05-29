@@ -9,7 +9,7 @@ use tauri::{
   include_image,
   menu::{Menu, MenuItem},
   tray::{MouseButton, MouseButtonState, QuickOperationConfig, TrayIconBuilder, TrayIconEvent},
-  Manager, Runtime, WebviewUrl,
+  Emitter, EventTarget, Manager, Runtime, WebviewUrl,
 };
 
 pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
@@ -59,7 +59,24 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
       module_name: Some("entry".into()),
       loading_status: None,
     })
-    .on_menu_event(move |app, event| match event.id.as_ref() {
+    .on_menu_event(move |app, event| {
+      let id = event.id().as_ref();
+      // Tray's on_menu_event fires for ALL menu events (by tauri design).
+      // Only execute actions for tray-specific item IDs.
+      const TRAY_IDS: &[&str] = &[
+        "toggle", "new-window", "icon-1", "icon-2", "set-title",
+        "switch-menu", "toggle-qo", "quit", "remove-tray",
+      ];
+      if !TRAY_IDS.contains(&id) {
+        return;
+      }
+      log::info!("[Tray on_menu_event] id={}", id);
+      let _ = app.emit_to(
+        EventTarget::webview_window("main"),
+        "menu-event",
+        format!("tray:{}", id),
+      );
+      match event.id.as_ref() {
       "quit" => {
         app.exit(0);
       }
@@ -123,7 +140,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
       }
 
       _ => {}
-    })
+    }})
     .on_tray_icon_event(|tray, event| {
       if let TrayIconEvent::Click {
         button: MouseButton::Left,
