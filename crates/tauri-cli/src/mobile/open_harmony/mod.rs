@@ -31,19 +31,15 @@ use sublime_fuzzy::best_match;
 use tauri_utils::resources::ResourcePaths;
 
 use super::{
-  ensure_init, get_app, init, log_finished, read_options, CliOptions, OptionsHandle,
-  Target as MobileTarget, MIN_DEVICE_MATCH_SCORE,
+  ensure_init, get_app, init::command as init_command, log_finished, read_options, CliOptions,
+  OptionsHandle, Target as MobileTarget, MIN_DEVICE_MATCH_SCORE,
 };
+use crate::{helpers::config::{BundleResources, Config as TauriConfig}, ConfigValue, ErrorExt, Result};
 use crate::error::Context;
-use crate::{
-  helpers::config::{BundleResources, Config as TauriConfig},
-  ConfigValue, ErrorExt, Result,
-};
 
 mod build;
 mod dev;
 mod dev_eco_studio_script;
-pub(crate) mod plugins;
 pub(crate) mod project;
 
 #[derive(Deserialize)]
@@ -107,7 +103,7 @@ pub fn command(cli: Cli, verbosity: u8) -> Result<()> {
   match cli.command {
     Commands::Init(options) => {
       crate::helpers::app_paths::resolve_dirs();
-      init::command(
+      init_command(
         MobileTarget::OpenHarmony,
         options.ci,
         false,
@@ -131,26 +127,9 @@ pub fn get_config(
 ) -> (OpenHarmonyConfig, OpenHarmonyMetadata) {
   let mut open_harmony_options = cli_options.clone();
   if let Some(features) = features {
-    open_harmony_options.features.extend_from_slice(features);
-  }
-
-  // Filter out --device-type and its value from cargo_args
-  // They might be passed as: ["--device-type", "desktop"] or ["--device-type=desktop"]
-  let mut cargo_args: Vec<String> = Vec::new();
-  let mut skip_next = false;
-  for arg in &open_harmony_options.args {
-    if skip_next {
-      skip_next = false;
-      continue;
-    }
-    if arg == "--device-type" {
-      skip_next = true; // skip the next arg which is the value
-      continue;
-    }
-    if arg.starts_with("--device-type=") {
-      continue; // skip combined form like --device-type=desktop
-    }
-    cargo_args.push(arg.clone());
+    open_harmony_options
+      .features
+      .extend_from_slice(features);
   }
 
   let raw = RawOpenHarmonyConfig {
@@ -173,7 +152,7 @@ pub fn get_config(
 
   let metadata = OpenHarmonyMetadata {
     supported: true,
-    cargo_args: Some(cargo_args),
+    cargo_args: Some(open_harmony_options.args),
     features: Some(open_harmony_options.features),
     ..Default::default()
   };
@@ -208,8 +187,7 @@ fn delete_codegen_vars() {
 }
 
 fn hdc_device_prompt<'a>(env: &'_ Env, target: Option<&str>) -> Result<Device<'a>> {
-  let device_list =
-    hdc::device_list(env).context("failed to detect connected OpenHarmony devices")?;
+  let device_list = hdc::device_list(env).context("failed to detect connected OpenHarmony devices")?;
   if !device_list.is_empty() {
     let device = if let Some(t) = target {
       let (device, score) = device_list
@@ -248,9 +226,7 @@ fn hdc_device_prompt<'a>(env: &'_ Env, target: Option<&str>) -> Result<Device<'a
     );
     Ok(device)
   } else {
-    Err(crate::Error::GenericError(
-      "No connected OpenHarmony devices detected".to_string(),
-    ))
+    Err(crate::Error::GenericError("No connected OpenHarmony devices detected".to_string()))
   }
 }
 
@@ -301,9 +277,7 @@ fn device_prompt<'a>(env: &'_ Env, target: Option<&str>) -> Result<Device<'a>> {
   } else {
     let emulator = emulator_prompt(env, target)?;
     log::info!("Starting emulator {}", emulator.name());
-    emulator
-      .start_detached(env)
-      .context("failed to start emulator")?;
+    emulator.start_detached(env).context("failed to start emulator")?;
     let mut tries = 0;
     loop {
       sleep(Duration::from_secs(2));
@@ -341,8 +315,7 @@ fn inject_resources(config: &OpenHarmonyConfig, tauri_config: &TauriConfig) -> R
   write(
     asset_dir.join("tauri.conf.json"),
     serde_json::to_string(&tauri_config).with_context(|| "failed to serialize tauri config")?,
-  )
-  .fs_context(
+  ).fs_context(
     "failed to write tauri config",
     asset_dir.join("tauri.conf.json"),
   )?;

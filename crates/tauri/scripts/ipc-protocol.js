@@ -16,8 +16,8 @@
   const fetchChannelDataCommand = __TEMPLATE_fetch_channel_data_command__
   let customProtocolIpcFailed = false
 
-  // on Android and OHOS we never use it because they do not have support to reading the request body
-  const canUseCustomProtocol = osName !== 'android' && osName !== 'ohos'
+  // on Android we never use it because Android does not have support to reading the request body
+  const canUseCustomProtocol = osName !== 'android'
 
   function sendIpcMessage(message) {
     const { cmd, callback, error, payload, options } = message
@@ -88,4 +88,4 @@
   Object.defineProperty(window.__TAURI_INTERNALS__, 'postMessage', {
     value: sendIpcMessage
   })
-})()
+})();

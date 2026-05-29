@@ -85,10 +85,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     )*/
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
-    .plugin(tauri_plugin_http::init())
     .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_dialog::init());
+    .plugin(tauri_plugin_process::init());
 
   #[cfg(target_env = "ohos")]
   {

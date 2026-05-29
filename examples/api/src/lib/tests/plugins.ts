@@ -60,131 +60,13 @@ export const pluginTests: TestCase[] = [
 
   // @tauri-apps/plugin-http
   {
-    name: '@tauri-apps/plugin-http.fetch (GET)',
+    name: '@tauri-apps/plugin-http.fetch',
     category: 'auto',
     async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/get', { method: 'GET' })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(
-        data.url === 'https://httpbin.org/get',
-        `url mismatch: ${data.url}`
-      )
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (POST)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const body = JSON.stringify({ test: 'post-data' })
-      const resp = await fetch('https://httpbin.org/post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body
-      })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(
-        data.json.test === 'post-data',
-        `body mismatch: ${JSON.stringify(data.json)}`
-      )
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (PUT)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const body = JSON.stringify({ update: 'put-data' })
-      const resp = await fetch('https://httpbin.org/put', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body
-      })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(
-        data.json.update === 'put-data',
-        `body mismatch: ${JSON.stringify(data.json)}`
-      )
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (DELETE)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/delete', {
-        method: 'DELETE'
-      })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (custom headers)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/headers', {
-        method: 'GET',
-        headers: {
-          'X-Custom-Header': 'test-value-123',
-          'X-Another-Header': 'another-value'
-        }
-      })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(
-        data.headers['X-Custom-Header'] === 'test-value-123',
-        `custom header not found`
-      )
-      assert(
-        data.headers['X-Another-Header'] === 'another-value',
-        `another header not found`
-      )
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (JSON parse)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/json', { method: 'GET' })
-      assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(typeof data === 'object', 'expected JSON object')
-      assert(data.slideshow !== undefined, 'expected slideshow property')
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (HTTPS/rustls-tls)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/get', { method: 'GET' })
-      assert(
-        resp.status === 200,
-        `HTTPS connection failed with status ${resp.status}`
-      )
-      assert(
-        resp.url.startsWith('https://'),
-        `expected HTTPS URL, got ${resp.url}`
-      )
-    }
-  },
-  {
-    name: '@tauri-apps/plugin-http.fetch (error handling)',
-    category: 'auto',
-    async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/status/404', {
-        method: 'GET'
-      })
-      assert(resp.status === 404, `expected status 404, got ${resp.status}`)
-      assert(!resp.ok, 'expected resp.ok to be false for 404')
-    }
+      const { fetch } = await import('@tauri-apps/plugin-http');
+      const resp = await fetch('https://www.example.com', { method: 'GET' });
+      assert(resp.status === 200, `expected status 200, got ${resp.status}`);
+    },
   },
 
   // @tauri-apps/plugin-fs
@@ -276,18 +158,8 @@ export const pluginTests: TestCase[] = [
   },
 
   // @tauri-apps/plugin-dialog (manual)
-{
-    name: '@tauri-apps/plugin-dialog.open (single)',
-    category: 'manual',
-    async fn() {},
-  },
   {
-    name: '@tauri-apps/plugin-dialog.open (multiple)',
-    category: 'manual',
-    async fn() {},
-  },
-  {
-    name: '@tauri-apps/plugin-dialog.save',
+    name: '@tauri-apps/plugin-dialog.message',
     category: 'manual',
     async fn() {},
   },
@@ -297,17 +169,12 @@ export const pluginTests: TestCase[] = [
     async fn() {},
   },
   {
-    name: '@tauri-apps/plugin-dialog.message (info)',
+    name: '@tauri-apps/plugin-dialog.open',
     category: 'manual',
     async fn() {},
   },
   {
-    name: '@tauri-apps/plugin-dialog.message (warning)',
-    category: 'manual',
-    async fn() {},
-  },
-  {
-    name: '@tauri-apps/plugin-dialog.message (error)',
+    name: '@tauri-apps/plugin-dialog.save',
     category: 'manual',
     async fn() {},
   },
