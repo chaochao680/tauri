@@ -276,7 +276,6 @@ pub struct Context<T: UserEvent> {
   next_webview_id: Arc<AtomicU32>,
   next_window_event_id: Arc<AtomicU32>,
   next_webview_event_id: Arc<AtomicU32>,
-  #[cfg(not(target_env = "ohos"))]
   webview_runtime_installed: bool,
 }
 
@@ -3002,8 +3001,16 @@ impl<T: UserEvent> Wry<T> {
       next_webview_id: Default::default(),
       next_window_event_id: Default::default(),
       next_webview_event_id: Default::default(),
-      #[cfg(not(target_env = "ohos"))]
-      webview_runtime_installed: wry::webview_version().is_ok(),
+      webview_runtime_installed: {
+        #[cfg(not(target_env = "ohos"))]
+        {
+          wry::webview_version().is_ok()
+        }
+        #[cfg(target_env = "ohos")]
+        {
+          true
+        }
+      },
     };
 
     Ok(Self {
@@ -4819,7 +4826,6 @@ fn create_webview<T: UserEvent>(
   pending: PendingWebview<T, Wry<T>>,
   #[allow(unused_variables)] focused_webview: Arc<Mutex<Option<String>>>,
 ) -> Result<WebviewWrapper> {
-  #[cfg(not(target_env = "ohos"))]
   if !context.webview_runtime_installed {
     #[cfg(all(not(debug_assertions), windows))]
     dialog::error(
