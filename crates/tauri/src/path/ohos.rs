@@ -89,8 +89,8 @@ impl<R: Runtime> PathResolver<R> {
   /// Returns the path to the resource directory.
   pub fn resource_dir(&self) -> Result<PathBuf> {
     let module_name = crate::ohos::MODULE_NAME
-      .get()
-      .and_then(|m| m.as_deref());
+        .get()
+        .and_then(|m| m.as_deref());
     Ok(compute_resource_dir(module_name))
   }
 
@@ -223,8 +223,8 @@ mod tests {
     // Simulates the `.ok_or(Error::UnknownPath)` branch when OnceLock is empty
     let empty: Option<&String> = None;
     let result: Result<PathBuf> = empty
-      .map(|p| PathBuf::from(p))
-      .ok_or(Error::UnknownPath);
+        .map(|p| PathBuf::from(p))
+        .ok_or(Error::UnknownPath);
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), Error::UnknownPath));
   }

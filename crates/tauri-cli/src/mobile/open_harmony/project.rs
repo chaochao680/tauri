@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
-use crate::{helpers::template, Result};
 use crate::error::Context;
+use crate::helpers::template;
+use crate::mobile::open_harmony::plugins::{validate_plugin_meta, PluginMeta};
+use crate::Result;
 use cargo_mobile2::{
   config::app::App,
   open_harmony::{config::Config, target::Target},
@@ -13,6 +15,7 @@ use cargo_mobile2::{
 };
 use handlebars::Handlebars;
 use include_dir::{include_dir, Dir};
+use serde_json::json;
 
 use std::path::Path;
 
@@ -23,6 +26,16 @@ pub fn gen(
   config: &Config,
   (handlebars, mut map): (Handlebars, template::JsonMap),
   skip_targets_install: bool,
+) -> Result<()> {
+  gen_with_plugins(app, config, (handlebars, map), skip_targets_install, vec![])
+}
+
+pub fn gen_with_plugins(
+  app: &App,
+  config: &Config,
+  (handlebars, mut map): (Handlebars, template::JsonMap),
+  skip_targets_install: bool,
+  plugins: Vec<PluginMeta>,
 ) -> Result<()> {
   if !skip_targets_install {
     let installed_targets =
@@ -54,8 +67,41 @@ pub fn gen(
   map.insert("root-dir", app.root_dir());
   map.insert("windows", cfg!(windows));
 
-  template::render(&handlebars, map.inner(), &TEMPLATE_DIR, &dest)
+  populate_template(handlebars, map, plugins, &dest)?;
+
+  Ok(())
+}
+
+pub fn populate_template(
+  handlebars: Handlebars,
+  map: template::JsonMap,
+  plugins: Vec<PluginMeta>,
+  dest: &Path,
+) -> Result<()> {
+  log::info!("Populating template with {} plugins", plugins.len());
+
+  for plugin in &plugins {
+    validate_plugin_meta(plugin)
+      .context(format!("Invalid plugin metadata for '{}'", plugin.name))?;
+  }
+
+  let plugin_data = plugins
+    .iter()
+    .map(|p| {
+      json!({
+        "name": p.name,
+        "identifier": p.identifier,
+        "className": p.class_name,
+      })
+    })
+    .collect::<Vec<_>>();
+
+  let mut data = map.inner().clone();
+  data.insert("plugins".to_string(), json!(plugin_data));
+
+  template::render(&handlebars, &data, &TEMPLATE_DIR, dest)
     .with_context(|| "failed to process template")?;
 
+  log::info!("Template populated successfully");
   Ok(())
 }

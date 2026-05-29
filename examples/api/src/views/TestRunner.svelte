@@ -624,6 +624,75 @@ Expected behavior:
       onMessage(manualResult);
     });
   }
+
+  async function manualDialogOpen() {
+    await wrapManual('dialog.open', async () => {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const file = await open({ multiple: false });
+      manualResult = `open() result: ${file ? (typeof file === 'string' ? file : file.path) : 'cancelled'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogSave() {
+    await wrapManual('dialog.save', async () => {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const file = await save({ defaultPath: 'test.txt' });
+      manualResult = `save() result: ${file ? (typeof file === 'string' ? file : file.path) : 'cancelled'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogConfirm() {
+    await wrapManual('dialog.confirm', async () => {
+      const { confirm } = await import('@tauri-apps/plugin-dialog');
+      const result = await confirm('Are you sure you want to proceed?', { title: 'Confirm Action', kind: 'warning' });
+      manualResult = `confirm() result: ${result} [${result ? 'OK: user clicked Yes' : 'user clicked No or cancelled'}]`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogMessageInfo() {
+    await wrapManual('dialog.message (info)', async () => {
+      const { message } = await import('@tauri-apps/plugin-dialog');
+      await message('This is an INFO message dialog.', { title: 'Info Dialog', kind: 'info' });
+      manualResult = 'message(kind: info) shown - verify info icon appeared';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogMessageWarning() {
+    await wrapManual('dialog.message (warning)', async () => {
+      const { message } = await import('@tauri-apps/plugin-dialog');
+      await message('This is a WARNING message dialog!', { title: 'Warning Dialog', kind: 'warning' });
+      manualResult = 'message(kind: warning) shown - verify warning icon appeared';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogMessageError() {
+    await wrapManual('dialog.message (error)', async () => {
+      const { message } = await import('@tauri-apps/plugin-dialog');
+      await message('This is an ERROR message dialog!', { title: 'Error Dialog', kind: 'error' });
+      manualResult = 'message(kind: error) shown - verify error icon appeared';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualDialogOpenMultiple() {
+    await wrapManual('dialog.open (multiple)', async () => {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const files = await open({ multiple: true });
+      if (files === null) {
+        manualResult = 'open(multiple: true) cancelled';
+      } else if (Array.isArray(files)) {
+        manualResult = `open(multiple: true) selected ${files.length} files:\n${files.map(f => typeof f === 'string' ? f : f.path).join('\n')}`;
+      } else {
+        manualResult = `open(multiple: true) single file: ${typeof files === 'string' ? files : files.path}`;
+      }
+      onMessage(manualResult);
+    });
+  }
 </script>
 
 <div class="flex flex-col gap-2">
@@ -726,6 +795,19 @@ Expected behavior:
         <button class="btn" onclick={manualMenuPredefinedCut}>Menu Edit → Cut (predefined)</button>
         <button class="btn" onclick={manualMenuBarNativeIcons}>MenuBar NativeIcon Symbols</button>
       </div>
+    </div>
+    <div class="flex gap-2 flex-wrap mt-2">
+      <button class="btn" onclick={manualDialogOpen}>Dialog.open (single)</button>
+      <button class="btn" onclick={manualDialogOpenMultiple}>Dialog.open (multiple)</button>
+      <button class="btn" onclick={manualDialogSave}>Dialog.save</button>
+    </div>
+    <div class="flex gap-2 flex-wrap mt-2">
+      <button class="btn" onclick={manualDialogConfirm}>Dialog.confirm</button>
+    </div>
+    <div class="flex gap-2 flex-wrap mt-2">
+      <button class="btn" onclick={manualDialogMessageInfo}>Dialog.message (info)</button>
+      <button class="btn" onclick={manualDialogMessageWarning}>Dialog.message (warning)</button>
+      <button class="btn" onclick={manualDialogMessageError}>Dialog.message (error)</button>
     </div>
     {#if manualResult}
       <div class="mt-2 p-2 rd-1 bg-black/10 dark:bg-white/10 text-xs font-mono break-all">

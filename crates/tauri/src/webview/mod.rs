@@ -1789,7 +1789,7 @@ tauri::Builder::default()
       request.error,
     );
 
-    #[cfg(mobile)]
+    #[cfg(any(mobile, target_env = "ohos"))]
     let app_handle = self.app_handle.clone();
 
     let message = InvokeMessage::new(
@@ -1869,13 +1869,13 @@ tauri::Builder::default()
 
       let command = invoke.message.command.clone();
 
-      #[cfg(mobile)]
+      #[cfg(any(mobile, target_env = "ohos"))]
       let message = invoke.message.clone();
 
       #[allow(unused_mut)]
       let mut handled = manager.extend_api(plugin, invoke);
 
-      #[cfg(mobile)]
+      #[cfg(any(mobile, target_env = "ohos"))]
       {
         if !handled {
           handled = true;
@@ -1898,6 +1898,9 @@ tauri::Builder::default()
           load_channels(&payload, &message.webview);
 
           let resolver_ = resolver.clone();
+          #[cfg(target_env = "ohos")]
+          let plugin_name = plugin.to_string();
+
           if let Err(e) = crate::plugin::mobile::run_command(
             plugin,
             &app_handle,

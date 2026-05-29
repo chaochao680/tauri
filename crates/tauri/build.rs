@@ -358,6 +358,12 @@ fn main() {
     }
   }
 
+  if target_env.as_deref() == Ok("ohos") {
+    let lib_path =
+      PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("mobile/ohos");
+    println!("cargo:ohos_library_path={}", lib_path.display());
+  }
+
   let tauri_global_scripts = PathBuf::from("./scripts/bundle.global.js")
     .canonicalize()
     .expect("failed to canonicalize tauri global API script path");

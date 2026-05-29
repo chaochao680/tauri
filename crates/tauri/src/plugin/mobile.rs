@@ -36,7 +36,7 @@ type PendingPluginCallHandler = Box<dyn FnOnce(PluginResponse) + Send + 'static>
 #[allow(dead_code)]
 static PENDING_PLUGIN_CALLS_ID: AtomicI32 = AtomicI32::new(0);
 #[allow(dead_code)]
-static PENDING_PLUGIN_CALLS: OnceLock<Mutex<HashMap<i32, PendingPluginCallHandler>>> =
+pub(crate) static PENDING_PLUGIN_CALLS: OnceLock<Mutex<HashMap<i32, PendingPluginCallHandler>>> =
   OnceLock::new();
 static CHANNELS: OnceLock<Mutex<HashMap<u32, Channel<serde_json::Value>>>> = OnceLock::new();
 
@@ -59,6 +59,10 @@ pub enum PluginInvokeError {
   /// Failed to serialize request payload.
   #[error("failed to serialize payload: {0}")]
   CannotSerializePayload(serde_json::Error),
+  /// NAPI error for OHOS.
+  #[cfg(target_env = "ohos")]
+  #[error("napi error: {0}")]
+  Napi(String),
 }
 
 pub(crate) fn register_channel(channel: Channel<serde_json::Value>) {
@@ -284,6 +288,41 @@ impl<R: Runtime, C: DeserializeOwned> PluginApi<R, C> {
       handle: self.handle.clone(),
     })
   }
+
+  #[cfg(target_env = "ohos")]
+  pub fn register_ohos_plugin(
+    &self,
+    plugin_identifier: &str,
+    class_name: &str,
+  ) -> Result<PluginHandle<R>, PluginInvokeError> {
+    use crate::ohos::{PluginRegistration, PLUGINS_TO_REGISTER};
+
+    let plugin_name = self.name.to_string();
+    let identifier = plugin_identifier.to_string();
+    let class = class_name.to_string();
+    let config = serde_json::to_string(&self.raw_config).unwrap_or_default();
+
+    log::info!(
+      "[register_ohos_plugin] Recording plugin: {} from {}",
+      plugin_name,
+      identifier
+    );
+
+    PLUGINS_TO_REGISTER
+      .lock()
+      .unwrap()
+      .push(PluginRegistration {
+        name: plugin_name,
+        identifier,
+        class_name: class,
+        config,
+      });
+
+    Ok(PluginHandle {
+      name: self.name,
+      handle: self.handle.clone(),
+    })
+  }
 }
 
 impl<R: Runtime> PluginHandle<R> {
@@ -350,13 +389,76 @@ impl<R: Runtime> PluginHandle<R> {
 
 #[cfg(target_env = "ohos")]
 pub(crate) fn run_command<R: Runtime, C: AsRef<str>, F: FnOnce(PluginResponse) + Send + 'static>(
-  _name: &str,
+  name: &str,
   _handle: &AppHandle<R>,
-  _command: C,
-  _payload: serde_json::Value,
-  _handler: F,
+  command: C,
+  payload: serde_json::Value,
+  handler: F,
 ) -> Result<(), PluginInvokeError> {
-  // TODO
+  use crate::ohos::PLUGIN_MANAGER;
+  use napi_ohos::bindgen_prelude::{FnArgs, Function, JsObjectValue};
+  use openharmony_ability::get_main_thread_env;
+
+  log::info!(
+    "[run_command] plugin={}, command={}",
+    name,
+    command.as_ref()
+  );
+
+  let id: i32 = PENDING_PLUGIN_CALLS_ID.fetch_add(1, Ordering::Relaxed);
+  PENDING_PLUGIN_CALLS
+    .get_or_init(Default::default)
+    .lock()
+    .unwrap()
+    .insert(id, Box::new(handler));
+
+  log::info!("[run_command] id={}, PLUGIN_MANAGER check", id);
+
+  if let Some(manager) = PLUGIN_MANAGER.lock().unwrap().as_ref() {
+    log::info!("[run_command] got manager, checking env");
+    if let Some(env) = get_main_thread_env().borrow().as_ref() {
+      log::info!("[run_command] got env, getting manager object");
+      let manager_obj = manager.get_value(env).map_err(|e| {
+        log::error!("[run_command] get_value error: {}", e);
+        PluginInvokeError::Napi(e.to_string())
+      })?;
+
+      let name_str = name.to_string();
+      let cmd_str = command.as_ref().to_string();
+      let payload_str = serde_json::to_string(&payload).unwrap();
+
+      log::info!(
+        "[run_command] calling runCommand: id={}, plugin={}, cmd={}, payload={}",
+        id,
+        name_str,
+        cmd_str,
+        payload_str
+      );
+
+      // Get the runCommand function with FnArgs wrapper
+      let run_command_fn = manager_obj
+        .get_named_property::<Function<'_, FnArgs<(i32, String, String, String)>, ()>>("runCommand")
+        .map_err(|e| {
+          log::error!("[run_command] get_named_property error: {}", e);
+          PluginInvokeError::Napi(e.to_string())
+        })?;
+
+      // Call with .into() to properly convert args
+      run_command_fn
+        .call((id, name_str, cmd_str, payload_str).into())
+        .map_err(|e| {
+          log::error!("[run_command] call error: {}", e);
+          PluginInvokeError::Napi(e.to_string())
+        })?;
+
+      log::info!("[run_command] runCommand call success");
+    } else {
+      log::error!("[run_command] env is None");
+    }
+  } else {
+    log::error!("[run_command] PLUGIN_MANAGER is None");
+  }
+
   Ok(())
 }
 

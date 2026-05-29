@@ -469,22 +469,21 @@ pub fn build() {
 pub fn try_build(attributes: Attributes) -> Result<()> {
   use anyhow::anyhow;
 
-  #[cfg(target_env = "ohos")]
-  napi_build_ohos::setup();
-
-  println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
-
   let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
   let target_env = env::var_os("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
+  if target_env == "ohos" {
+    napi_build_ohos::setup();
+  }
+
+  println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
+  println!("cargo:rerun-if-env-changed=OHOS_TAURI_DEVICE_TYPE");
   let mobile = if target_env == "ohos" {
-    let device_type = env::var("TAURI_OHOS_DEVICE_TYPE")
-      .unwrap_or_else(|_| "mobile".to_string());
+    let device_type = env::var("OHOS_TAURI_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
     device_type != "desktop"
   } else {
     target_os == "ios" || target_os == "android"
   };
-
   cfg_alias("desktop", !mobile);
   cfg_alias("mobile", mobile);
 

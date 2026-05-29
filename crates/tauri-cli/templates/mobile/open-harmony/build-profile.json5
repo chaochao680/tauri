@@ -36,6 +36,18 @@
           ]
         }
       ]
+    },
+    {
+      "name": "tauri",
+      "srcPath": "./tauri",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
     }
   ]
 }

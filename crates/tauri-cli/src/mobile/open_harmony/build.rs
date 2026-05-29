@@ -4,7 +4,7 @@
 
 use super::{
   delete_codegen_vars, ensure_init, env, get_app, get_config, inject_resources, log_finished,
-  open_and_wait, MobileTarget, OptionsHandle,
+  open_and_wait, plugins, MobileTarget, OptionsHandle,
 };
 use crate::{
   build::Options as BuildOptions,
@@ -26,10 +26,11 @@ use cargo_mobile2::{
   target::TargetTrait,
 };
 
+use crate::helpers::app_paths::Dirs;
 use std::collections::HashMap;
 use std::env::{set_current_dir, set_var};
 use std::ffi::OsString;
-use crate::helpers::app_paths::Dirs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Parser)]
 #[clap(
@@ -129,17 +130,24 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
       .iter()
       .map(|conf| &conf.0)
       .collect::<Vec<_>>(),
-    dirs.tauri
+    dirs.tauri,
   )?;
   let (interface, config, metadata) = {
-
     let interface = AppInterface::new(&tauri_config, build_options.target.clone(), dirs.tauri)?;
     interface.build_options(&mut Vec::new(), &mut build_options.features, true);
 
-    let app = get_app(MobileTarget::OpenHarmony, &tauri_config, &interface, dirs.tauri);
+    let app = get_app(
+      MobileTarget::OpenHarmony,
+      &tauri_config,
+      &interface,
+      dirs.tauri,
+    );
 
     let mut vars = HashMap::new();
-    vars.insert("TAURI_OHOS_DEVICE_TYPE".into(), OsString::from(&options.device_type));
+    vars.insert(
+      "TAURI_OHOS_DEVICE_TYPE".into(),
+      OsString::from(&options.device_type),
+    );
     let cli_options = CliOptions {
       vars,
       ..Default::default()
@@ -168,15 +176,19 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
     config.app(),
     config.project_dir(),
     MobileTarget::OpenHarmony,
-    false
+    false,
   )?;
+
+  let plugin_metadata = inject_plugins(&dirs.tauri, &config.project_dir())?;
 
   let mut env = env()?;
 
   crate::build::setup(&interface, &mut build_options, &tauri_config, &dirs, true)?;
 
   // run an initial build to initialize plugins
-  first_target.build(&config, &metadata, &env, noise_level, true, profile).context("failed to build OpenHarmony app")?;
+  first_target
+    .build(&config, &metadata, &env, noise_level, true, profile)
+    .context("failed to build OpenHarmony app")?;
 
   let open = options.open;
   let _handle = run_build(
@@ -188,7 +200,8 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
     &config,
     &mut env,
     noise_level,
-    dirs
+    dirs,
+    plugin_metadata,
   )?;
 
   if open {
@@ -208,7 +221,8 @@ fn run_build(
   config: &OpenHarmonyConfig,
   env: &mut Env,
   noise_level: NoiseLevel,
-  dirs: Dirs
+  dirs: Dirs,
+  plugin_metadata: Vec<plugins::PluginMeta>,
 ) -> Result<OptionsHandle> {
   let interface_options = InterfaceOptions {
     debug: build_options.debug,
@@ -222,7 +236,10 @@ fn run_build(
   let _lock = flock::open_rw(out_dir.join("lock").with_extension("ohos"), "OpenHarmony")?;
 
   let mut vars = HashMap::new();
-  vars.insert("TAURI_OHOS_DEVICE_TYPE".into(), OsString::from(&options.device_type));
+  vars.insert(
+    "TAURI_OHOS_DEVICE_TYPE".into(),
+    OsString::from(&options.device_type),
+  );
 
   let cli_options = CliOptions {
     dev: false,
@@ -237,9 +254,65 @@ fn run_build(
 
   inject_resources(config, &tauri_config)?;
 
+  if !plugin_metadata.is_empty() {
+    let project_dir = config.project_dir();
+    for plugin in &plugin_metadata {
+      plugins::copy_plugin_har(plugin, &project_dir)
+        .context(format!("Failed to copy plugin '{}' HAR", plugin.name))?;
+    }
+    plugins::update_plugin_configs(&project_dir, &plugin_metadata)
+      .context("Failed to update plugin configurations")?;
+  }
+
   let hap_outputs = hap::build(config, env, noise_level, profile).context("failed to build hap")?;
 
   log_finished(hap_outputs, "HAP");
 
   Ok(handle)
+}
+
+fn inject_plugins(tauri_dir: &Path, project_dir: &Path) -> Result<Vec<plugins::PluginMeta>> {
+  log::info!("Starting OpenHarmony dynamic plugin injection");
+
+  let detected_plugins =
+    plugins::detect_all_plugins(&tauri_dir).context("Plugin detection failed")?;
+
+  if detected_plugins.is_empty() {
+    log::info!("No OpenHarmony-compatible plugins detected, continuing build");
+    return Ok(vec![]);
+  }
+
+  log::info!(
+    "Detected {} OpenHarmony plugins: {:?}",
+    detected_plugins.len(),
+    detected_plugins.iter().map(|p| &p.name).collect::<Vec<_>>()
+  );
+
+  let metadata: Vec<plugins::PluginMeta> = detected_plugins
+    .iter()
+    .map(|d| plugins::parse_plugin_meta(&d.har_path, &d.name))
+    .collect::<Result<Vec<_>>>()
+    .context("Plugin metadata parsing failed")?;
+
+  for plugin in &metadata {
+    plugins::validate_plugin_meta(plugin)
+      .context(format!("Invalid metadata for plugin '{}'", plugin.name))?;
+  }
+
+  for plugin in &metadata {
+    plugins::copy_plugin_har(plugin, &project_dir)
+      .context(format!("Failed to copy plugin '{}' HAR", plugin.name))?;
+  }
+
+  plugins::update_plugin_configs(&project_dir, &metadata)
+    .context("Failed to update plugin configurations")?;
+
+  plugins::validate_plugin_configs(&project_dir, &metadata)
+    .context("Plugin configuration validation failed")?;
+
+  log::info!(
+    "Build completed successfully with {} plugins",
+    metadata.len()
+  );
+  Ok(metadata)
 }

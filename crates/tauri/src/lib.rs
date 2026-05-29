@@ -92,6 +92,8 @@ mod manager;
 #[doc(hidden)]
 #[cfg(target_env = "ohos")]
 pub mod ohos;
+#[cfg(target_env = "ohos")]
+mod ohos_plugin;
 mod pattern;
 pub mod plugin;
 pub(crate) mod protocol;
@@ -199,7 +201,7 @@ use std::{
 };
 use utils::assets::{AssetKey, CspHash, EmbeddedAssets};
 
-#[cfg(feature = "wry")]
+#[cfg(all(feature = "wry", not(target_env = "ohos")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "wry")))]
 pub use tauri_runtime_wry::webview_version;
 

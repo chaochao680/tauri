@@ -103,6 +103,7 @@ use wry::{
 pub use tao;
 pub use tao::window::{Window, WindowBuilder as TaoWindowBuilder, WindowId as TaoWindowId};
 pub use wry;
+#[cfg(not(target_env = "ohos"))]
 pub use wry::webview_version;
 
 #[cfg(windows)]
@@ -3000,7 +3001,16 @@ impl<T: UserEvent> Wry<T> {
       next_webview_id: Default::default(),
       next_window_event_id: Default::default(),
       next_webview_event_id: Default::default(),
-      webview_runtime_installed: wry::webview_version().is_ok(),
+      webview_runtime_installed: {
+        #[cfg(not(target_env = "ohos"))]
+        {
+          wry::webview_version().is_ok()
+        }
+        #[cfg(target_env = "ohos")]
+        {
+          true
+        }
+      },
     };
 
     Ok(Self {
