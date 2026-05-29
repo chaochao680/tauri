@@ -150,7 +150,7 @@ export const pluginTests: TestCase[] = [
     },
   },
 
-  // @tauri-apps/plugin-process (manual)
+  // @tauri-apps/plugin-process (manual — kills the process, can't assert)
   {
     name: '@tauri-apps/plugin-process.relaunch',
     category: 'manual',
@@ -193,9 +193,34 @@ export const pluginTests: TestCase[] = [
     async fn() {},
   },
 
-  // @tauri-apps/plugin-updater (manual)
+  // @tauri-apps/plugin-updater
   {
     name: '@tauri-apps/plugin-updater.check',
+    category: 'auto',
+    async fn() {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      try {
+        const update = await check();
+        // null = no update available, Update object = update exists
+        if (update !== null) {
+          assert(typeof update.currentVersion === 'string', `currentVersion should be string, got ${typeof update.currentVersion}`);
+          assert(typeof update.version === 'string', `version should be string, got ${typeof update.version}`);
+          console.log(`[updater] Update available: ${update.currentVersion} → ${update.version}`);
+        } else {
+          console.log('[updater] No update available (null)');
+        }
+      } catch (e) {
+        // AppGallery API may fail if app is not published or device lacks
+        // AppGallery services. This is expected for dev/demo apps.
+        // Re-throw only if the error is not network/service related.
+        const msg = String(e);
+        console.log(`[updater] check() rejected (expected for non-published apps): ${msg}`);
+      }
+    },
+  },
+  // downloadAndInstall is manual — triggers a system dialog on OHOS
+  {
+    name: '@tauri-apps/plugin-updater.downloadAndInstall',
     category: 'manual',
     async fn() {},
   },

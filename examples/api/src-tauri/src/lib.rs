@@ -26,7 +26,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{
   webview::{PageLoadEvent, WebviewWindowBuilder},
-  App, Emitter, Listener, Manager, Runtime, WebviewUrl,
+  App, Emitter, EventTarget, Listener, Manager, Runtime, WebviewUrl,
 };
 #[allow(unused)]
 use tauri::RunEvent;
@@ -85,8 +85,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     )*/
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
+    .plugin(tauri_plugin_http::init())
     .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_process::init());
+    .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_updater::Builder::new().build());
 
   #[cfg(target_env = "ohos")]
   {
@@ -180,6 +182,21 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
       // Manage event tracker for testing
       app.manage(EventTracker::default());
+
+      #[cfg(all(desktop, not(test)))]
+      {
+        app.on_menu_event(|app, event| {
+          let id = event.id().as_ref();
+          log::info!("[on_menu_event global] id={}", id);
+          let _ = app.emit_to(
+            EventTarget::webview_window("main"),
+            "menu-event",
+            format!("global:{}", id),
+          );
+          let tracker = app.state::<EventTracker>();
+          tracker.menu_events.lock().unwrap().push(id.to_string());
+        });
+      }
 
       #[cfg(all(desktop, not(test)))]
       app.manage(PopupMenu(

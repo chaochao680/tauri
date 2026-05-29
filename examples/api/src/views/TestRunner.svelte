@@ -9,6 +9,7 @@
   import { menuTests } from '../lib/tests/menu';
   import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
   import { appCacheDir } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
@@ -24,6 +25,7 @@
   let focusWatchActive = $state(false);
   let focusWatchUnlisten = null;
   let focusEvents = $state([]);
+  let menuEvents = $state([]);
 
   const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
 
@@ -56,8 +58,26 @@
   }
 
   // Auto-run on first mount
-  onMount(() => {
+  let listenId = 0;
+  onMount(async () => {
     runAll();
+    // Listen for menu events from Rust (tray + global on_menu_event)
+    const myListenId = ++listenId;
+    let fireCount = 0;
+    console.log(`[listen-register] listenId=${myListenId} registered at ${new Date().toLocaleTimeString()}`);
+    const unlisten = await listen('menu-event', (event) => {
+      fireCount++;
+      const payload = event.payload;
+      const ts = new Date().toLocaleTimeString();
+      const msg = `[menu-event #${fireCount} lid=${myListenId}] ${payload} at ${ts}`;
+      console.log(msg);
+      onMessage(msg);
+      menuEvents = [...menuEvents, { payload, ts }];
+    });
+    return () => {
+      console.log(`[listen-cleanup] listenId=${myListenId} cleaned up`);
+      unlisten();
+    };
   });
 
   async function runCategory(category) {
@@ -421,6 +441,27 @@ Expected behavior:
     });
   }
 
+  async function manualMenuBarActionEvent() {
+    await wrapManual('menuBarActionEvent', async () => {
+      const { Menu, Submenu, MenuItem } = await import('@tauri-apps/api/menu');
+      const item = await MenuItem.new({
+        id: 'menu-event-test',
+        text: 'Click Me',
+        action: (id) => {
+          console.log(`[MenuBar action] id=${id}`);
+          const msg = `action callback fired! id=${id}`;
+          manualResult = msg;
+          onMessage(msg);
+        }
+      });
+      const sub = await Submenu.new({ text: 'EventTest', items: [item] });
+      const menu = await Menu.new({ items: [sub] });
+      await menu.setAsWindowMenu();
+      manualResult = 'MenuBar: "EventTest → Click Me".\nClick it → action callback should fire.\nVerify: result area updates + hilog shows [on_menu_event global] id=menu-event-test';
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Phase 13: Predefined Item Manual Tests ───
   async function manualMenuPredefinedCopy() {
     await wrapManual('menuPredefinedCopy', async () => {
@@ -548,19 +589,41 @@ Expected behavior:
     await wrapManual('trayEvent', async () => {
       const { TrayIcon } = await import('@tauri-apps/api/tray');
       const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+
+      // OHOS is single-tray: remove the default "tray-1" (created by tray.rs with
+      // quickOperation.abilityName="TestTrayAbility") to avoid singleton conflict.
+      // Without removal, the new tray may not replace it cleanly.
+      try {
+        const existing = await TrayIcon.getById('tray-1');
+        if (existing) {
+          await TrayIcon.removeById('tray-1');
+          console.log('[Manual Tray] Removed existing tray-1');
+        }
+      } catch (e) {
+        console.log('[Manual Tray] No existing tray-1 to remove:', e);
+      }
+
       console.log('[Manual Tray] Creating tray with event listener...');
       const tray = await TrayIcon.new({
         icon: TEST_ICON,
-        tooltip: 'Click me!',
+        tooltip: 'Click me! (no QuickOp)',
         action: (event) => {
           const data = JSON.stringify(event);
-          console.log(`[Manual Tray] Event received: ${data}`);
-          manualResult = `Tray event received:\n${data}`;
+          const ts = new Date().toLocaleTimeString();
+          console.log(`[Manual Tray] Event received at ${ts}: ${data}`);
+          manualResult = `TrayIconEvent received!\n${data}`;
           onMessage(manualResult);
         }
       });
       console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
-      manualResult = `Tray created with id: "${tray.id}".\nClick the status bar icon to trigger events.\nResult will appear below.`;
+      manualResult = `Tray created (id: "${tray.id}") WITHOUT QuickOperation.\n` +
+        `On OHOS: abilityName="" → statusBarIconClick should fire.\n` +
+        `Click the status bar icon — event should appear below.\n\n` +
+        `If no event after clicking:\n` +
+        `• Check hilog for "[StatusBar] ICON CLICK NAPI CLOSURE INVOKED"\n` +
+        `• Check hilog for "[StatusBar] icon click: clickType="\n` +
+        `• If neither appears → statusBarManager.on() not working\n` +
+        `• If they appear → Rust→JS event channel broken`;
       onMessage(manualResult);
     });
   }
@@ -578,6 +641,46 @@ Expected behavior:
       const tray = await TrayIcon.new({ icon: TEST_ICON, menu, tooltip: 'Right-click me' });
       console.log(`[Manual Tray] Tray created with id: ${tray.id}`);
       manualResult = `Tray created with menu.\nRight-click the status bar icon to see the context menu.\nClick the menu item to verify event trigger.`;
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── Process & Updater Manual Tests ───
+  async function manualRelaunch() {
+    await wrapManual('relaunch', async () => {
+      const { relaunch } = await import('@tauri-apps/plugin-process');
+      manualResult = 'relaunch() called. The app will restart now (process hard-kill, no onDestroy).\nOn OHOS: restartApp(want) triggers a cold restart.\nThe JS promise will NOT resolve — the process is killed before IPC response.\nVerify: app disappears and reappears within ~2 seconds.';
+      onMessage(manualResult);
+      // Small delay so the user can read the message before the process dies
+      await new Promise(r => setTimeout(r, 1500));
+      await relaunch();
+    });
+  }
+
+  async function manualDownloadAndInstall() {
+    await wrapManual('downloadAndInstall', async () => {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      let update;
+      try {
+        update = await check();
+      } catch (e) {
+        manualResult = `check() rejected: ${e}\n\nThis is expected if the app is not published on AppGallery.\nOn OHOS, check() requires the app to be listed in the AppGallery store.`;
+        onMessage(manualResult);
+        return;
+      }
+      if (!update) {
+        manualResult = 'check() returned null — no update available.\nCannot test downloadAndInstall without a pending update.\nOn OHOS: this requires the app to be published on AppGallery with a newer version available.';
+        onMessage(manualResult);
+        return;
+      }
+      manualResult = `Update found: ${update.currentVersion} → ${update.version}.\nCalling downloadAndInstall() — system dialog should appear.\nOn OHOS: AppGallery shows its native update dialog.\nVerify: dialog appears with update/download options.`;
+      onMessage(manualResult);
+      try {
+        await update.downloadAndInstall();
+        manualResult += '\ndownloadAndInstall() resolved — update downloaded and installed.';
+      } catch (e) {
+        manualResult += `\ndownloadAndInstall() rejected: ${e}`;
+      }
       onMessage(manualResult);
     });
   }
@@ -684,6 +787,13 @@ Expected behavior:
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Process & Updater Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualRelaunch}>relaunch() (app will restart)</button>
+        <button class="btn" onclick={manualDownloadAndInstall}>downloadAndInstall() (system dialog)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Tray Manual Tests</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualTrayIconShow}>Tray Icon Show (check system tray)</button>
@@ -721,6 +831,7 @@ Expected behavior:
         <button class="btn" onclick={manualMenuBarFullscreen}>MenuBar Fullscreen</button>
         <button class="btn" onclick={manualMenuBarPredefinedHide}>MenuBar Predefined Hide</button>
         <button class="btn" onclick={manualMenuBarPopupRegression}>MenuBar Popup Regression</button>
+        <button class="btn" onclick={manualMenuBarActionEvent}>MenuBar Action Event</button>
         <button class="btn" onclick={manualMenuPredefinedCopy}>Menu Edit → Copy (predefined)</button>
         <button class="btn" onclick={manualMenuPredefinedPaste}>Menu Edit → Paste (predefined)</button>
         <button class="btn" onclick={manualMenuPredefinedCut}>Menu Edit → Cut (predefined)</button>
@@ -732,6 +843,24 @@ Expected behavior:
         {manualResult}
       </div>
     {/if}
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-xs font-bold">Menu Event Log</span>
+        <span class="text-xs text-gray-500">({menuEvents.length})</span>
+        {#if menuEvents.length > 0}
+          <button class="text-xs text-blue-500 underline" onclick={() => menuEvents = []}>Clear</button>
+        {/if}
+      </div>
+      {#if menuEvents.length > 0}
+        <div class="max-h-40 overflow-y-auto flex flex-col gap-1">
+          {#each menuEvents as ev}
+            <div class="text-xs font-mono p-1 rd-1 bg-green-500/10 dark:bg-green-500/20">{ev.ts} — {ev.payload}</div>
+          {/each}
+        </div>
+      {:else}
+        <div class="text-xs text-gray-500 italic">No events yet. Click a tray menu item or menubar item to see events here.</div>
+      {/if}
+    </div>
     {#if focusWatchActive || focusEvents.length > 0}
       <div class="mt-2 text-xs">
         <div class="font-bold mb-1">Focus events ({focusEvents.length}):</div>

@@ -28,6 +28,7 @@ tauri-plugin-fs = { path = "../../../../plugins-workspace/plugins/fs" }
 tauri-plugin-shell = { path = "../../../../plugins-workspace/plugins/shell" }
 tauri-plugin-clipboard-manager = { path = "../../../../plugins-workspace/plugins/clipboard-manager" }
 tauri-plugin-process = { path = "../../../../plugins-workspace/plugins/process" }
+tauri-plugin-updater = { path = "../../../../plugins-workspace/plugins/updater" }
 tauri-plugin-autostart = { path = "../../../../plugins-workspace/plugins/autostart" }
 tauri-plugin-log = { path = "../../../../plugins-workspace/plugins/log" }
 chrono = "0.4"

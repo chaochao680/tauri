@@ -38,6 +38,27 @@ use tauri_runtime::{
 };
 use tauri_utils::{assets::AssetsIter, PackageInfo};
 
+/// Platform-specific restart implementation.
+/// Concentrates the `cfg` branching in one place so the rest of the code
+/// can call `do_restart(env)` without caring about the platform.
+#[cfg(target_env = "ohos")]
+fn do_restart(_env: &crate::Env) -> ! {
+    if let Ok(app) = crate::ohos::APP.lock() {
+        if let Some(app_ref) = app.as_ref() {
+            if let Err(e) = app_ref.restart() {
+                log::error!("OHOS restart failed: {e}");
+            }
+        }
+    }
+    std::process::exit(0);
+}
+
+/// Platform-specific restart implementation.
+#[cfg(not(target_env = "ohos"))]
+fn do_restart(env: &crate::Env) -> ! {
+    crate::process::restart(env);
+}
+
 use std::{
   borrow::Cow,
   collections::HashMap,
@@ -567,7 +588,7 @@ impl<R: Runtime> AppHandle<R> {
     if self.event_loop.lock().unwrap().main_thread_id == std::thread::current().id() {
       log::debug!("restart triggered on the main thread");
       self.cleanup_before_exit();
-      crate::process::restart(&self.env());
+      do_restart(&self.env());
     } else {
       log::debug!("restart triggered from a separate thread");
       // we're running on a separate thread, so we must trigger the exit request and wait for it to finish
@@ -583,7 +604,7 @@ impl<R: Runtime> AppHandle<R> {
         Err(e) => {
           log::error!("failed to request exit: {e}");
           self.cleanup_before_exit();
-          crate::process::restart(&self.env());
+          do_restart(&self.env());
         }
       }
     }
@@ -598,7 +619,7 @@ impl<R: Runtime> AppHandle<R> {
     // We'll be restarting when we receive the next `RuntimeRunEvent::Exit` event in `App::run` if this call succeed
     if self.runtime_handle.request_exit(RESTART_EXIT_CODE).is_err() {
       self.cleanup_before_exit();
-      crate::process::restart(&self.env());
+      do_restart(&self.env());
     }
   }
 
@@ -1408,7 +1429,7 @@ impl<R: Runtime> App<R> {
         callback(&app_handle, event);
         app_handle.cleanup_before_exit();
         if self.manager.restart_on_exit.load(atomic::Ordering::Relaxed) {
-          crate::process::restart(&self.env());
+          do_restart(&self.env());
         }
       }
       _ => {
@@ -2298,7 +2319,7 @@ tauri::Builder::default()
         let ohos_app = crate::ohos::APP
           .lock()
           .unwrap()
-          .take()
+          .clone()
           .expect("OpenHarmony app instance not initialized");
         crate::ohos::BASE_PATH.set(ohos_app.base_path()).ok();
         crate::ohos::MODULE_NAME.set(ohos_app.module_name()).ok();
