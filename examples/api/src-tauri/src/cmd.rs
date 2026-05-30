@@ -50,6 +50,7 @@ pub fn get_counter_value<R: Runtime>(app: tauri::AppHandle<R>, rid: ResourceId) 
 pub struct EventTracker {
   pub window_events: Mutex<Vec<String>>,
   pub menu_events: Mutex<Vec<String>>,
+  pub run_events: Mutex<Vec<String>>,
 }
 
 #[command]
@@ -67,10 +68,18 @@ pub fn get_tracked_menu_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::R
 }
 
 #[command]
+pub fn get_tracked_run_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<Vec<String>> {
+  let tracker = app.state::<EventTracker>();
+  let events = tracker.run_events.lock().unwrap().clone();
+  Ok(events)
+}
+
+#[command]
 pub fn clear_tracked_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
   let tracker = app.state::<EventTracker>();
   tracker.window_events.lock().unwrap().clear();
   tracker.menu_events.lock().unwrap().clear();
+  // Do NOT clear run_events — Ready fires only once and cannot be re-triggered
   Ok(())
 }
 
@@ -372,7 +381,7 @@ pub fn test_eval_with_callback<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> t
       r#"(function() { return JSON.stringify({arithmetic: 1+2, stringLen: "hello".length, bool: true}); })()"#,
       move |result| {
         log::info!("eval_with_callback result from JS: {}", result);
-        let _ = app_clone.emit("eval-with-callback-result", &result);
+        let _ = app_clone.emit_str("eval-with-callback-result", result);
       },
     )?;
   }

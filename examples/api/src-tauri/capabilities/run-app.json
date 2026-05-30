@@ -37,6 +37,7 @@
     "allow-get-counter-value",
     "allow-get-tracked-window-events",
     "allow-get-tracked-menu-events",
+    "allow-get-tracked-run-events",
     "allow-clear-tracked-events",
     "allow-emit-test-event",
     "allow-setup-app-listener",

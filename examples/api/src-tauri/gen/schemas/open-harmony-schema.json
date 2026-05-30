@@ -2349,10 +2349,10 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Allows appending a test result to the report file incrementally.",
+          "description": "Enables the append-test-result command without any pre-configured scope.",
           "type": "string",
           "const": "allow-append-test-result",
-          "markdownDescription": "Allows appending a test result to the report file incrementally."
+          "markdownDescription": "Enables the append-test-result command without any pre-configured scope."
         },
         {
           "description": "Enables the clear_console_log command without any pre-configured scope.",
@@ -2437,6 +2437,12 @@
           "type": "string",
           "const": "allow-get-tracked-menu-events",
           "markdownDescription": "Enables the get_tracked_menu_events command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_tracked_run_events command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-tracked-run-events",
+          "markdownDescription": "Enables the get_tracked_run_events command without any pre-configured scope."
         },
         {
           "description": "Enables the get_tracked_window_events command without any pre-configured scope.",
@@ -2605,6 +2611,12 @@
           "type": "string",
           "const": "deny-get-tracked-menu-events",
           "markdownDescription": "Denies the get_tracked_menu_events command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_tracked_run_events command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-tracked-run-events",
+          "markdownDescription": "Denies the get_tracked_run_events command without any pre-configured scope."
         },
         {
           "description": "Denies the get_tracked_window_events command without any pre-configured scope.",

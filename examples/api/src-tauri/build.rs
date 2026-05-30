@@ -36,6 +36,7 @@ fn main() {
         "get_counter_value",
         "get_tracked_window_events",
         "get_tracked_menu_events",
+        "get_tracked_run_events",
         "clear_tracked_events",
         "emit_test_event",
         "setup_app_listener",

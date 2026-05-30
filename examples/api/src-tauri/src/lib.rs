@@ -424,6 +424,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::test_async_spawn,
       cmd::get_tracked_window_events,
       cmd::get_tracked_menu_events,
+      cmd::get_tracked_run_events,
       cmd::clear_tracked_events,
     ])
     .build(tauri::tauri_build_context!())
@@ -434,9 +435,63 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_os = "ios")]
   let mut counter = 0;
-  app.run(move |_app_handle, _event| {
+  app.run(move |_app_handle, event| {
+    // Track all RunEvent variants for testing (tracker may not be ready on early events)
+    if let Some(tracker) = _app_handle.try_state::<EventTracker>() {
+      let event_name = match &event {
+        RunEvent::Ready => {
+          log::info!("[RunEvent] Ready");
+          "Ready"
+        }
+        RunEvent::Resumed => {
+          log::info!("[RunEvent] Resumed");
+          "Resumed"
+        }
+        RunEvent::MainEventsCleared => {
+          use std::sync::atomic::{AtomicBool, Ordering};
+          static LOGGED: AtomicBool = AtomicBool::new(false);
+          if !LOGGED.swap(true, Ordering::Relaxed) {
+            log::info!("[RunEvent] MainEventsCleared");
+          }
+          "MainEventsCleared"
+        }
+        RunEvent::ExitRequested { code, .. } => {
+          log::info!("[RunEvent] ExitRequested, code={:?}", code);
+          if code.is_some() { "ExitRequested(code)" } else { "ExitRequested" }
+        }
+        RunEvent::Exit => {
+          log::info!("[RunEvent] Exit");
+          "Exit"
+        }
+        RunEvent::WindowEvent { label, event, .. } => {
+          match event {
+            tauri::WindowEvent::CloseRequested { .. } => {
+              log::info!("[RunEvent] WindowEvent::CloseRequested, label={}", label);
+              "WindowEvent::CloseRequested"
+            }
+            tauri::WindowEvent::Destroyed => {
+              log::info!("[RunEvent] WindowEvent::Destroyed, label={}", label);
+              "WindowEvent::Destroyed"
+            }
+            _ => "",
+          }
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android", target_env = "ohos"))]
+        RunEvent::Opened { urls } => {
+          log::info!("[RunEvent] Opened, urls={:?}", urls);
+          "Opened"
+        }
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => "Reopen",
+        _ => "",
+      };
+      if !event_name.is_empty() {
+        tracker.run_events.lock().unwrap().push(event_name.to_string());
+      }
+    }
+
     #[cfg(not(test))]
-    match &_event {
+    match &event {
       // Keep the event loop running even if all windows are closed
       // This allow us to catch tray icon events when there is no window
       // if we manually requested an exit (code is Some(_)) we will let it go through
@@ -451,8 +506,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         ..
       } => {
         log::info!("closing window...");
-        // run the window destroy manually just for fun :)
-        // usually you'd show a dialog here to ask for confirmation or whatever
         api.prevent_close();
         _app_handle
           .get_webview_window(label)
@@ -471,7 +524,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         .build()
         .unwrap();
       }
-      #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+      #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android", target_env = "ohos"))]
       RunEvent::Opened { urls } => {
         log::info!("opened urls: {:?}", urls);
       }

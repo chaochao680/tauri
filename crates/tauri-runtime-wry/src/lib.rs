@@ -4280,6 +4280,10 @@ fn handle_event_loop<T: UserEvent>(
     }
 
     Event::LoopDestroyed => {
+      log::info!("[wry] Event::LoopDestroyed received, triggering Exit");
+      // TODO: OHOS 上需要正确处理 ExitRequested
+      // 当前 LoopDestroyed 由 MainEvent::Destroy 触发，直接发送 Exit
+      // 理想情况应先触发 ExitRequested(code: Some(0))，让用户决定是否阻止退出
       callback(RunEvent::Exit);
     }
 
@@ -4414,6 +4418,7 @@ fn handle_event_loop<T: UserEvent>(
 
                 let recv = rx.try_recv();
                 let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
+                log::info!("[wry] ExitRequested should_prevent: {}", should_prevent);
 
                 if !should_prevent {
                   *control_flow = ControlFlow::Exit;
@@ -4480,7 +4485,7 @@ fn handle_event_loop<T: UserEvent>(
         );
       }
     },
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android", target_env = "ohos"))]
     Event::Opened { urls } => {
       callback(RunEvent::Opened { urls });
     }
