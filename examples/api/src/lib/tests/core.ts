@@ -357,20 +357,21 @@ export const coreTests: TestCase[] = [
     name: 'webview.eval_with_callback',
     category: 'auto',
     async fn() {
-      const resultPromise = new Promise<string>((resolve) => {
+      const resultPromise = new Promise<any>((resolve) => {
         const unlisten = listen('eval-with-callback-result', (event) => {
           unlisten.then((fn) => fn());
-          resolve(event.payload as string);
+          // payload arrives as a JSON string; parse it into an object
+          const parsed = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+          resolve(parsed);
         });
       });
 
       await invoke('test_eval_with_callback');
 
       const result = await resultPromise;
-      const parsed = JSON.parse(result);
-      assert(parsed.arithmetic === 3, `Expected arithmetic=3, got ${parsed.arithmetic}`);
-      assert(parsed.stringLen === 5, `Expected stringLen=5, got ${parsed.stringLen}`);
-      assert(parsed.bool === true, `Expected bool=true, got ${parsed.bool}`);
+      assert(result.arithmetic === 3, `Expected arithmetic=3, got ${result.arithmetic}`);
+      assert(result.stringLen === 5, `Expected stringLen=5, got ${result.stringLen}`);
+      assert(result.bool === true, `Expected bool=true, got ${result.bool}`);
     },
   },
 
@@ -539,6 +540,71 @@ export const coreTests: TestCase[] = [
       } finally {
         unlisten();
       }
+    },
+  },
+
+  // RunEvent lifecycle tracking
+  {
+    name: 'RunEvent::Ready fires on startup',
+    category: 'auto',
+    async fn() {
+      const events = await invoke('get_tracked_run_events') as string[];
+      assert(Array.isArray(events), 'Should receive array of run events');
+      assert(events.includes('Ready'), `Ready should be in tracked events, got: ${JSON.stringify(events)}`);
+    },
+  },
+  {
+    name: 'RunEvent::MainEventsCleared fires',
+    category: 'auto',
+    async fn() {
+      // Clear previous events first to get a fresh baseline
+      await invoke('clear_tracked_events');
+      // Trigger a window title change to force event loop iteration
+      await getCurrentWindow().setTitle('Test Title for RunEvent');
+      await new Promise((r) => setTimeout(r, 100));
+      const events = await invoke('get_tracked_run_events') as string[];
+      assert(events.includes('MainEventsCleared'), `MainEventsCleared should be in tracked events, got: ${JSON.stringify(events)}`);
+    },
+  },
+  {
+    name: 'RunEvent::Resumed fires on startup',
+    category: 'auto',
+    async fn() {
+      const events = await invoke('get_tracked_run_events') as string[];
+      assert(events.includes('Resumed'), `Resumed should be in tracked events, got: ${JSON.stringify(events)}`);
+    },
+  },
+  {
+    name: 'RunEvent::WindowEvent::CloseRequested fires',
+    category: 'auto',
+    async fn() {
+      // Create a new window, then close it — this triggers CloseRequested
+      await invoke('create_isolated_window', {
+        windowId: 'test-close-req',
+        dataSuffix: 'close',
+        url: '/hello.html',
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      // Close the window — triggers WindowEvent::CloseRequested
+      const win = await WebviewWindow.getByLabel('test-close-req');
+      if (win) {
+        await win.close();
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      const events = await invoke('get_tracked_run_events') as string[];
+      assert(
+        events.includes('WindowEvent::CloseRequested'),
+        `WindowEvent::CloseRequested should be in tracked events, got: ${JSON.stringify(events)}`,
+      );
+    },
+  },
+  {
+    name: 'RunEvent::Opened (manual — requires deep link)',
+    category: 'manual',
+    async fn() {
+      // Opened requires OS-level NewWant (deep link), cannot be triggered programmatically.
+      // The event tracking infrastructure is verified by Ready/MainEventsCleared/Resumed tests.
+      // To test manually: launch the app via deep link (e.g., hdc shell aa start -a EntryAbility -b com.tauri.api -U myapp://test)
     },
   },
 ];
