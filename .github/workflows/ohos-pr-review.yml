@@ -1,0 +1,488 @@
+# Copyright 2019-2024 Tauri Programme within The Commons Conservancy
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
+
+name: OHOS PR Review (Gate 1)
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'crates/**'
+      - 'examples/**'
+      - 'packages/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_PROFILE_DEV_DEBUG: 0
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# PR comment requires write permission
+permissions:
+  pull-requests: write
+  issues: write
+  checks: read
+  id-token: write
+
+jobs:
+  # ═══════════════════════════════════════════════════
+  # ① Host platform compile check (3-platform matrix)
+  # Ensures PR does not break Windows/macOS/Linux compilation
+  # Note: needs to checkout sibling repos to resolve [patch] path dependencies
+  # ═══════════════════════════════════════════════════
+  host-compile-check:
+    name: Host Compile (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            toolchain: '1.77.2'
+          - name: macOS
+            os: macos-14
+            target: aarch64-apple-darwin
+            toolchain: '1.77.2'
+          - name: Linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            toolchain: '1.77.2'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout sibling repos for [patch] resolution
+        shell: bash
+        run: |
+          # Cargo.toml [patch] references local paths to sibling repos
+          # Need to checkout these repos to the correct location
+          SIBLINGS=(
+            "Eulogizethesun/wry"
+            "Eulogizethesun/tao"
+            "Eulogizethesun/muda"
+            "Eulogizethesun/tray-icon"
+            "Eulogizethesun/openharmony-ability"
+          )
+          for repo in "${SIBLINGS[@]}"; do
+            name=$(basename "$repo")
+            echo "::group::Checkout $repo"
+            git clone --depth 1 "https://github.com/${repo}.git" "../${name}" 2>/dev/null || \
+              echo "⚠️ Failed to clone $repo, skipping"
+            echo "::endgroup::"
+          done
+
+          # plugins-workspace (required by examples/api)
+          echo "::group::Checkout plugins-workspace"
+          git clone --depth 1 --branch v2 "https://github.com/Eulogizethesun/plugins-workspace.git" "../plugins-workspace" 2>/dev/null || \
+            echo "⚠️ Failed to clone plugins-workspace, skipping"
+          echo "::endgroup::"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev webkit2gtk-4.1 libayatana-appindicator3-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gate1-${{ matrix.target }}
+
+      - name: cargo check (tauri-utils)
+        run: cargo check --target ${{ matrix.target }} --all-targets --manifest-path crates/tauri-utils/Cargo.toml
+
+      - name: cargo check (tauri)
+        run: cargo check --target ${{ matrix.target }} --all-targets --manifest-path crates/tauri/Cargo.toml
+
+  # ═══════════════════════════════════════════════════
+  # ⑤ Host unit tests (Linux)
+  # ═══════════════════════════════════════════════════
+  host-tests:
+    name: Host Tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout sibling repos for [patch] resolution
+        run: |
+          SIBLINGS=(
+            "Eulogizethesun/wry"
+            "Eulogizethesun/tao"
+            "Eulogizethesun/muda"
+            "Eulogizethesun/tray-icon"
+            "Eulogizethesun/openharmony-ability"
+          )
+          for repo in "${SIBLINGS[@]}"; do
+            name=$(basename "$repo")
+            git clone --depth 1 "https://github.com/${repo}.git" "../${name}" 2>/dev/null || \
+              echo "⚠️ Failed to clone $repo, skipping"
+          done
+          git clone --depth 1 --branch v2 "https://github.com/Eulogizethesun/plugins-workspace.git" "../plugins-workspace" 2>/dev/null || \
+            echo "⚠️ Failed to clone plugins-workspace, skipping"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev webkit2gtk-4.1 libayatana-appindicator3-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gate1-test-linux
+
+      - name: cargo test (tauri-utils)
+        run: cargo test --lib --bins --tests --manifest-path crates/tauri-utils/Cargo.toml
+
+      - name: cargo test (tauri-runtime)
+        run: cargo test --lib --bins --tests --manifest-path crates/tauri-runtime/Cargo.toml
+
+  # ═══════════════════════════════════════════════════
+  # OHOS pattern static check (lightweight grep)
+  # Scans PR diff for common OHOS violation patterns
+  # ═══════════════════════════════════════════════════
+  ohos-pattern-lint:
+    name: OHOS Pattern Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan PR diff for OHOS violations
+        id: lint
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // ── Violation pattern definitions ──
+            const patterns = [
+              {
+                regex: /callee_handled\s*::\s*<\s*true\s*>/,
+                severity: '🔴 Blocker',
+                title: 'TSFN callee_handled parameter error',
+                rule: 'Must use callee_handled::<false>(). napi-ohos auto-inserts null at position 0 when CalleeHandled=true, causing argument offset'
+              },
+              {
+                regex: /run_on_main_thread[\s\S]{0,200}\.recv\s*\(/,
+                severity: '🔴 Blocker',
+                title: 'Threading violation: deadlock risk',
+                rule: 'run_on_main_thread + blocking recv() causes deadlock. Chrome_IOThread waits for ArkTS main thread, ArkTS main thread waits for Chrome_IOThread'
+              },
+              {
+                regex: /target_os\s*=\s*"linux"(?!.*not\s*\(\s*target_env\s*=\s*"ohos"\s*\))/,
+                severity: '🔴 Blocker',
+                title: 'Linux dependency missing OHOS exclusion',
+                rule: 'OHOS target_os is "linux", Linux dependencies must add not(target_env = "ohos") exclusion'
+              },
+              {
+                regex: /global\s+Mutex\s*<\s*Option/,
+                severity: '🟡 Major',
+                title: 'TSFN data passing pattern not recommended',
+                rule: 'Global Mutex<Option<Data>> causes data races under rapid consecutive calls. Should carry data via generic parameters'
+              },
+              {
+                regex: /mock_app\s*\(\s*\)|mock_builder\s*\(\s*\)/,
+                severity: '🟡 Major',
+                title: 'mock_runtime unavailable on OHOS',
+                rule: 'mock_runtime depends on tao EventLoop (desktop-only), test module must use cfg(not(target_env = "ohos")) exclusion'
+              }
+            ];
+
+            // ── Get PR diff ──
+            const prNumber = context.payload.pull_request.number;
+            const diff = await github.request(
+              `GET /repos/${context.repo.owner}/${context.repo.repo}/pulls/${prNumber}`,
+              { mediaType: { format: 'diff' } }
+            );
+
+            // ── Parse diff: group by file, extract added lines (only scan Rust and ArkTS files) ──
+            const diffText = typeof diff.data === 'string' ? diff.data : String(diff.data);
+            const fileSections = diffText.split(/^diff --git /m).slice(1);
+            const results = [];
+
+            for (const section of fileSections) {
+              const headerMatch = section.match(/a\/(.+?) b\/(.+)/);
+              const filePath = headerMatch ? headerMatch[2] : 'unknown';
+
+              // Only scan Rust (.rs) and ArkTS (.ets/.ts) source files
+              if (!/\.(rs|ets|ts)$/.test(filePath)) continue;
+
+              const addedLines = section.split('\n')
+                .filter(l => l.startsWith('+') && !l.startsWith('+++'))
+                .map(l => l.slice(1));
+
+              for (const pattern of patterns) {
+                for (let i = 0; i < addedLines.length; i++) {
+                  if (pattern.regex.test(addedLines[i])) {
+                    results.push({
+                      file: filePath,
+                      line: i + 1,
+                      severity: pattern.severity,
+                      title: pattern.title,
+                      rule: pattern.rule,
+                      matched: addedLines[i].trim().substring(0, 120)
+                    });
+                  }
+                }
+              }
+            }
+
+            // ── Build report ──
+            let body;
+            if (results.length === 0) {
+              body = '### 🔍 OHOS Pattern Lint\n\n✅ No known OHOS violation patterns found';
+            } else {
+              body = `### 🔍 OHOS Pattern Lint — Found ${results.length} potential issue(s)\n\n`;
+              body += '| File | Severity | Issue | Rule Description |\n';
+              body += '|------|----------|-------|------------------|\n';
+              for (const r of results) {
+                body += `| \`${r.file}\` | ${r.severity} | **${r.title}** | ${r.rule} |\n`;
+              }
+            }
+
+            core.setOutput('body', body);
+            core.setOutput('violation_count', results.length.toString());
+
+            // Mark blockers as job failure
+            const blockers = results.filter(r => r.severity.includes('Blocker'));
+            if (blockers.length > 0) {
+              core.setFailed(`Found ${blockers.length} Blocker-level OHOS violation(s)`);
+            }
+
+      - name: Post pattern lint comment
+        if: always() && steps.lint.outputs.body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: process.env.LINT_BODY
+            });
+        env:
+          LINT_BODY: ${{ steps.lint.outputs.body }}
+
+  # ═══════════════════════════════════════════════════
+  # ⑥ Claude AI code review
+  # Deep review based on OHOS constraints checklist
+  # Runs independently of compile/tests; executes even if compile fails
+  # Requires repo secrets:
+  #   - ANTHROPIC_API_KEY: API key
+  #   - ANTHROPIC_BASE_URL (optional): custom API endpoint (e.g. DashScope proxy)
+  # ═══════════════════════════════════════════════════
+  claude-review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are a Tauri OHOS adaptation code review assistant. Please review the code changes in this PR item by item.
+
+            ## Step 1: Get the full PR diff
+
+            ```bash
+            # Ensure full history (Actions defaults to shallow clone)
+            git fetch --unshallow origin ${{ github.base_ref }}
+            BASE_REF=${{ github.base_ref }}
+            FULL_DIFF=$(git diff origin/$BASE_REF...HEAD -- . ':!openspec/')
+            ```
+
+            ## Step 2: Detect openspec changes
+
+            ```bash
+            OPENSPEC_FILES=$(git diff --name-only origin/$BASE_REF...HEAD -- 'openspec/')
+            echo "$OPENSPEC_FILES"
+            ```
+
+            If the output contains `openspec/changes/<name>/` paths, this PR has openspec changes.
+            Read all files in that change directory:
+            - `openspec/changes/<name>/proposal.md` — change goals and scope
+            - `openspec/changes/<name>/design.md` — technical design decisions
+            - `openspec/changes/<name>/tasks.md` — implementation task list
+            - `openspec/changes/<name>/specs/*/spec.md` — all capability specs (each spec includes requirements and scenarios)
+
+            Extract all **requirements** from spec.md (paragraphs starting with `### Requirement:`),
+            as the item-by-item check basis for **G. Spec Compliance** section.
+
+            If `OPENSPEC_FILES` is empty, skip section G.
+
+            ## Step 3: Item-by-item review
+
+            Check the PR diff against the following checklist, marking each item with ✅ Pass / ❌ Violation / ⚠️ Unable to determine.
+
+            ### A. cfg Isolation
+            - [ ] OHOS-specific code uses `cfg(target_env = "ohos")` or combinations
+            - [ ] Linux dependencies have `not(target_env = "ohos")` exclusion (OHOS target_os is "linux")
+            - [ ] desktop/mobile distinction uses `cfg(all(target_env = "ohos", desktop/mobile))`
+
+            ### B. NAPI/TSFN Standards
+            - [ ] NAPI function names in ArkTS use camelCase (Rust snake_case auto-converts)
+            - [ ] TSFN uses `callee_handled::<false>()` (true causes argument offset)
+            - [ ] TSFN data carried via generic parameters, not global `Mutex<Option<Data>>`
+            - [ ] tuple arguments wrapped with `FnArgs<>`
+
+            ### C. Threading Model
+            - [ ] No `run_on_main_thread` + blocking `rx.recv()` pattern (deadlock risk)
+            - [ ] Mutex not held across blocking I/O operations
+            - [ ] `Function::call()` not called within `render()` / `@Builder` context (silently fails on OHOS)
+
+            ### D. ArkTS Framework Constraints
+            - [ ] `@Builder` requiring `this` is inside `@Component` (module-level @Builder has no this)
+            - [ ] `onLoadIntercept` return value is inverted `!ret` (semantics opposite to Tauri on_navigation)
+            - [ ] WebView events pre-build registered inside `@Builder`
+            - [ ] Multi-window state uses `@LocalStorageProp` isolation (FloatPage), not global `@StorageProp`
+            - [ ] `setColorMode` called asynchronously (`setTimeout(..., 0)`) to avoid deadlock
+
+            ### E. Platform Isolation
+            - [ ] Windows/macOS/Linux original implementation not affected
+            - [ ] No missing cfg gates (check diff for modifications on non-OHOS paths)
+            - [ ] No unnecessary modifications (formatting, whitespace, changes unrelated to PR goal)
+
+            ### F. Architecture Constraints
+            - [ ] All repos call HarmonyOS system capabilities through `openharmony-ability` (no direct ArkTS/NAPI calls)
+            - [ ] `TAURI_OHOS_DEVICE_TYPE` correctly controls desktop/mobile form factor
+
+            ### G. Spec Compliance (only checked when Step 2 finds openspec changes)
+
+            Extract all requirements from specs read in Step 2, check each one:
+            - [ ] Each requirement has a corresponding implementation
+            - [ ] Interface signatures match spec
+            - [ ] Unsupported APIs have stub/fallback as designed
+            - [ ] All tasks in tasks.md are implemented
+            - [ ] Implementation does not exceed spec scope (untested extra functionality)
+
+            ## Step 4: Output review report
+
+            Format:
+            ```
+            ## OHOS PR Review Report
+
+            ### Review Checklist
+            A. cfg Isolation
+            - [x] OHOS-specific code uses cfg isolation ✅
+            - [ ] Linux dependency exclusion ❌ — Found 2 omissions (see below)
+            ...
+
+            ### Issues Found
+            | File:Line | Severity | Category | Description | Fix Suggestion |
+            |-----------|----------|----------|-------------|----------------|
+            | src/xxx.rs:42 | 🔴 Blocker | cfg isolation | Missing cfg gate | Add cfg(target_env = "ohos") |
+
+            ### Summary
+            | Level | Count |
+            |-------|-------|
+            | 🔴 Blocker | 0 |
+            | 🟡 Major | 0 |
+            | 🔵 Minor | 0 |
+            | ℹ️ Suggestion | 0 |
+            ```
+
+            Severity levels:
+            - 🔴 Blocker: Must fix (deadlock, data corruption, platform breakage)
+            - 🟡 Major: Should fix (API misuse, cfg omission, spec mismatch)
+            - 🔵 Minor: Nice to fix (unnecessary modifications, out of spec)
+            - ℹ️ Suggestion: Optional improvement
+
+            If all pass, output `✅ LGTM — No issues found`.
+
+            Please post the review result as a PR comment using `gh pr comment`.
+
+  # ═══════════════════════════════════════════════════
+  # Gate 1 summary
+  # Collect all job results, post summary comment
+  # ═══════════════════════════════════════════════════
+  gate1-summary:
+    name: Gate 1 Summary
+    needs: [host-compile-check, host-tests, ohos-pattern-lint, claude-review]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Gate 1 summary comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const sha = pr.head.sha;
+
+            // Get all check runs
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+              per_page: 100
+            });
+
+            // Filter Gate 1 related jobs
+            const gate1Prefixes = [
+              'Host Compile', 'Host Tests',
+              'OHOS Pattern Lint', 'Claude Code Review'
+            ];
+            const relevant = checks.check_runs.filter(c =>
+              gate1Prefixes.some(p => c.name.startsWith(p))
+            );
+
+            // Build results table
+            let allPassed = true;
+            let rows = '';
+            for (const check of relevant) {
+              let status = '⏳ Running';
+              if (check.conclusion === 'success') {
+                status = '✅ Passed';
+              } else if (check.conclusion === 'failure') {
+                status = '❌ Failed';
+                allPassed = false;
+              } else if (check.conclusion === 'skipped') {
+                status = '⏭️ Skipped';
+              } else if (check.conclusion) {
+                status = `⚠️ ${check.conclusion}`;
+                allPassed = false;
+              }
+              rows += `| ${check.name} | ${status} |\n`;
+            }
+
+            // Build comment
+            let body;
+            if (allPassed && relevant.length > 0) {
+              body = '## ✅ Gate 1 Passed\n\n';
+              body += '| Check | Result |\n|-------|--------|\n';
+              body += rows;
+              body += '\n### ⏭️ Awaiting Gate 2: On-device Verification\n\n';
+              body += 'Please have a Committer run:\n';
+              body += '```bash\n';
+              body += `gh pr checkout ${pr.number}\n`;
+              body += '# OHOS unit tests (requires connected device)\n';
+              body += 'cargo test-ohos\n';
+              body += '# OHOS API self-test (requires connected device)\n';
+              body += '/opsx:verify\n';
+              body += '```\n\n';
+              body += 'On-device verification checklist:\n';
+              body += '- [ ] OHOS unit tests (`cargo test-ohos`)\n';
+              body += '- [ ] OHOS API self-test (autotest)\n';
+              body += '- [ ] Manual functional verification (if needed)\n';
+            } else {
+              body = '## ❌ Gate 1 Failed\n\n';
+              body += '| Check | Result |\n|-------|--------|\n';
+              body += rows;
+              body += '\nPlease fix the above issues and resubmit.\n';
+            }
+
+            await github.rest.issues.createComment({
+              issue_number: pr.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
