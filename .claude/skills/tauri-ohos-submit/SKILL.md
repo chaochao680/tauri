@@ -7,6 +7,8 @@ description: Tauri OHOS 代码提交。使用场景：(1) 验证通过后需要�
 
 本技能引导完成代码提交流程：多仓库扫描 → 文件过滤 → commit → rebase → push → 创建 PR。
 
+> **⚠️ 语言约束**：所有 commit message、PR title 和 PR body 必须使用英文编写。
+
 > **openspec 目录说明**：openspec 位于 **tauri 仓库根目录**（`<项目根目录>/tauri/openspec/`），属于 tauri 仓库的 git 管理范围。提交 tauri 仓库时包含 openspec 目录。
 
 ## 状态追踪
