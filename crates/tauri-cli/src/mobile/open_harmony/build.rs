@@ -9,7 +9,7 @@ use super::{
 use crate::{
   build::Options as BuildOptions,
   helpers::{
-    app_paths::resolve_tauri_dir,
+    app_paths::{resolve_tauri_dir, Dirs},
     config::{get_config as get_tauri_config, ConfigMetadata},
     flock,
   },

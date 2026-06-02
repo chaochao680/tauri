@@ -76,7 +76,7 @@ pub fn gen_with_plugins(
         serde_json::json!({
           "name": p.name,
           "identifier": p.identifier,
-          "class_name": p.class_name,
+          "className": p.class_name,
         })
       })
       .collect();
