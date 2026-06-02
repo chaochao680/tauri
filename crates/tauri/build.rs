@@ -265,8 +265,8 @@ fn main() {
 
   let mobile = if target_env == "ohos" {
     println!("cargo:rerun-if-env-changed=TAURI_OHOS_DEVICE_TYPE");
-    let device_type = std::env::var("TAURI_OHOS_DEVICE_TYPE")
-      .unwrap_or_else(|_| "mobile".to_string());
+    let device_type =
+      std::env::var("TAURI_OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
     device_type != "desktop"
   } else {
     target_os == "ios" || target_os == "android"
@@ -346,6 +346,12 @@ fn main() {
     let lib_path =
       PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("mobile/android");
     println!("cargo:android_library_path={}", lib_path.display());
+  }
+
+  if Ok("ohos") == target_env.as_deref() {
+    let lib_path =
+      PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("mobile/ohos");
+    println!("cargo:ohos_library_path={}", lib_path.display());
   }
 
   #[cfg(target_os = "macos")]

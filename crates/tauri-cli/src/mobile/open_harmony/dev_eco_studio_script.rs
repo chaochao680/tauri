@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 use super::{detect_target_ok, ensure_init, env, get_app, get_config, read_options, MobileTarget};
-use crate::{helpers::config::{get_config as get_tauri_config, reload_config as reload_tauri_config}, interface::{AppInterface}, mobile::CliOptions, Error, ErrorExt, Result};
+use crate::{
+  helpers::config::{get_config as get_tauri_config, reload_config as reload_tauri_config},
+  interface::AppInterface,
+  mobile::CliOptions,
+  Error, ErrorExt, Result,
+};
 use clap::{ArgAction, Parser};
 
 use crate::error::Context;
@@ -42,10 +47,9 @@ pub fn command(options: Options) -> Result<()> {
   };
 
   let (mut tauri_config, cli_options) = {
-    let mut tauri_config = get_tauri_config(tauri_utils::platform::Target::OpenHarmony, &[], dirs.tauri)?;
-    let cli_options = {
-      read_options(&tauri_config)
-    };
+    let mut tauri_config =
+      get_tauri_config(tauri_utils::platform::Target::OpenHarmony, &[], dirs.tauri)?;
+    let cli_options = { read_options(&tauri_config) };
 
     let tauri_config = if cli_options.config.is_empty() {
       tauri_config
@@ -58,7 +62,7 @@ pub fn command(options: Options) -> Result<()> {
           .iter()
           .map(|conf| &conf.0)
           .collect::<Vec<_>>(),
-        dirs.tauri
+        dirs.tauri,
       )?;
       tauri_config
     };
@@ -72,7 +76,7 @@ pub fn command(options: Options) -> Result<()> {
         MobileTarget::OpenHarmony,
         &tauri_config,
         &AppInterface::new(&tauri_config, None, dirs.tauri)?,
-        dirs.tauri
+        dirs.tauri,
       ),
       &tauri_config,
       None,
@@ -86,7 +90,7 @@ pub fn command(options: Options) -> Result<()> {
     config.app(),
     config.project_dir(),
     MobileTarget::OpenHarmony,
-    false
+    false,
   )?;
 
   if !cli_options.config.is_empty() {
@@ -103,10 +107,7 @@ pub fn command(options: Options) -> Result<()> {
   let env = env()?;
 
   if cli_options.dev {
-    let dev_url = tauri_config
-      .build
-      .dev_url
-      .clone();
+    let dev_url = tauri_config.build.dev_url.clone();
 
     if let Some(url) = dev_url {
       let localhost = match url.host() {
@@ -130,14 +131,16 @@ pub fn command(options: Options) -> Result<()> {
     &detect_target_ok,
     &env,
     |target: &Target| {
-      target.build(
-        &config,
-        &metadata,
-        &env,
-        cli_options.noise_level,
-        true,
-        profile,
-      ).context("Failed to build")?;
+      target
+        .build(
+          &config,
+          &metadata,
+          &env,
+          cli_options.noise_level,
+          true,
+          profile,
+        )
+        .context("Failed to build")?;
 
       if !validated_lib {
         validated_lib = true;
@@ -152,7 +155,8 @@ pub fn command(options: Options) -> Result<()> {
 
       Ok(())
     },
-  ).map_err(|e| Error::GenericError(e.to_string()))?
+  )
+  .map_err(|e| Error::GenericError(e.to_string()))?
 }
 
 fn validate_lib(path: &Path) -> Result<()> {
@@ -258,7 +262,8 @@ fn hdc_forward_port(
           format!("failed to forward port with hdc, is the {target_device_name} device connected?",)
         })?;
 
-        let reverse_list_output = hdc_reverse_list(env, &target_device_serial_no).context("hdc list failed")?;
+        let reverse_list_output =
+          hdc_reverse_list(env, &target_device_serial_no).context("hdc list failed")?;
         // wait and retry until the port has actually been forwarded
         if String::from_utf8_lossy(&reverse_list_output.stdout).contains(&forward) {
           break;

@@ -4,7 +4,7 @@
 
 use super::{
   delete_codegen_vars, device_prompt, ensure_init, env, get_app, get_config, inject_resources,
-  open_and_wait, MobileTarget,
+  open_and_wait, plugins, MobileTarget,
 };
 use crate::{
   dev::Options as DevOptions,
@@ -34,8 +34,8 @@ use cargo_mobile2::{
   target::TargetTrait,
 };
 
-use std::{env::set_current_dir, path::PathBuf};
 use crate::helpers::app_paths::Dirs;
+use std::{env::set_current_dir, path::PathBuf};
 
 #[derive(Debug, Clone, Parser)]
 #[clap(
@@ -157,7 +157,7 @@ fn run_command(options: Options, noise_level: NoiseLevel, dirs: Dirs) -> Result<
       .iter()
       .map(|conf| &conf.0)
       .collect::<Vec<_>>(),
-    dirs.tauri
+    dirs.tauri,
   )?;
 
   let env = env()?;
@@ -181,10 +181,14 @@ fn run_command(options: Options, noise_level: NoiseLevel, dirs: Dirs) -> Result<
   dev_options.target = Some(target_triple);
 
   let (interface, config, metadata) = {
-
     let interface = AppInterface::new(&tauri_config, dev_options.target.clone(), dirs.tauri)?;
 
-    let app = get_app(MobileTarget::OpenHarmony, &tauri_config, &interface, dirs.tauri);
+    let app = get_app(
+      MobileTarget::OpenHarmony,
+      &tauri_config,
+      &interface,
+      dirs.tauri,
+    );
     let (config, metadata) = get_config(
       &app,
       &tauri_config,
@@ -202,8 +206,11 @@ fn run_command(options: Options, noise_level: NoiseLevel, dirs: Dirs) -> Result<
     config.app(),
     config.project_dir(),
     MobileTarget::OpenHarmony,
-    false
+    false,
   )?;
+
+  let plugin_metadata = inject_plugins_for_dev(&dirs.tauri, &config.project_dir())?;
+
   run_dev(
     interface,
     options,
@@ -214,7 +221,8 @@ fn run_command(options: Options, noise_level: NoiseLevel, dirs: Dirs) -> Result<
     &config,
     &metadata,
     noise_level,
-    &dirs
+    &dirs,
+    plugin_metadata,
   )
 }
 
@@ -230,6 +238,7 @@ fn run_dev(
   metadata: &OpenHarmonyMetadata,
   noise_level: NoiseLevel,
   dirs: &Dirs,
+  plugin_metadata: Vec<plugins::PluginMeta>,
 ) -> Result<()> {
   // when running on an actual device we must use the network IP
   if options.host.0.is_some()
@@ -238,7 +247,12 @@ fn run_dev(
       .map(|device| !device.model().starts_with("emulator"))
       .unwrap_or(false)
   {
-    use_network_address_for_dev_url(&mut tauri_config, &mut dev_options, options.force_ip_prompt, dirs.tauri)?;
+    use_network_address_for_dev_url(
+      &mut tauri_config,
+      &mut dev_options,
+      options.force_ip_prompt,
+      dirs.tauri,
+    )?;
   }
 
   crate::dev::setup(&interface, &mut dev_options, &mut tauri_config, dirs)?;
@@ -259,18 +273,20 @@ fn run_dev(
     .values()
     .find(|t| t.triple == target_triple)
     .unwrap_or_else(|| Target::all().values().next().unwrap());
-  target.build(
-    config,
-    metadata,
-    &env,
-    noise_level,
-    true,
-    if options.release_mode {
-      Profile::Release
-    } else {
-      Profile::Debug
-    },
-  ).context("failed to build OpenHarmony app")?;
+  target
+    .build(
+      config,
+      metadata,
+      &env,
+      noise_level,
+      true,
+      if options.release_mode {
+        Profile::Release
+      } else {
+        Profile::Debug
+      },
+    )
+    .context("failed to build OpenHarmony app")?;
 
   let open = options.open;
   interface.mobile_dev(
@@ -301,6 +317,16 @@ fn run_dev(
 
       inject_resources(config, tauri_config)?;
 
+      if !plugin_metadata.is_empty() {
+        let project_dir = config.project_dir();
+        for plugin in &plugin_metadata {
+          plugins::copy_plugin_har(plugin, &project_dir)
+            .context(format!("Failed to copy plugin '{}' HAR", plugin.name))?;
+        }
+        plugins::update_plugin_configs(&project_dir, &plugin_metadata)
+          .context("Failed to update plugin configurations")?;
+      }
+
       if open {
         open_and_wait(config, &env)
       } else if let Some(device) = &device {
@@ -315,7 +341,7 @@ fn run_dev(
         open_and_wait(config, &env)
       }
     },
-    dirs
+    dirs,
   )
 }
 
@@ -334,7 +360,56 @@ fn run(
   };
 
   device
-      .run(config, env, noise_level, profile)
-      .map(DevChild::new)
-      .context("failed to run OpenHarmony app")
+    .run(config, env, noise_level, profile)
+    .map(DevChild::new)
+    .context("failed to run OpenHarmony app")
+}
+
+fn inject_plugins_for_dev(
+  tauri_dir: &std::path::Path,
+  project_dir: &std::path::Path,
+) -> crate::Result<Vec<plugins::PluginMeta>> {
+  log::info!("Starting OpenHarmony dynamic plugin injection for dev");
+
+  let detected_plugins =
+    plugins::detect_all_plugins(tauri_dir).context("Plugin detection failed")?;
+
+  if detected_plugins.is_empty() {
+    log::info!("No OpenHarmony-compatible plugins detected, continuing dev");
+    return Ok(vec![]);
+  }
+
+  log::info!(
+    "Detected {} OpenHarmony plugins: {:?}",
+    detected_plugins.len(),
+    detected_plugins.iter().map(|p| &p.name).collect::<Vec<_>>()
+  );
+
+  let metadata: Vec<plugins::PluginMeta> = detected_plugins
+    .iter()
+    .map(|d| plugins::parse_plugin_meta(&d.har_path, &d.name))
+    .collect::<crate::Result<Vec<_>>>()
+    .context("Plugin metadata parsing failed")?;
+
+  for plugin in &metadata {
+    plugins::validate_plugin_meta(plugin)
+      .context(format!("Invalid metadata for plugin '{}'", plugin.name))?;
+  }
+
+  for plugin in &metadata {
+    plugins::copy_plugin_har(plugin, project_dir)
+      .context(format!("Failed to copy plugin '{}' HAR", plugin.name))?;
+  }
+
+  plugins::update_plugin_configs(project_dir, &metadata)
+    .context("Failed to update plugin configurations")?;
+
+  plugins::validate_plugin_configs(project_dir, &metadata)
+    .context("Plugin configuration validation failed")?;
+
+  log::info!(
+    "Dev plugin injection completed with {} plugins",
+    metadata.len()
+  );
+  Ok(metadata)
 }

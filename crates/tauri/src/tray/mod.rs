@@ -137,13 +137,13 @@ impl TrayIconEvent {
 }
 
 // OHOS platform limitations (TrayIconEvent):
-  // - DoubleClick, Enter, Move, Leave events are never dispatched
-  // - All Click events have position (0,0) and rect Rect::default()
-  // - Only MouseButton::Left (icon click) and Right (menu click) are dispatched
-  // - All events have MouseButtonState::Up (no Down state)
-  // - rect() always returns None (StatusBar API has no tray icon position;
-  //   AvoidArea.topRect is the entire status bar area, not the tray icon itself)
-  // - NativeIcon is not supported (same as Windows/Linux)
+// - DoubleClick, Enter, Move, Leave events are never dispatched
+// - All Click events have position (0,0) and rect Rect::default()
+// - Only MouseButton::Left (icon click) and Right (menu click) are dispatched
+// - All events have MouseButtonState::Up (no Down state)
+// - rect() always returns None (StatusBar API has no tray icon position;
+//   AvoidArea.topRect is the entire status bar area, not the tray icon itself)
+// - NativeIcon is not supported (same as Windows/Linux)
 impl From<tray_icon::TrayIconEvent> for TrayIconEvent {
   fn from(value: tray_icon::TrayIconEvent) -> Self {
     match value {
@@ -210,7 +210,7 @@ impl From<tray_icon::TrayIconEvent> for TrayIconEvent {
           button: MouseButton::Left,
           button_state: MouseButtonState::Up,
         }
-      },
+      }
     }
   }
 }
@@ -624,7 +624,8 @@ impl<R: Runtime> TrayIcon<R> {
     }
     #[cfg(not(target_env = "ohos"))]
     {
-      run_item_main_thread!(self, |self_: Self| self_.inner.set_visible(visible))?.map_err(Into::into)
+      run_item_main_thread!(self, |self_: Self| self_.inner.set_visible(visible))?
+        .map_err(Into::into)
     }
   }
 
@@ -669,7 +670,10 @@ impl<R: Runtime> TrayIcon<R> {
   /// the tray icon. Pass `None` to disable the popup (left-click will only fire events).
   ///
   /// On other platforms, this is silently ignored.
-  pub fn set_quick_operation(&self, #[allow(unused)] config: Option<QuickOperationConfig>) -> crate::Result<()> {
+  pub fn set_quick_operation(
+    &self,
+    #[allow(unused)] config: Option<QuickOperationConfig>,
+  ) -> crate::Result<()> {
     #[cfg(target_env = "ohos")]
     {
       self.inner.set_quick_operation(config);
@@ -793,7 +797,13 @@ mod tests {
     };
     let converted: TrayIconEvent = tray_event.into();
     match converted {
-      TrayIconEvent::Click { id, position, button, button_state, .. } => {
+      TrayIconEvent::Click {
+        id,
+        position,
+        button,
+        button_state,
+        ..
+      } => {
         assert_eq!(id.0, "test");
         assert_eq!(position.x, 10.0);
         assert_eq!(button, MouseButton::Left);

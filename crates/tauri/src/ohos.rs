@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
 pub use openharmony_ability;
@@ -6,19 +7,58 @@ pub use tauri_runtime::OHOSWindowKind;
 
 pub static APP: Mutex<Option<openharmony_ability::OpenHarmonyApp>> = Mutex::new(None);
 
-/// Stores the base path for OHOS app, initialized before APP is taken.
 pub static BASE_PATH: OnceLock<Option<String>> = OnceLock::new();
 
-/// Stores the module name for OHOS app, initialized before APP is taken.
 pub static MODULE_NAME: OnceLock<Option<String>> = OnceLock::new();
+
+pub static PLUGIN_MANAGER: Mutex<Option<napi_ohos::bindgen_prelude::ObjectRef>> = Mutex::new(None);
+
+pub struct PluginRegistration {
+  pub name: String,
+  pub identifier: String,
+  pub class_name: String,
+  pub config: serde_json::Value,
+}
+
+pub static PLUGINS_TO_REGISTER: Mutex<Vec<PluginRegistration>> = Mutex::new(Vec::new());
+
+#[derive(Debug, Clone)]
+pub struct RunCommandArgs {
+  pub id: i32,
+  pub plugin_name: String,
+  pub command: String,
+  pub payload: String,
+}
+
+pub type RunCommandTsfn =
+  napi_ohos::threadsafe_function::ThreadsafeFunction<(), (), (), napi_ohos::Status, false>;
+
+pub static RUN_COMMAND_TSFN: OnceLock<Mutex<Option<RunCommandTsfn>>> = OnceLock::new();
+
+pub static RUN_COMMAND_QUEUE: Mutex<VecDeque<RunCommandArgs>> = Mutex::new(VecDeque::new());
+
+pub fn dispatch_run_command(args: RunCommandArgs) {
+  RUN_COMMAND_QUEUE.lock().unwrap().push_back(args);
+
+  let tsfn_guard = RUN_COMMAND_TSFN
+    .get_or_init(|| Mutex::new(None))
+    .lock()
+    .unwrap();
+  if let Some(tsfn) = tsfn_guard.as_ref() {
+    tsfn.call(
+      (),
+      napi_ohos::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
+    );
+  }
+}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+  use super::*;
 
-    #[test]
-    fn base_path_and_module_name_accessors() {
-        let _ = BASE_PATH.get();
-        let _ = MODULE_NAME.get();
-    }
+  #[test]
+  fn base_path_and_module_name_accessors() {
+    let _ = BASE_PATH.get();
+    let _ = MODULE_NAME.get();
+  }
 }

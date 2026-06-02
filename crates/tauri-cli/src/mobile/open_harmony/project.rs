@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
-use crate::{helpers::template, Result};
 use crate::error::Context;
+use crate::{helpers::template, Result};
 use cargo_mobile2::{
   config::app::App,
   open_harmony::{config::Config, target::Target},
@@ -15,6 +15,8 @@ use handlebars::Handlebars;
 use include_dir::{include_dir, Dir};
 
 use std::path::Path;
+
+use super::plugins::PluginMeta;
 
 const TEMPLATE_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates/mobile/open-harmony");
 
@@ -58,4 +60,28 @@ pub fn gen(
     .with_context(|| "failed to process template")?;
 
   Ok(())
+}
+
+pub fn gen_with_plugins(
+  app: &App,
+  config: &Config,
+  (handlebars, mut map): (Handlebars, template::JsonMap),
+  skip_targets_install: bool,
+  plugin_metadata: Vec<PluginMeta>,
+) -> Result<()> {
+  if !plugin_metadata.is_empty() {
+    let plugin_list: Vec<serde_json::Value> = plugin_metadata
+      .iter()
+      .map(|p| {
+        serde_json::json!({
+          "name": p.name,
+          "identifier": p.identifier,
+          "class_name": p.class_name,
+        })
+      })
+      .collect();
+    map.insert("plugins", &plugin_list);
+  }
+
+  gen(app, config, (handlebars, map), skip_targets_install)
 }

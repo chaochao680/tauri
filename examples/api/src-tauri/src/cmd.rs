@@ -3,14 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 use tauri::{
   command,
   ipc::{Channel, CommandScope},
-  Resource, ResourceId,
-  Manager, Runtime, WebviewUrl, Emitter, Listener,
   webview::PageLoadEvent,
+  Emitter, Listener, Manager, Resource, ResourceId, Runtime, WebviewUrl,
 };
 
 // A simple Counter resource that lives in Rust
@@ -33,14 +32,20 @@ pub fn create_counter<R: Runtime>(app: tauri::AppHandle<R>) -> ResourceId {
 }
 
 #[command]
-pub fn increment_counter<R: Runtime>(app: tauri::AppHandle<R>, rid: ResourceId) -> tauri::Result<u32> {
+pub fn increment_counter<R: Runtime>(
+  app: tauri::AppHandle<R>,
+  rid: ResourceId,
+) -> tauri::Result<u32> {
   let counter = app.resources_table().get::<Counter>(rid)?;
   let new_value = counter.value.fetch_add(1, Ordering::SeqCst) + 1;
   Ok(new_value)
 }
 
 #[command]
-pub fn get_counter_value<R: Runtime>(app: tauri::AppHandle<R>, rid: ResourceId) -> tauri::Result<u32> {
+pub fn get_counter_value<R: Runtime>(
+  app: tauri::AppHandle<R>,
+  rid: ResourceId,
+) -> tauri::Result<u32> {
   let counter = app.resources_table().get::<Counter>(rid)?;
   Ok(counter.value.load(Ordering::SeqCst))
 }
@@ -54,7 +59,9 @@ pub struct EventTracker {
 }
 
 #[command]
-pub fn get_tracked_window_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<Vec<String>> {
+pub fn get_tracked_window_events<R: Runtime>(
+  app: tauri::AppHandle<R>,
+) -> tauri::Result<Vec<String>> {
   let tracker = app.state::<EventTracker>();
   let events = tracker.window_events.lock().unwrap().clone();
   Ok(events)
@@ -423,21 +430,30 @@ pub fn create_isolated_window<R: tauri::Runtime>(
   // Append a unique sequence number to ensure window name is always unique
   let seq = WINDOW_SEQ.fetch_add(1, Ordering::SeqCst);
   let unique_window_id = format!("{}_{}", window_id, seq);
-  log::info!("[Rust] create_isolated_window called. window_id={} (unique={}), url={}", window_id, unique_window_id, url);
+  log::info!(
+    "[Rust] create_isolated_window called. window_id={} (unique={}), url={}",
+    window_id,
+    unique_window_id,
+    url
+  );
 
   let mut data_dir = app.path().app_data_dir()?;
   data_dir.push(format!("webview_data_{}_{}", data_suffix, seq));
 
   // Try to parse as external URL (supports http, https, data, etc.)
   let webview_url = match url::Url::parse(&url) {
-      Ok(parsed) => {
-          log::info!("[Rust] Parsed as External URL: {}", parsed);
-          WebviewUrl::External(parsed)
-      }
-      Err(e) => {
-          log::info!("[Rust] Failed to parse as External, using App URL: {}. Error: {}", url, e);
-          WebviewUrl::App(url.into())
-      }
+    Ok(parsed) => {
+      log::info!("[Rust] Parsed as External URL: {}", parsed);
+      WebviewUrl::External(parsed)
+    }
+    Err(e) => {
+      log::info!(
+        "[Rust] Failed to parse as External, using App URL: {}. Error: {}",
+        url,
+        e
+      );
+      WebviewUrl::App(url.into())
+    }
   };
 
   let app_nav = app.clone();
@@ -445,14 +461,14 @@ pub fn create_isolated_window<R: tauri::Runtime>(
   let app_page = app.clone();
 
   let init_script = format!(
-      "document.addEventListener('DOMContentLoaded', () => {{ \
+    "document.addEventListener('DOMContentLoaded', () => {{ \
         let num = {seq}; \
         document.title = num <= 1 ? 'Hello World' : 'Hello World' + num; \
         let h1 = document.querySelector('h1'); \
         if (h1) {{ h1.textContent = num <= 1 ? 'Hello World' : 'Hello World' + num; }} \
       }});"
-    );
-    tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
+  );
+  tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
     .inner_size(800.0, 600.0)
