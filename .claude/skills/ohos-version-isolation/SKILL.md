@@ -328,7 +328,6 @@ async function processImage(data: ArrayBuffer): Promise<ImageResult> {
 
 ## 参考文档
 
-- 完整指南：`openharmony-ability/docs/version-isolation-guide.md`
 - API 源码：`openharmony-ability/crates/ability/src/version.rs`
 - [OpenHarmony 版本说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/app-compatibility-api-compatibility)
 - [SystemCapability 列表](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/syscap)

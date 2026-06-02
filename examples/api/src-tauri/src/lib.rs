@@ -426,6 +426,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::get_tracked_menu_events,
       cmd::get_tracked_run_events,
       cmd::clear_tracked_events,
+      #[cfg(desktop)]
+      tray::simulate_tray_click,
     ])
     .build(tauri::tauri_build_context!())
     .expect("error while building tauri application");
