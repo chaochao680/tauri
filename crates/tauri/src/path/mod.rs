@@ -18,17 +18,17 @@ use crate::error::*;
 
 #[cfg(target_os = "android")]
 mod android;
-#[cfg(target_env = "ohos")]
-mod ohos;
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
 mod desktop;
+#[cfg(target_env = "ohos")]
+mod ohos;
 
 #[cfg(target_os = "android")]
 pub use android::PathResolver;
-#[cfg(target_env = "ohos")]
-pub use ohos::PathResolver;
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
 pub use desktop::PathResolver;
+#[cfg(target_env = "ohos")]
+pub use ohos::PathResolver;
 
 /// A wrapper for [`PathBuf`] that prevents path traversal.
 ///
@@ -155,7 +155,7 @@ pub enum BaseDirectory {
   /// Resolves to [`BaseDirectory::Home`]`/Library/Logs/{bundle_identifier}` on macOS
   /// and [`BaseDirectory::Config`]`/{bundle_identifier}/logs` on linux and Windows.
   AppLog = 17,
-/// The Desktop directory.
+  /// The Desktop directory.
   /// Resolves to [`crate::path::PathResolver::desktop_dir`].
   #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
   Desktop = 18,
@@ -197,7 +197,7 @@ impl BaseDirectory {
       Self::Resource => "$RESOURCE",
       Self::Temp => "$TEMP",
       Self::AppConfig => "$APPCONFIG",
-Self::AppData => "$APPDATA",
+      Self::AppData => "$APPDATA",
       Self::AppLocalData => "$APPLOCALDATA",
       Self::AppCache => "$APPCACHE",
       Self::AppLog => "$APPLOG",
@@ -327,7 +327,7 @@ fn resolve_path<R: Runtime>(
     BaseDirectory::LocalData => resolver.local_data_dir(),
     BaseDirectory::Document => resolver.document_dir(),
     BaseDirectory::Download => resolver.download_dir(),
-BaseDirectory::Picture => resolver.picture_dir(),
+    BaseDirectory::Picture => resolver.picture_dir(),
     BaseDirectory::Public => resolver.public_dir(),
     BaseDirectory::Video => resolver.video_dir(),
     BaseDirectory::Resource => resolver.resource_dir(),

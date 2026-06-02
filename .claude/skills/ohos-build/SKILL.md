@@ -12,12 +12,13 @@ bash D:/workspace/tauri/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" 
 第二个参数为设备类型：`desktop`（PC/桌面，tray/menu 需要）或 `mobile`（手机/平板）。
 
 脚本自动完成全部流程：
-1. 检测 `openharmony-ability/` 源码变更，自动重建 HAR 包并 ohpm install
-2. 前端构建（pnpm + vite，VITE_AUTOTEST=true）
-3. Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
-4. 拷贝 .so → hvigorw assembleHap（自动禁用/恢复 tauriPlugin，使用 build-profile.json5 中的证书签名）
-5. 卸载旧版 → 安装已签名 HAP → 启动
-6. 等待 30s → 拉取 test-report → 分析结果
+1. 检测模板文件变更，自动重建 `gen/ohos/` 项目（`tauri ohos init`）
+2. 检测 `openharmony-ability/` 源码变更，自动重建 HAR 包并 ohpm install
+3. 前端构建（pnpm + vite，VITE_AUTOTEST=true）
+4. Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
+5. 拷贝 .so → hvigorw assembleHap（自动禁用/恢复 tauriPlugin，使用 build-profile.json5 中的证书签名）
+6. 卸载旧版 → 安装已签名 HAP → 启动
+7. 等待 30s → 拉取 test-report → 分析结果
 
 ## 环境要求
 
@@ -44,8 +45,8 @@ echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > D:/workspace/tauri/tauri/.claude/ski
 | 脚本 | 功能 |
 |------|------|
 | `env.sh` | 环境配置：CC/linker/JAVA_HOME/PATH，必须在其他脚本前 source |
-| `run-tests.sh` | 一键全流程（含 HAR 自动重建、tauriPlugin 自动禁用/恢复） |
-| `build-ohos.sh` | 构建全流程（前端 → Rust → .so → hvigorw 签名打包），自动处理 tauriPlugin |
+| `run-tests.sh` | 一键全流程（含模板检测、HAR 自动重建、tauriPlugin 自动禁用/恢复） |
+| `build-ohos.sh` | 构建全流程（模板检测 → 前端 → Rust → .so → hvigorw 签名打包），自动处理 tauriPlugin |
 | `sign-and-install.sh` | 仅安装启动（使用 hvigorw 已签名的 HAP），不构建不签名 |
 
 ## 关键注意事项
@@ -56,6 +57,12 @@ echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > D:/workspace/tauri/tauri/.claude/ski
 4. **签名由 hvigorw 完成** — build-profile.json5 中配置了含 system_basic 权限的证书，hvigorw assembleHap 自动签名。无需手动签名。
 5. **HAR 缓存** — 修改了 openharmony-ability 后必须重建 HAR。`run-tests.sh` Step 0 自动检测并处理。
 6. **tauriPlugin** — hvigorfile.ts 中的 tauriPlugin 需要 TCP 回调 tauri CLI，独立构建时必须禁用。`build-ohos.sh` 和 `run-tests.sh` 自动处理。
+7. **模板变更检测** — 修改了 `crates/tauri-cli/templates/mobile/open-harmony/` 下的模板后，`gen/ohos/` 需要重新生成。`build-ohos.sh` Step 0 自动检测模板 mtime 并运行 `tauri ohos init`。
+8. **tauri-cli 修改后必须重装** — 如果修改了 `crates/tauri-cli/` 下的 Rust 源码（非模板文件），必须重新安装 tauri-cli，否则 `cargo` 使用缓存的旧二进制，改动不生效：
+   ```bash
+   cargo install --path crates/tauri-cli --locked
+   ```
+   仅修改模板文件（`templates/` 下）不需要重装，`build-ohos.sh` 会自动检测模板 mtime 并重建 `gen/ohos/`。
 
 ## 设备日志与故障诊断
 

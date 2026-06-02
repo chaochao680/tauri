@@ -39,6 +39,7 @@ pub struct Builder<'a> {
   global_api_script_path: Option<PathBuf>,
   android_path: Option<PathBuf>,
   ios_path: Option<PathBuf>,
+  ohos_path: Option<PathBuf>,
 }
 
 impl<'a> Builder<'a> {
@@ -49,6 +50,7 @@ impl<'a> Builder<'a> {
       global_api_script_path: None,
       android_path: None,
       ios_path: None,
+      ohos_path: None,
     }
   }
 
@@ -75,6 +77,12 @@ impl<'a> Builder<'a> {
   /// Sets the iOS project path.
   pub fn ios_path<P: Into<PathBuf>>(mut self, ios_path: P) -> Self {
     self.ios_path.replace(ios_path.into());
+    self
+  }
+
+  /// Sets the OpenHarmony project path.
+  pub fn ohos_path<P: Into<PathBuf>>(mut self, ohos_path: P) -> Self {
+    self.ohos_path.replace(ohos_path.into());
     self
   }
 
@@ -147,7 +155,7 @@ impl<'a> Builder<'a> {
       tauri_utils::plugin::define_global_api_script_path(&path);
     }
 
-    mobile::setup(self.android_path, self.ios_path)?;
+    mobile::setup(self.android_path, self.ios_path, self.ohos_path)?;
 
     Ok(())
   }

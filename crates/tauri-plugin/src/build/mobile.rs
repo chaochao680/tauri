@@ -55,6 +55,7 @@ pub fn update_android_manifest(block_identifier: &str, parent: &str, insert: Str
 pub(crate) fn setup(
   android_path: Option<PathBuf>,
   #[allow(unused_variables)] ios_path: Option<PathBuf>,
+  #[allow(unused_variables)] ohos_path: Option<PathBuf>,
 ) -> Result<()> {
   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
   let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
@@ -106,7 +107,28 @@ pub(crate) fn setup(
         );
       }
     }
-    _ => (),
+    _ => {
+      if target_env == "ohos" {
+        if let Some(path) = ohos_path {
+          let manifest_dir = build_var("CARGO_MANIFEST_DIR").map(PathBuf::from)?;
+          let source = manifest_dir.join(path);
+
+          let tauri_library_path = std::env::var("DEP_TAURI_OHOS_LIBRARY_PATH")
+            .expect("missing `DEP_TAURI_OHOS_LIBRARY_PATH` environment variable. Make sure `tauri` is a dependency of the plugin.");
+          println!("cargo:rerun-if-env-changed=DEP_TAURI_OHOS_LIBRARY_PATH");
+
+          create_dir_all(source.join(".tauri")).context("failed to create .tauri directory")?;
+          copy_folder(
+            Path::new(&tauri_library_path),
+            &source.join(".tauri").join("tauri-api"),
+            &[],
+          )
+          .context("failed to copy tauri-api to the plugin project")?;
+
+          println!("cargo:ohos_library_path={}", source.display());
+        }
+      }
+    }
   }
 
   Ok(())

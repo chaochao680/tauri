@@ -36,7 +36,7 @@ type PendingPluginCallHandler = Box<dyn FnOnce(PluginResponse) + Send + 'static>
 #[allow(dead_code)]
 static PENDING_PLUGIN_CALLS_ID: AtomicI32 = AtomicI32::new(0);
 #[allow(dead_code)]
-static PENDING_PLUGIN_CALLS: OnceLock<Mutex<HashMap<i32, PendingPluginCallHandler>>> =
+pub(crate) static PENDING_PLUGIN_CALLS: OnceLock<Mutex<HashMap<i32, PendingPluginCallHandler>>> =
   OnceLock::new();
 static CHANNELS: OnceLock<Mutex<HashMap<u32, Channel<serde_json::Value>>>> = OnceLock::new();
 
@@ -284,6 +284,25 @@ impl<R: Runtime, C: DeserializeOwned> PluginApi<R, C> {
       handle: self.handle.clone(),
     })
   }
+
+  #[cfg(target_env = "ohos")]
+  pub fn register_ohos_plugin(
+    &self,
+    plugin_identifier: &str,
+    class_name: &str,
+  ) -> Result<PluginHandle<R>, PluginInvokeError> {
+    let mut plugins = crate::ohos::PLUGINS_TO_REGISTER.lock().unwrap();
+    plugins.push(crate::ohos::PluginRegistration {
+      name: self.name.to_string(),
+      identifier: plugin_identifier.to_string(),
+      class_name: class_name.to_string(),
+      config: (*self.raw_config).clone(),
+    });
+    Ok(PluginHandle {
+      name: self.name,
+      handle: self.handle.clone(),
+    })
+  }
 }
 
 impl<R: Runtime> PluginHandle<R> {
@@ -350,15 +369,50 @@ impl<R: Runtime> PluginHandle<R> {
 
 #[cfg(target_env = "ohos")]
 pub(crate) fn run_command<R: Runtime, C: AsRef<str>, F: FnOnce(PluginResponse) + Send + 'static>(
-  _name: &str,
+  name: &str,
   _handle: &AppHandle<R>,
-  _command: C,
-  _payload: serde_json::Value,
-  _handler: F,
+  command: C,
+  payload: serde_json::Value,
+  handler: F,
 ) -> Result<(), PluginInvokeError> {
-  // TODO
+  let id: i32 = PENDING_PLUGIN_CALLS_ID.fetch_add(1, Ordering::Relaxed);
+  PENDING_PLUGIN_CALLS
+    .get_or_init(Default::default)
+    .lock()
+    .unwrap()
+    .insert(id, Box::new(handler));
+
+  let args = crate::ohos::RunCommandArgs {
+    id,
+    plugin_name: name.to_string(),
+    command: command.as_ref().to_string(),
+    payload: serde_json::to_string(&payload).map_err(PluginInvokeError::CannotSerializePayload)?,
+  };
+
+  crate::ohos::dispatch_run_command(args);
+
   Ok(())
 }
+
+#[cfg(target_env = "ohos")]
+macro_rules! register_ohos_plugin {
+  ($api:ident, $name:literal, $identifier:literal, $class_name:literal) => {{
+    let mut plugins = crate::ohos::PLUGINS_TO_REGISTER.lock().unwrap();
+    plugins.push(crate::ohos::PluginRegistration {
+      name: $name.to_string(),
+      identifier: $identifier.to_string(),
+      class_name: $class_name.to_string(),
+      config: (*$api.raw_config).clone(),
+    });
+    Ok(PluginHandle {
+      name: $api.name,
+      handle: $api.handle.clone(),
+    })
+  }};
+}
+
+#[cfg(target_env = "ohos")]
+pub(crate) use register_ohos_plugin;
 
 #[cfg(target_os = "ios")]
 pub(crate) fn run_command<R: Runtime, C: AsRef<str>, F: FnOnce(PluginResponse) + Send + 'static>(

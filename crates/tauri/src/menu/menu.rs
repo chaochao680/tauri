@@ -58,7 +58,10 @@ impl<R: Runtime> ContextMenuBase for Menu<R> {
         None => (None, None),
       };
       let window_id = window.label();
-      (*self.0).as_ref().popup(x, y, window_id).map_err(Into::into)
+      (*self.0)
+        .as_ref()
+        .popup(x, y, window_id)
+        .map_err(Into::into)
     }
     #[cfg(not(target_env = "ohos"))]
     {
@@ -412,7 +415,9 @@ impl<R: Runtime> Menu<R> {
     let kind = item.kind();
     #[cfg(target_env = "ohos")]
     {
-      (*self.0).as_ref().insert(kind.inner().inner_muda(), position)?;
+      (*self.0)
+        .as_ref()
+        .insert(kind.inner().inner_muda(), position)?;
       super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
     }
@@ -437,7 +442,9 @@ impl<R: Runtime> Menu<R> {
     {
       for (i, item) in items.iter().enumerate() {
         let kind = item.kind();
-        (*self.0).as_ref().insert(kind.inner().inner_muda(), position + i)?;
+        (*self.0)
+          .as_ref()
+          .insert(kind.inner().inner_muda(), position + i)?;
       }
       super::auto_refresh_menubar(&self.0.app_handle);
       Ok(())
@@ -553,8 +560,11 @@ impl<R: Runtime> Menu<R> {
   ///
   /// - **OHOS desktop**: Sends the updated menu JSON to ArkTS for re-rendering.
   /// - **Other platforms**: No-op (menu bar updates automatically).
-#[cfg(all(target_env = "ohos", desktop))]
+  #[cfg(all(target_env = "ohos", desktop))]
   pub fn refresh_menubar(&self, window_id: &str) -> crate::Result<()> {
-    (*self.0).as_ref().refresh_menubar(window_id).map_err(Into::into)
+    (*self.0)
+      .as_ref()
+      .refresh_menubar(window_id)
+      .map_err(Into::into)
   }
 }

@@ -20,6 +20,35 @@ echo "PROJECT_ROOT=$PROJECT_ROOT"
 echo "TAURI_OHOS_DEVICE_TYPE=$TAURI_OHOS_DEVICE_TYPE"
 echo ""
 
+# ─── Step 0: Detect template changes and re-run `tauri ohos init` ───
+TEMPLATE_DIR="$PROJECT_ROOT/crates/tauri-cli/templates/mobile/open-harmony"
+ENTRY_ETS="$OHOS_PROJECT/entry/src/main/ets/entryability/EntryAbility.ets"
+NEED_INIT=false
+
+if [ ! -f "$ENTRY_ETS" ]; then
+    NEED_INIT=true
+    echo ">>> Step 0: gen/ohos project not found, will run tauri ohos init."
+elif [ -d "$TEMPLATE_DIR" ]; then
+    # Check if any template file is newer than the generated EntryAbility.ets
+    ETS_MTIME=$(stat -c %Y "$ENTRY_ETS" 2>/dev/null || stat -f %m "$ENTRY_ETS" 2>/dev/null || echo 0)
+    NEWER_TEMPLATE=$(find "$TEMPLATE_DIR" -newer "$ENTRY_ETS" -type f 2>/dev/null | head -1)
+    if [ -n "$NEWER_TEMPLATE" ]; then
+        NEED_INIT=true
+        echo ">>> Step 0: Template files changed (e.g. $NEWER_TEMPLATE), will re-run tauri ohos init."
+    fi
+fi
+
+if [ "$NEED_INIT" = true ]; then
+    echo "    Running tauri ohos init to regenerate gen/ohos project..."
+    (cd "$SRC_TAURI" && cargo run --manifest-path "$PROJECT_ROOT/crates/tauri-cli/Cargo.toml" -- ohos init --skip-targets-install --ci 2>&1) || {
+        echo "ERROR: tauri ohos init failed"
+        exit 1
+    }
+    echo "    gen/ohos project regenerated."
+else
+    echo ">>> Step 0: gen/ohos project is up-to-date with templates, skipping init."
+fi
+
 # ─── Step 1: 安装前端依赖 ───
 if [ ! -d "$API_DIR/node_modules" ]; then
     echo ""
