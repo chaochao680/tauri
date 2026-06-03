@@ -90,13 +90,13 @@
 
 ## 13. Verification Testing
 
-- [ ] 13.1 Test dialog `open` command → File picker opens, selected file path returned to Rust
-- [ ] 13.2 Test dialog `save` command → Save picker opens, selected path returned to Rust
-- [ ] 13.3 Test dialog `message` command → Message dialog displays with OK button
-- [ ] 13.4 Test dialog `ask` command → Confirmation dialog displays with Yes/No buttons, boolean returned
-- [ ] 13.5 Test dialog `confirm` command → Confirmation dialog displays with OK/Cancel buttons, boolean returned
-- [ ] 13.6 Verify plugin auto-detection in CLI build logs
-- [ ] 13.7 Verify HAR file bundled in HAP package
+- [x] 13.1 Test dialog `open` command → File picker opens, selected file path returned to Rust
+- [x] 13.2 Test dialog `save` command → Save picker opens, selected path returned to Rust
+- [x] 13.3 Test dialog `message` command → Message dialog displays with OK button
+- [x] 13.4 Test dialog `ask` command → Confirmation dialog displays with Yes/No buttons, boolean returned
+- [x] 13.5 Test dialog `confirm` command → Confirmation dialog displays with OK/Cancel buttons, boolean returned
+- [x] 13.6 Verify plugin auto-detection in CLI build logs
+- [x] 13.7 Verify HAR file bundled in HAP package
 
 ## 14. Documentation
 

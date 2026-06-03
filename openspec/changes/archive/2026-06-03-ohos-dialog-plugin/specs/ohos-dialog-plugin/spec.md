@@ -188,7 +188,7 @@ The system SHALL display a confirmation dialog via the `confirm` command. The di
 - **WHEN** the user clicks "Cancel"
 - **THEN** the system returns `false`
 
-## MODIFIED Requirements
+## ADDED Requirements (continued)
 
 ### Requirement: Plugin API availability
 The system SHALL provide `PluginApi::register_ohos_plugin` method for OHOS plugin registration. This method is only available on OHOS (`#[cfg(target_env = "ohos")]`).
