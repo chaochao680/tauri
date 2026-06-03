@@ -33,18 +33,17 @@ pub struct RunCommandArgs {
 pub type RunCommandTsfn =
   napi_ohos::threadsafe_function::ThreadsafeFunction<(), (), (), napi_ohos::Status, false>;
 
-pub static RUN_COMMAND_TSFN: OnceLock<Mutex<Option<RunCommandTsfn>>> = OnceLock::new();
+pub static RUN_COMMAND_TSFN: OnceLock<RunCommandTsfn> = OnceLock::new();
 
 pub static RUN_COMMAND_QUEUE: Mutex<VecDeque<RunCommandArgs>> = Mutex::new(VecDeque::new());
 
 pub fn dispatch_run_command(args: RunCommandArgs) {
-  RUN_COMMAND_QUEUE.lock().unwrap().push_back(args);
-
-  let tsfn_guard = RUN_COMMAND_TSFN
-    .get_or_init(|| Mutex::new(None))
+  RUN_COMMAND_QUEUE
     .lock()
-    .unwrap();
-  if let Some(tsfn) = tsfn_guard.as_ref() {
+    .unwrap_or_else(|e| e.into_inner())
+    .push_back(args);
+
+  if let Some(tsfn) = RUN_COMMAND_TSFN.get() {
     tsfn.call(
       (),
       napi_ohos::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,

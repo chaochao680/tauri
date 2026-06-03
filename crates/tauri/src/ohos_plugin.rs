@@ -6,7 +6,10 @@ use napi_ohos::Env;
 
 #[napi]
 pub fn tauri_set_plugin_manager(_env: &Env, manager: ObjectRef) -> napi_ohos::Result<()> {
-  PLUGIN_MANAGER.lock().unwrap().replace(manager);
+  PLUGIN_MANAGER
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .replace(manager);
   println!("[Tauri] PluginManager set from ArkTS");
   Ok(())
 }
@@ -16,7 +19,9 @@ fn create_run_command_tsfn(env: &Env) -> napi_ohos::Result<()> {
     env.create_function_from_closure("run_command_callback", move |_ctx| {
       let env_rc = crate::ohos::openharmony_ability::get_main_thread_env();
       if let Some(env_ref) = env_rc.borrow().as_ref() {
-        let manager_guard = PLUGIN_MANAGER.lock().unwrap();
+        let manager_guard = PLUGIN_MANAGER
+          .lock()
+          .map_err(|e| napi_ohos::Error::from_reason(format!("PLUGIN_MANAGER lock poisoned: {e}")))?;
         if let Some(manager_ref) = manager_guard.as_ref() {
           let manager_obj = manager_ref.get_value(env_ref)?;
           let run_command_fn = manager_obj.get_named_property::<Function<
@@ -25,7 +30,9 @@ fn create_run_command_tsfn(env: &Env) -> napi_ohos::Result<()> {
             (),
           >>("runCommand")?;
 
-          let mut queue = RUN_COMMAND_QUEUE.lock().unwrap();
+          let mut queue = RUN_COMMAND_QUEUE
+            .lock()
+            .map_err(|e| napi_ohos::Error::from_reason(format!("RUN_COMMAND_QUEUE lock poisoned: {e}")))?;
           while let Some(args) = queue.pop_front() {
             run_command_fn.call((args.id, args.plugin_name, args.command, args.payload).into())?;
           }
@@ -39,11 +46,7 @@ fn create_run_command_tsfn(env: &Env) -> napi_ohos::Result<()> {
     .callee_handled::<false>()
     .build()?;
 
-  RUN_COMMAND_TSFN
-    .get_or_init(|| std::sync::Mutex::new(None))
-    .lock()
-    .unwrap()
-    .replace(tsfn);
+  RUN_COMMAND_TSFN.set(tsfn).ok();
 
   println!("[Tauri] run_command TSFN created");
   Ok(())
@@ -51,7 +54,9 @@ fn create_run_command_tsfn(env: &Env) -> napi_ohos::Result<()> {
 
 #[napi]
 pub fn tauri_init_plugins(env: &Env, manager: ObjectRef) -> napi_ohos::Result<String> {
-  let plugins = PLUGINS_TO_REGISTER.lock().unwrap();
+  let plugins = PLUGINS_TO_REGISTER
+    .lock()
+    .unwrap_or_else(|e| e.into_inner());
   let count = plugins.len();
 
   println!(
@@ -59,7 +64,10 @@ pub fn tauri_init_plugins(env: &Env, manager: ObjectRef) -> napi_ohos::Result<St
     count
   );
 
-  PLUGIN_MANAGER.lock().unwrap().replace(manager);
+  PLUGIN_MANAGER
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .replace(manager);
 
   create_run_command_tsfn(env)?;
 
@@ -76,7 +84,10 @@ pub fn tauri_init_plugins(env: &Env, manager: ObjectRef) -> napi_ohos::Result<St
       })
       .collect::<Vec<_>>(),
   )
-  .unwrap();
+  .unwrap_or_else(|e| {
+    log::error!("[Tauri] Failed to serialize plugins: {e}");
+    "[]".to_string()
+  });
 
   println!("[Tauri] Plugins JSON: {}", plugins_json);
 
@@ -88,7 +99,7 @@ pub fn tauri_handle_plugin_response(id: i32, success: bool, payload: String) {
   let handler = PENDING_PLUGIN_CALLS
     .get_or_init(Default::default)
     .lock()
-    .unwrap()
+    .unwrap_or_else(|e| e.into_inner())
     .remove(&id);
 
   if let Some(handler) = handler {
