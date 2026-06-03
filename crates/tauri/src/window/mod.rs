@@ -6,12 +6,12 @@
 
 pub(crate) mod plugin;
 
+#[cfg(target_env = "ohos")]
+use tauri_runtime::OHOSWindowKind;
 use tauri_runtime::{
   dpi::{PhysicalPosition, PhysicalRect, PhysicalSize},
   webview::PendingWebview,
 };
-#[cfg(target_env = "ohos")]
-use tauri_runtime::OHOSWindowKind;
 pub use tauri_utils::{config::Color, WindowEffect as Effect, WindowEffectState as EffectState};
 
 #[cfg(desktop)]
@@ -465,7 +465,12 @@ tauri::Builder::default()
 
     #[cfg(all(target_env = "ohos", desktop))]
     if let Some(window_menu) = &*window.menu_lock() {
-      window_menu.menu.inner().refresh_menubar(window.label()).ok();
+      window_menu
+        .menu
+        .inner()
+        .refresh_menubar(window.label())
+        .ok();
+      openharmony_ability::menu::set_menubar_visible(true, window.label().to_string()).ok();
     }
 
     Ok(window)
@@ -1166,7 +1171,10 @@ impl<R: Runtime> Window<R> {
   }
 
   /// Adds a new webview as a child of this window.
-  #[cfg(all(any(test, all(desktop, feature = "unstable")), not(target_env = "ohos")))]
+  #[cfg(all(
+    any(test, all(desktop, feature = "unstable")),
+    not(target_env = "ohos")
+  ))]
   #[cfg_attr(docsrs, doc(cfg(all(desktop, feature = "unstable"))))]
   pub fn add_child<P: Into<Position>, S: Into<Size>>(
     &self,

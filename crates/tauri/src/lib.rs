@@ -53,7 +53,10 @@
   html_favicon_url = "https://github.com/tauri-apps/tauri/raw/dev/.github/icon.png"
 )]
 #![warn(missing_docs, rust_2018_idioms)]
-#![cfg_attr(target_env = "ohos", allow(unused_imports, unused_macros, unused_variables, dead_code))]
+#![cfg_attr(
+  target_env = "ohos",
+  allow(unused_imports, unused_macros, unused_variables, dead_code)
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Setups the binding that initializes an iOS plugin.
@@ -92,6 +95,9 @@ mod manager;
 #[doc(hidden)]
 #[cfg(target_env = "ohos")]
 pub mod ohos;
+#[doc(hidden)]
+#[cfg(target_env = "ohos")]
+pub mod ohos_plugin;
 mod pattern;
 pub mod plugin;
 pub(crate) mod protocol;
@@ -199,7 +205,7 @@ use std::{
 };
 use utils::assets::{AssetKey, CspHash, EmbeddedAssets};
 
-#[cfg(feature = "wry")]
+#[cfg(all(feature = "wry", not(target_env = "ohos")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "wry")))]
 pub use tauri_runtime_wry::webview_version;
 

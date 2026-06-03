@@ -43,20 +43,20 @@ use tauri_utils::{assets::AssetsIter, PackageInfo};
 /// can call `do_restart(env)` without caring about the platform.
 #[cfg(target_env = "ohos")]
 fn do_restart(_env: &crate::Env) -> ! {
-    if let Ok(app) = crate::ohos::APP.lock() {
-        if let Some(app_ref) = app.as_ref() {
-            if let Err(e) = app_ref.restart() {
-                log::error!("OHOS restart failed: {e}");
-            }
-        }
+  if let Ok(app) = crate::ohos::APP.lock() {
+    if let Some(app_ref) = app.as_ref() {
+      if let Err(e) = app_ref.restart() {
+        log::error!("OHOS restart failed: {e}");
+      }
     }
-    std::process::exit(0);
+  }
+  std::process::exit(0);
 }
 
 /// Platform-specific restart implementation.
 #[cfg(not(target_env = "ohos"))]
 fn do_restart(env: &crate::Env) -> ! {
-    crate::process::restart(env);
+  crate::process::restart(env);
 }
 
 use std::{
@@ -746,6 +746,25 @@ impl<R: Runtime> fmt::Debug for App<R> {
       .field("manager", &self.manager)
       .field("handle", &self.handle)
       .finish()
+  }
+}
+
+#[cfg(target_env = "ohos")]
+impl<R: Runtime> App<R> {
+  pub fn ohos_plugin_register(
+    &self,
+    name: &str,
+    identifier: &str,
+    class_name: &str,
+    config: serde_json::Value,
+  ) {
+    let mut plugins = crate::ohos::PLUGINS_TO_REGISTER.lock().unwrap();
+    plugins.push(crate::ohos::PluginRegistration {
+      name: name.to_string(),
+      identifier: identifier.to_string(),
+      class_name: class_name.to_string(),
+      config,
+    });
   }
 }
 

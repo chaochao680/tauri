@@ -24,12 +24,12 @@ mod ohos_log {
 use serde::Serialize;
 #[cfg(not(target_env = "ohos"))]
 use tauri::ipc::Channel;
+#[allow(unused)]
+use tauri::RunEvent;
 use tauri::{
   webview::{PageLoadEvent, WebviewWindowBuilder},
   App, Emitter, EventTarget, Listener, Manager, Runtime, WebviewUrl,
 };
-#[allow(unused)]
-use tauri::RunEvent;
 #[cfg(not(target_env = "ohos"))]
 use tauri_plugin_sample::{PingRequest, SampleExt};
 
@@ -74,30 +74,30 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   #[cfg(target_env = "ohos")]
   let builder = builder
-     /*.plugin(
+    .plugin(
       tauri_plugin_log::Builder::default()
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Trace)
         .clear_targets()
         .target(tauri_plugin_log::Target::new(
           tauri_plugin_log::TargetKind::Stdout,
         ))
+        .skip_logger()
         .build(),
-    )*/
+    )
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_http::init())
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_updater::Builder::new().build());
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_clipboard_manager::init());
 
   #[cfg(target_env = "ohos")]
   {
-    // 当前pulgin_log尚未对接hilog，因此需要调用 ohos_log::init()
     ohos_log::init();
-    
-    log::info!("OHOS log initialized via tauri_plugin_log");
+    log::info!("OHOS log initialized via hilog + tauri_plugin_log(skip_logger)");
   };
-
 
   #[allow(unused_mut)]
   let mut builder = builder
