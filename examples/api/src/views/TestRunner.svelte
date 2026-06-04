@@ -11,7 +11,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
-  import { appCacheDir } from '@tauri-apps/api/path';
+  import { appCacheDir, join } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
 
   let { onMessage } = $props();
@@ -572,6 +572,89 @@ Expected behavior:
     });
   }
 
+  // ─── Clipboard writeImage Manual Tests ───
+  // Valid 1×1 red pixel PNG (same bytes as automated test)
+  const CLIPBOARD_TEST_PNG = new Uint8Array([
+    137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+    0,0,0,1,0,0,0,1,8,2,0,0,0,144,119,83,
+    222,0,0,0,12,73,68,65,84,120,156,99,248,207,192,0,
+    0,3,1,1,0,201,254,146,239,0,0,0,0,73,69,78,
+    68,174,66,96,130
+  ]);
+
+  async function manualClipboardWriteImageRgba() {
+    await wrapManual('clipboardWriteImageRgba', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const rgba = new Uint8Array([255, 0, 0, 255]); // 1×1 red pixel
+      await writeImage({ rgba, width: 1, height: 1 });
+      manualResult = 'writeImage({ rgba: [255,0,0,255], width:1, height:1 }) OK.\nSwitch to another app → paste → should see a tiny red image.\nIf image appears → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImageDataUri() {
+    await wrapManual('clipboardWriteImageDataUri', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+      await writeImage(dataUri);
+      manualResult = `writeImage(dataUri) OK (data URI, ${dataUri.length} chars).\nSwitch to another app → paste → should see a 1×1 image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImageRid() {
+    await wrapManual('clipboardWriteImageRid', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const { Image } = await import('@tauri-apps/api/image');
+      const rgba = new Uint8Array([255, 0, 0, 255]);
+      const img = await Image.new(rgba, 1, 1);
+      await writeImage(img);
+      manualResult = `writeImage(Image rid=${img.rid}) OK.\nSwitch to another app → paste → should see a 1×1 red image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImageBytes() {
+    await wrapManual('clipboardWriteImageBytes', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      await writeImage(CLIPBOARD_TEST_PNG);
+      manualResult = `writeImage(Uint8Array) OK (${CLIPBOARD_TEST_PNG.length} bytes PNG).\nSwitch to another app → paste → should see a 1×1 red image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImagePath() {
+    await wrapManual('clipboardWriteImagePath', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const dir = await appCacheDir();
+      const filePath = await join(dir, `manual-clipboard-${Date.now()}.png`);
+      await writeFile(filePath, CLIPBOARD_TEST_PNG);
+      await writeImage(filePath);
+      manualResult = `writeImage(filePath) OK.\nPath: ${filePath}\nSwitch to another app → paste → should see a 1×1 red image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImageNumberArray() {
+    await wrapManual('clipboardWriteImageNumberArray', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      const arr = Array.from(CLIPBOARD_TEST_PNG);
+      await writeImage(arr);
+      manualResult = `writeImage(number[]) OK (${arr.length} elements).\nSwitch to another app → paste → should see a 1×1 red image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualClipboardWriteImageArrayBuffer() {
+    await wrapManual('clipboardWriteImageArrayBuffer', async () => {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      await writeImage(CLIPBOARD_TEST_PNG.buffer.slice(0));
+      manualResult = `writeImage(ArrayBuffer) OK (${CLIPBOARD_TEST_PNG.buffer.byteLength} bytes).\nSwitch to another app → paste → should see a 1×1 red image.\nIf image appears → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Tray Manual Tests ───
   async function manualTrayIconShow() {
     await wrapManual('trayIconShow', async () => {
@@ -860,6 +943,18 @@ Expected behavior:
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualRelaunch}>relaunch() (app will restart)</button>
         <button class="btn" onclick={manualDownloadAndInstall}>downloadAndInstall() (system dialog)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Clipboard writeImage Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualClipboardWriteImageRgba}>writeImage(rgba)</button>
+        <button class="btn" onclick={manualClipboardWriteImageDataUri}>writeImage(data-uri)</button>
+        <button class="btn" onclick={manualClipboardWriteImageRid}>writeImage(Image rid)</button>
+        <button class="btn" onclick={manualClipboardWriteImageBytes}>writeImage(Uint8Array)</button>
+        <button class="btn" onclick={manualClipboardWriteImagePath}>writeImage(filePath)</button>
+        <button class="btn" onclick={manualClipboardWriteImageNumberArray}>writeImage(number[])</button>
+        <button class="btn" onclick={manualClipboardWriteImageArrayBuffer}>writeImage(ArrayBuffer)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
