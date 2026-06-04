@@ -1,3 +1,8 @@
+---
+name: ohos-build
+description: 编译 Tauri OpenHarmony 项目（examples/api），生成 HAP 包并签名安装到设备。使用场景：(1) 一键构建部署，(2) HAR 包重建与安装，(3) 模板修改后重新生成，(4) 设备日志与故障诊断。
+---
+
 # ohos-build
 
 编译 Tauri OpenHarmony 项目（examples/api），生成 HAP 包并签名安装到设备。
