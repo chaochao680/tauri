@@ -16,7 +16,7 @@
 - [ ] A1: OHOS 特有代码使用 `cfg(target_env = "ohos")` 或组合 gate
 - [ ] A2: Linux 依赖加了 `not(target_env = "ohos")` 排除（OHOS `target_os` 是 `"linux"`）
 - [ ] A3: desktop/mobile 区分使用 `cfg(all(target_env = "ohos", desktop))` / `cfg(all(target_env = "ohos", mobile))`
-- [ ] A4: `TAURI_OHOS_DEVICE_TYPE` 正确使用（`desktop` 含 tray/menu bar，`mobile` 默认）
+- [ ] A4: `OHOS_DEVICE_TYPE` 正确使用（`desktop` 含 tray/menu bar，`mobile` 默认）
 
 ## B — 平台隔离
 

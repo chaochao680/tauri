@@ -73,10 +73,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 export PROJECT_ROOT
 
 # ─── 设备类型配置 ───
-# TAURI_OHOS_DEVICE_TYPE: mobile 或 desktop
+# OHOS_DEVICE_TYPE: mobile 或 desktop
 # - mobile: 编译为移动端模式（默认）
 # - desktop: 编译为桌面端模式，启用 desktop cfg 功能
-export TAURI_OHOS_DEVICE_TYPE="${TAURI_OHOS_DEVICE_TYPE:-mobile}"
+export OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-mobile}"
 
 # ─── OHOS NDK & SDK (ohrs/hvigorw 需要) ───
 # ohrs expects OHOS_NDK_HOME pointing to the SDK root (not /native subdirectory)

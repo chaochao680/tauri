@@ -12,7 +12,7 @@
 | 规则 | 说明 |
 |------|------|
 | `cfg(target_env = "ohos")` 是所有设备形态通用 | 不要滥用。OHOS 上的 desktop/mobile 差异用 `cfg(all(target_env = "ohos", desktop))` / `cfg(all(target_env = "ohos", mobile))` |
-| `cfg(desktop)` 由 `TAURI_OHOS_DEVICE_TYPE=desktop` 控制 | 包含 tray/menu bar。`cfg(mobile)` 不含 tray/menu |
+| `cfg(desktop)` 由 `OHOS_DEVICE_TYPE=desktop` 控制 | 包含 tray/menu bar。`cfg(mobile)` 不含 tray/menu |
 | 功能在 desktop+mobile 都可用时用 `ohos` cfg | 仅 desktop, 用 `ohos+desktop` |
 
 ### 1.2 线程模型：Chrome_IOThread 是 event loop
@@ -175,7 +175,7 @@
 | 规则 | 说明 |
 |------|------|
 | OHOS 的 `target_os` 是 `"linux"` | 所有 Linux 依赖必须加 `not(target_env = "ohos")` 排除 |
-| OHOS 不自动是 `mobile` | `desktop`/`mobile` 由 `TAURI_OHOS_DEVICE_TYPE` 环境变量编译时决定 |
+| OHOS 不自动是 `mobile` | `desktop`/`mobile` 由 `OHOS_DEVICE_TYPE` 环境变量编译时决定 |
 | tauri crate 测试在 OHOS 上排除 | 因为 `mock_runtime` 依赖 tao EventLoop（desktop-only） |
 | OHOS 特有测试只在 openharmony-ability 内 | 使用 `cfg(all(test, target_env = "ohos"))` |
 

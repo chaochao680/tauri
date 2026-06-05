@@ -107,7 +107,7 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
   let dirs = crate::helpers::app_paths::resolve_dirs();
 
   // Set device type environment variable
-  set_var("TAURI_OHOS_DEVICE_TYPE", &options.device_type);
+  set_var("OHOS_DEVICE_TYPE", &options.device_type);
 
   delete_codegen_vars();
 
@@ -140,7 +140,7 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
     let app = get_app(MobileTarget::OpenHarmony, &tauri_config, &interface, dirs.tauri);
 
     let mut vars = HashMap::new();
-    vars.insert("TAURI_OHOS_DEVICE_TYPE".into(), OsString::from(&options.device_type));
+    vars.insert("OHOS_DEVICE_TYPE".into(), OsString::from(&options.device_type));
     let cli_options = CliOptions {
       vars,
       ..Default::default()
@@ -230,7 +230,7 @@ fn run_build(
 
   let mut vars = HashMap::new();
   vars.insert(
-    "TAURI_OHOS_DEVICE_TYPE".into(),
+    "OHOS_DEVICE_TYPE".into(),
     OsString::from(&options.device_type),
   );
 

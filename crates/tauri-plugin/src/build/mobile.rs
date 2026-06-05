@@ -59,7 +59,14 @@ pub(crate) fn setup(
 ) -> Result<()> {
   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
   let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+  let mobile = if target_env == "ohos" {
+    println!("cargo:rerun-if-env-changed=OHOS_DEVICE_TYPE");
+    let device_type =
+      std::env::var("OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
+    device_type != "desktop"
+  } else {
+    target_os == "ios" || target_os == "android"
+  };
   cfg_alias("desktop", !mobile);
   cfg_alias("mobile", mobile);
 

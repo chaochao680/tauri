@@ -8,7 +8,7 @@
 
 2. **不影响其他平台原有实现** — 所有修改不得影响 Windows/macOS/Linux 的现有功能和代码路径。OHOS 代码必须通过 `cfg(target_env = "ohos")` 隔离。
 
-3. **TAURI_OHOS_DEVICE_TYPE 决定设备形态** — desktop/mobile 由环境变量编译时决定。通用代码用 `cfg(target_env = "ohos")`，形态特有代码用 `cfg(all(target_env = "ohos", desktop))` 或 `cfg(all(target_env = "ohos", mobile))`。
+3. **OHOS_DEVICE_TYPE 决定设备形态** — desktop/mobile 由环境变量编译时决定。通用代码用 `cfg(target_env = "ohos")`，形态特有代码用 `cfg(all(target_env = "ohos", desktop))` 或 `cfg(all(target_env = "ohos", mobile))`。
 
 ## cfg 隔离关键规则
 

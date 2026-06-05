@@ -2349,10 +2349,10 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Enables the append-test-result command without any pre-configured scope.",
+          "description": "Allows appending a test result to the report file incrementally.",
           "type": "string",
           "const": "allow-append-test-result",
-          "markdownDescription": "Enables the append-test-result command without any pre-configured scope."
+          "markdownDescription": "Allows appending a test result to the report file incrementally."
         },
         {
           "description": "Enables the clear_console_log command without any pre-configured scope.",
@@ -2407,6 +2407,12 @@
           "type": "string",
           "const": "allow-create-window-with-custom-ua",
           "markdownDescription": "Enables the create_window_with_custom_ua command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the dummy_command command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dummy-command",
+          "markdownDescription": "Enables the dummy_command command without any pre-configured scope."
         },
         {
           "description": "Enables the echo command without any pre-configured scope.",
@@ -2473,6 +2479,12 @@
           "type": "string",
           "const": "allow-setup-app-listener",
           "markdownDescription": "Enables the setup_app_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the simulate_tray_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-simulate-tray-click",
+          "markdownDescription": "Enables the simulate_tray_click command without any pre-configured scope."
         },
         {
           "description": "Enables the spam command without any pre-configured scope.",
@@ -2583,6 +2595,12 @@
           "markdownDescription": "Denies the create_window_with_custom_ua command without any pre-configured scope."
         },
         {
+          "description": "Denies the dummy_command command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dummy-command",
+          "markdownDescription": "Denies the dummy_command command without any pre-configured scope."
+        },
+        {
           "description": "Denies the echo command without any pre-configured scope.",
           "type": "string",
           "const": "deny-echo",
@@ -2649,6 +2667,12 @@
           "markdownDescription": "Denies the setup_app_listener command without any pre-configured scope."
         },
         {
+          "description": "Denies the simulate_tray_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-simulate-tray-click",
+          "markdownDescription": "Denies the simulate_tray_click command without any pre-configured scope."
+        },
+        {
           "description": "Denies the spam command without any pre-configured scope.",
           "type": "string",
           "const": "deny-spam",
@@ -2697,10 +2721,10 @@
           "markdownDescription": "Denies the write_test_report command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`\n- `allow-simulate-menu-click`",
           "type": "string",
           "const": "app-menu:default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-toggle`\n- `allow-popup`\n- `allow-hide-menu`\n- `allow-show-menu`\n- `allow-is-menu-visible`\n- `allow-simulate-menu-click`"
         },
         {
           "description": "Enables the hide_menu command without any pre-configured scope.",
@@ -2725,6 +2749,12 @@
           "type": "string",
           "const": "app-menu:allow-show-menu",
           "markdownDescription": "Enables the show_menu command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the simulate_menu_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:allow-simulate-menu-click",
+          "markdownDescription": "Enables the simulate_menu_click command without any pre-configured scope."
         },
         {
           "description": "Enables the toggle command without any pre-configured scope.",
@@ -2755,6 +2785,12 @@
           "type": "string",
           "const": "app-menu:deny-show-menu",
           "markdownDescription": "Denies the show_menu command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the simulate_menu_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "app-menu:deny-simulate-menu-click",
+          "markdownDescription": "Denies the simulate_menu_click command without any pre-configured scope."
         },
         {
           "description": "Denies the toggle command without any pre-configured scope.",

@@ -108,6 +108,9 @@ pub struct Options {
   /// Path to the certificate file used by your dev server. Required for mobile dev when using HTTPS.
   #[clap(long, env = "TAURI_DEV_ROOT_CERTIFICATE_PATH")]
   pub root_certificate_path: Option<PathBuf>,
+  /// Device type to build for (mobile or desktop)
+  #[clap(long, default_value = "mobile", value_parser(["mobile", "desktop"]))]
+  pub device_type: String,
 }
 
 impl From<Options> for DevOptions {
@@ -143,6 +146,7 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
 fn run_command(options: Options, noise_level: NoiseLevel, dirs: Dirs) -> Result<()> {
   delete_codegen_vars();
   // setup env additions before calling env()
+  std::env::set_var("OHOS_DEVICE_TYPE", &options.device_type);
   if let Some(root_certificate_path) = &options.root_certificate_path {
     std::env::set_var(
       "TAURI_DEV_ROOT_CERTIFICATE",
