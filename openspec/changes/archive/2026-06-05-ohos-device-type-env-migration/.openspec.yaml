@@ -1,0 +1,9 @@
+schema: spec-driven
+name: ohos-device-type-env-migration
+archived: "2026-06-05"
+description: Replace ohos-desktop Cargo feature with OHOS_DEVICE_TYPE environment variable
+specs:
+  ohos-device-type-env-var:
+    status: implemented
+    operations:
+      - add
