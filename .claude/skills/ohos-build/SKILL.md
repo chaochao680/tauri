@@ -41,7 +41,7 @@ bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" des
 echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/.env.local
 ```
 
-## 设备类型（TAURI_OHOS_DEVICE_TYPE）
+## 设备类型（OHOS_DEVICE_TYPE）
 
 | 值 | 说明 | 编译特性 |
 |---|------|---------|

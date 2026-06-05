@@ -57,10 +57,10 @@ if [ -d "$ABILITY_ROOT" ]; then
     fi
 fi
 
-# Step 1: Build with VITE_AUTOTEST=true and TAURI_OHOS_DEVICE_TYPE
+# Step 1: Build with VITE_AUTOTEST=true and OHOS_DEVICE_TYPE
 echo ">>> Step 1: Building (autotest mode, device_type=${OHOS_DEVICE_TYPE:-desktop})..."
 export VITE_AUTOTEST=true
-export TAURI_OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-desktop}"
+export OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-desktop}"
 bash "$SCRIPT_DIR/build-ohos.sh"
 
 # Step 2: Sign & Install

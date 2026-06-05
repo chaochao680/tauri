@@ -264,9 +264,9 @@ fn main() {
   let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
   let mobile = if target_env == "ohos" {
-    println!("cargo:rerun-if-env-changed=TAURI_OHOS_DEVICE_TYPE");
+    println!("cargo:rerun-if-env-changed=OHOS_DEVICE_TYPE");
     let device_type =
-      std::env::var("TAURI_OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
+      std::env::var("OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
     device_type != "desktop"
   } else {
     target_os == "ios" || target_os == "android"
