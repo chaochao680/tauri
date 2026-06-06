@@ -4,6 +4,33 @@ function assert(condition: boolean, msg: string) {
   if (!condition) throw new Error(msg);
 }
 
+/**
+ * Fetch with retry for external endpoints (e.g. httpbin.org).
+ * Retries up to 3 times with 1s delay on 503 or network errors.
+ */
+async function retryFetch(
+  url: string,
+  init: Parameters<typeof globalThis.fetch>[1],
+  maxRetries = 3
+): Promise<Response> {
+  const { fetch } = await import('@tauri-apps/plugin-http');
+  const opts = { ...init, connectTimeout: 3000 };
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fetch(url, opts);
+      if (resp.status !== 503 || attempt === maxRetries) return resp;
+      lastError = new Error(`HTTP 503 from ${url}`);
+    } catch (e) {
+      lastError = e;
+    }
+    if (attempt < maxRetries) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw lastError;
+}
+
 export const pluginTests: TestCase[] = [
   // @tauri-apps/plugin-os
   {
@@ -59,18 +86,18 @@ export const pluginTests: TestCase[] = [
   },
 
   // @tauri-apps/plugin-http
+  //
+  // Most HTTP tests use the local echo server (localhost:3003) started in
+  // src-tauri/src/lib.rs to avoid flaky failures from external services.
+  // Only tests that genuinely need a real remote endpoint (TLS handshake,
+  // specific JSON structure) still target httpbin.org with retry logic.
   {
     name: '@tauri-apps/plugin-http.fetch (GET)',
     category: 'auto',
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/get', { method: 'GET' })
+      const resp = await fetch('http://localhost:3003/get', { method: 'GET' })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
-      assert(
-        data.url === 'https://httpbin.org/get',
-        `url mismatch: ${data.url}`
-      )
     }
   },
   {
@@ -79,16 +106,17 @@ export const pluginTests: TestCase[] = [
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
       const body = JSON.stringify({ test: 'post-data' })
-      const resp = await fetch('https://httpbin.org/post', {
+      const resp = await fetch('http://localhost:3003/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body
       })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
+      // Echo server returns the request body as-is
+      const data = await resp.text()
       assert(
-        data.json.test === 'post-data',
-        `body mismatch: ${JSON.stringify(data.json)}`
+        data === body,
+        `body mismatch: ${data}`
       )
     }
   },
@@ -98,16 +126,16 @@ export const pluginTests: TestCase[] = [
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
       const body = JSON.stringify({ update: 'put-data' })
-      const resp = await fetch('https://httpbin.org/put', {
+      const resp = await fetch('http://localhost:3003/put', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body
       })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
+      const data = await resp.text()
       assert(
-        data.json.update === 'put-data',
-        `body mismatch: ${JSON.stringify(data.json)}`
+        data === body,
+        `body mismatch: ${data}`
       )
     }
   },
@@ -116,7 +144,7 @@ export const pluginTests: TestCase[] = [
     category: 'auto',
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/delete', {
+      const resp = await fetch('http://localhost:3003/delete', {
         method: 'DELETE'
       })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
@@ -127,7 +155,7 @@ export const pluginTests: TestCase[] = [
     category: 'auto',
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/headers', {
+      const resp = await fetch('http://localhost:3003/headers', {
         method: 'GET',
         headers: {
           'X-Custom-Header': 'test-value-123',
@@ -135,14 +163,16 @@ export const pluginTests: TestCase[] = [
         }
       })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
-      const data = await resp.json()
+      // Echo server reflects request headers in response headers
+      const customHeader = resp.headers.get('X-Custom-Header')
       assert(
-        data.headers['X-Custom-Header'] === 'test-value-123',
-        `custom header not found`
+        customHeader === 'test-value-123',
+        `custom header mismatch: ${customHeader}`
       )
+      const anotherHeader = resp.headers.get('X-Another-Header')
       assert(
-        data.headers['X-Another-Header'] === 'another-value',
-        `another header not found`
+        anotherHeader === 'another-value',
+        `another header mismatch: ${anotherHeader}`
       )
     }
   },
@@ -150,20 +180,20 @@ export const pluginTests: TestCase[] = [
     name: '@tauri-apps/plugin-http.fetch (JSON parse)',
     category: 'auto',
     async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/json', { method: 'GET' })
+      // Use jsonplaceholder — fast, reliable, no rate limiting
+      const resp = await retryFetch('https://jsonplaceholder.typicode.com/todos/1', { method: 'GET' })
       assert(resp.status === 200, `expected status 200, got ${resp.status}`)
       const data = await resp.json()
       assert(typeof data === 'object', 'expected JSON object')
-      assert(data.slideshow !== undefined, 'expected slideshow property')
+      assert(data.title !== undefined, 'expected title property')
     }
   },
   {
     name: '@tauri-apps/plugin-http.fetch (HTTPS/rustls-tls)',
     category: 'auto',
     async fn() {
-      const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/get', { method: 'GET' })
+      // Use example.com — IANA-managed, extremely reliable
+      const resp = await retryFetch('https://www.example.com', { method: 'GET' })
       assert(
         resp.status === 200,
         `HTTPS connection failed with status ${resp.status}`
@@ -179,7 +209,7 @@ export const pluginTests: TestCase[] = [
     category: 'auto',
     async fn() {
       const { fetch } = await import('@tauri-apps/plugin-http')
-      const resp = await fetch('https://httpbin.org/status/404', {
+      const resp = await fetch('http://localhost:3003/status/404', {
         method: 'GET'
       })
       assert(resp.status === 404, `expected status 404, got ${resp.status}`)

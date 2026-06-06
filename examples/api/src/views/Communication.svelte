@@ -344,7 +344,7 @@
   // Test: Create transparent borderless window
   function createTransparentWindow() {
     console.log('Creating transparent borderless window...')
-    invoke('create_transparent_window', {
+    invoke('create_transparent_borderless_window', {
       windowId: 'window_transparent'
     })
       .then(() => {

@@ -1597,13 +1597,16 @@ class Window {
    *
    * - **Windows:** alpha channel is ignored.
    * - **iOS / Android:** Unsupported.
+   * - **OpenHarmony:** Supported on the main window and float sub-windows.
+   *   When `transparent` is `true`, this call is silently ignored (transparent takes priority over background color).
+   *   On API 20+ devices, uses `setWindowContainerColor`; on older APIs, the call succeeds but has no visible effect.
    *
    * @returns A promise indicating the success or failure of the operation.
    *
    * @since 2.1.0
    */
   async setBackgroundColor(color: Color): Promise<void> {
-    return invoke('plugin:window|set_background_color', { color })
+    return invoke('plugin:window|set_background_color', { value: color })
   }
 
   /**

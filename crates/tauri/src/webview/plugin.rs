@@ -40,13 +40,44 @@ async fn create_webview_window<R: Runtime>(
   Ok(())
 }
 
+/// Cross-platform webview commands — available on all platforms including
+/// OHOS mobile. Only commands whose underlying wry backend is verified
+/// cross-platform should live here.
+mod commands {
+  use super::*;
+  use crate::{command, utils::config::Color, Webview};
+
+  fn get_webview<R: Runtime>(
+    webview: Webview<R>,
+    label: Option<String>,
+  ) -> crate::Result<Webview<R>> {
+    match label {
+      Some(l) if !l.is_empty() => webview
+        .manager()
+        .get_webview(&l)
+        .ok_or(crate::Error::WebviewNotFound),
+      _ => Ok(webview),
+    }
+  }
+
+  #[command(root = "crate")]
+  pub async fn set_webview_background_color<R: Runtime>(
+    webview: Webview<R>,
+    label: Option<String>,
+    value: Option<Color>,
+  ) -> crate::Result<()> {
+    get_webview(webview, label)?
+      .set_background_color(value)
+      .map_err(Into::into)
+  }
+}
+
 #[cfg(desktop)]
 mod desktop_commands {
   use super::*;
   use crate::{
     command,
     runtime::dpi::{Position, Size},
-    utils::config::Color,
     Webview,
   };
 
@@ -121,11 +152,6 @@ mod desktop_commands {
   setter!(webview_hide, hide);
   setter!(webview_show, show);
   setter!(set_webview_zoom, set_zoom, f64);
-  setter!(
-    set_webview_background_color,
-    set_background_color,
-    Option<Color>
-  );
   setter!(clear_all_browsing_data, clear_all_browsing_data);
 
   #[cfg(not(feature = "unstable"))]
@@ -243,7 +269,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       #[cfg(desktop)] desktop_commands::set_webview_position,
       #[cfg(desktop)] desktop_commands::set_webview_focus,
       #[cfg(desktop)] desktop_commands::set_webview_auto_resize,
-      #[cfg(desktop)] desktop_commands::set_webview_background_color,
+      commands::set_webview_background_color,
       #[cfg(desktop)] desktop_commands::set_webview_zoom,
       #[cfg(desktop)] desktop_commands::webview_hide,
       #[cfg(desktop)] desktop_commands::webview_show,

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "run-app",
   "description": "permissions to run the app",
-  "windows": ["main", "main-*"],
+  "windows": ["main", "main-*", "test-*"],
   "permissions": [
     "core:window:allow-is-enabled",
     "core:window:allow-set-enabled",
@@ -32,6 +32,9 @@
     "allow-create-window-with-custom-ua",
     "allow-create-window-no-throttle",
     "allow-create-transparent-window",
+    "allow-create-borderless-window",
+    "allow-create-transparent-borderless-window",
+    "allow-close-test-window",
     "allow-create-counter",
     "allow-increment-counter",
     "allow-get-counter-value",
@@ -92,8 +95,10 @@
     "core:window:allow-set-progress-bar",
     "core:window:allow-set-icon",
     "core:window:allow-toggle-maximize",
+    "core:window:allow-set-background-color",
     "core:webview:allow-create-webview-window",
     "core:webview:allow-print",
+    "core:webview:allow-set-webview-background-color",
     "fs:default",
     "fs:allow-mkdir",
     "fs:allow-write-file",
@@ -112,7 +117,7 @@
     "http:allow-fetch-read-body",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://httpbin.org/*" }, { "url": "https://www.example.com/*" }]
+      "allow": [{ "url": "https://httpbin.org/*" }, { "url": "https://www.example.com/*" }, { "url": "https://jsonplaceholder.typicode.com/*" }, { "url": "http://localhost:3003/*" }]
     },
     "os:default",
     "os:allow-platform",

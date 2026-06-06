@@ -94,19 +94,21 @@ ohpm install --all
 
 ### ② 页面路由（main_pages.json）
 
-`main_pages.json` 会被模板覆盖为仅包含 `pages/Index`，需要手动添加 `TestTrayPage`：
+`main_pages.json` 会被模板覆盖为仅包含 `pages/Index`，需要手动添加：
 
 ```json5
 // gen/ohos/entry/src/main/resources/base/profile/main_pages.json
 {
   "src": [
     "pages/Index",
-    "pages/TestTrayPage"   // ← 需要手动添加
+    "pages/TestTrayPage",           // ← QuickOperation 面板页面
+    "pages/TransparencyTestPage"    // ← WebView 透明度测试页面
   ]
 }
 ```
 
-`TestTrayPage` 是 `TestTrayAbility`（QuickOperation 面板）的内容页面，缺少此路由注册会导致面板打开后内容为空。
+- `TestTrayPage` 是 `TestTrayAbility`（QuickOperation 面板）的内容页面，缺少此路由注册会导致面板打开后内容为空。
+- `TransparencyTestPage` 是 WebView 容器透明背景测试页面（Float 子窗口穿透测试）。
 
 ### ③ TestTrayPage.ets 和 TestTrayAbility.ets 文件
 

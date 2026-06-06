@@ -426,7 +426,7 @@ pub fn create_isolated_window<R: tauri::Runtime>(
   window_id: String,
   data_suffix: String,
   url: String,
-) -> tauri::Result<()> {
+) -> tauri::Result<String> {
   // Append a unique sequence number to ensure window name is always unique
   let seq = WINDOW_SEQ.fetch_add(1, Ordering::SeqCst);
   let unique_window_id = format!("{}_{}", window_id, seq);
@@ -496,7 +496,7 @@ pub fn create_isolated_window<R: tauri::Runtime>(
     })
     .build()?;
 
-  Ok(())
+  Ok(unique_window_id)
 }
 
 #[command]
@@ -577,43 +577,163 @@ pub fn create_window_no_throttle<R: tauri::Runtime>(
   Ok(())
 }
 
+/// Shared close link HTML for test windows.
+/// Uses <a href="#close-window"> instead of <button> with onclick handler,
+/// because OHOS Web component initialization_script cannot attach JS event listeners.
+/// The #close-window URL is intercepted by DefaultWebview.ets onLoadIntercept handler,
+/// which destroys the window via WindowManager.destroyWindow().
+const CLOSE_LINK_HTML: &str = r##"<a href="http://close-window.invalid/" style="display:inline-block;margin-top:20px;padding:8px 20px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:#fff;border-radius:8px;text-decoration:none;font-size:14px;cursor:pointer;">✕ Close</a>"##;
+
+/// Shared status display script for child test windows (T3 multi-window isolation).
+/// Polls isDecorated() every 500ms and shows live state in a status badge,
+/// so testers can visually verify that toggling decorations on the main window
+/// does NOT affect child windows.
+const STATUS_SCRIPT: &str = r##"
+      var statusDiv = document.createElement('div');
+      statusDiv.id = 'state-status';
+      statusDiv.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.8);color:#0f0;padding:8px 14px;border-radius:8px;font-size:13px;font-family:monospace;z-index:9999;';
+      statusDiv.textContent = 'isDecorated: checking...';
+      document.body.appendChild(statusDiv);
+      setInterval(function() {
+        window.__TAURI__.invoke('plugin:window|is_decorated').then(function(v) {
+          var el = document.getElementById('state-status');
+          if (el) {
+            el.textContent = 'isDecorated: ' + v;
+            el.style.color = v ? '#0f0' : '#f80';
+          }
+        }).catch(function() {});
+      }, 500);
+"##;
+
 #[command]
 pub fn create_transparent_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
   window_id: String,
 ) -> tauri::Result<()> {
-  log::info!("Creating transparent borderless window: {}", window_id);
+  log::info!("Creating transparent window: {}", window_id);
 
-  let _window = tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
+  let close_link = CLOSE_LINK_HTML;
+  let status_script = STATUS_SCRIPT;
+  let init_script = format!(r#"
+    document.addEventListener('DOMContentLoaded', function() {{
+      document.documentElement.style.background = 'transparent';
+      document.body.style.cssText = 'background:transparent;margin:0;padding:0;'
+        + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;';
+      document.body.innerHTML = '';
+      var div = document.createElement('div');
+      div.style.cssText = 'background:rgba(0,0,0,0.6);color:#fff;padding:30px;'
+        + 'border-radius:15px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);'
+        + 'text-align:center;max-width:80%;';
+      div.innerHTML = '<h2>\u{{1FA9F}} Transparent Window</h2>'
+        + '<p>This window has transparent background.</p>'
+        + '{close_link}';
+      document.body.appendChild(div);
+      {status_script}
+    }});
+  "#);
+
+  let _window = tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
     .title("Transparent Window")
     .transparent(true)
     .inner_size(600.0, 400.0)
-    .initialization_script(
-      r#"
-        document.addEventListener('DOMContentLoaded', () => {
-          document.body.style.background = 'transparent';
-          document.body.style.margin = '0';
-          document.body.style.padding = '20px';
-          document.body.style.display = 'flex';
-          document.body.style.flexDirection = 'column';
-          document.body.style.alignItems = 'center';
-          document.body.style.justifyContent = 'center';
-          document.body.style.fontFamily = 'system-ui, sans-serif';
-
-          const div = document.createElement('div');
-          div.style.background = 'rgba(0, 0, 0, 0.7)';
-          div.style.color = 'white';
-          div.style.padding = '30px';
-          div.style.borderRadius = '15px';
-          div.style.backdropFilter = 'blur(10px)';
-          div.style.textAlign = 'center';
-          div.innerHTML = '<h2>🪟 Transparent Borderless Window</h2><p>This window has transparent background and no title bar.</p><p style="font-size: 12px; opacity: 0.7; margin-top: 20px;">Close this window by pressing Ctrl+W or Cmd+W</p>';
-          document.body.appendChild(div);
-        });
-      "#
-    )
+    .initialization_script(&init_script)
     .build()?;
 
+  Ok(())
+}
+
+/// Test command: create a borderless window (decorations=false) to verify
+/// Phase 2 implementation. The window should have no title bar, no drag area,
+/// and no close button on OHOS.
+#[command]
+pub fn create_borderless_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+) -> tauri::Result<()> {
+  log::info!("Creating borderless window: {}", window_id);
+
+  let close_link = CLOSE_LINK_HTML;
+  let status_script = STATUS_SCRIPT;
+  let init_script = format!(r#"
+    document.addEventListener('DOMContentLoaded', function() {{
+      document.documentElement.style.background = '#1a1a2e';
+      document.body.style.cssText = 'background:#1a1a2e;margin:0;padding:0;'
+        + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;color:#fff;';
+      document.body.innerHTML = '';
+      var div = document.createElement('div');
+      div.style.cssText = 'text-align:center;padding:30px;';
+      div.innerHTML = '<h2>\u{{1F5BC}}️ Borderless Window</h2>'
+        + '<p>This window has <code>decorations: false</code>.</p>'
+        + '<p>No title bar, drag area, or close button from the OS.</p>'
+        + '{close_link}';
+      document.body.appendChild(div);
+      {status_script}
+    }});
+  "#);
+
+  let builder = tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
+    .title("Borderless Window")
+    .decorations(false)
+    .inner_size(500.0, 350.0)
+    .initialization_script(&init_script);
+
+  let _window = builder.build()?;
+
+  Ok(())
+}
+
+/// Test command: create a transparent + borderless window (decorations=false + transparent=true)
+/// to verify Phase 1 + Phase 2 + Phase 3 combined implementation.
+#[command]
+pub fn create_transparent_borderless_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+) -> tauri::Result<()> {
+  log::info!("Creating transparent borderless window: {}", window_id);
+
+  let close_link = CLOSE_LINK_HTML;
+  let status_script = STATUS_SCRIPT;
+  let init_script = format!(r#"
+    document.addEventListener('DOMContentLoaded', function() {{
+      document.documentElement.style.background = 'transparent';
+      document.body.style.cssText = 'background:transparent;margin:0;padding:0;'
+        + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;';
+      document.body.innerHTML = '';
+      var div = document.createElement('div');
+      div.style.cssText = 'background:rgba(0,0,0,0.5);color:#fff;padding:30px;'
+        + 'border-radius:15px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);'
+        + 'text-align:center;max-width:80%;';
+      div.innerHTML = '<h2>\u{{2728}} Transparent + Borderless</h2>'
+        + '<p><code>decorations: false</code> + <code>transparent: true</code></p>'
+        + '<p>Background should be see-through AND no title bar.</p>'
+        + '{close_link}';
+      document.body.appendChild(div);
+      {status_script}
+    }});
+  "#);
+
+  let builder = tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
+    .title("Transparent Borderless")
+    .transparent(true)
+    .decorations(false)
+    .inner_size(500.0, 350.0)
+    .initialization_script(&init_script);
+
+  let _window = builder.build()?;
+
+  Ok(())
+}
+
+/// Close the calling webview window. Used by test windows' close buttons
+/// since __TAURI_INTERNALS__.invoke('plugin:window|close') may not work
+/// in initialization_script context on OHOS.
+#[command]
+pub fn close_test_window<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) -> tauri::Result<()> {
+  log::info!("close_test_window called for label: {}", window.label());
+  window.close()?;
   Ok(())
 }
 

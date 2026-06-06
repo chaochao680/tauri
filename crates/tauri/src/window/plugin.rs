@@ -98,7 +98,16 @@ mod commands {
   setter!(set_position, Position);
   setter!(set_focus);
   setter!(set_focusable, bool);
-  setter!(set_background_color, Option<Color>);
+  // Custom implementation for set_background_color with debug logging
+  #[command(root = "crate")]
+  pub async fn set_background_color<R: Runtime>(
+    window: Window<R>,
+    label: Option<String>,
+    value: Option<Color>,
+  ) -> crate::Result<()> {
+    log::debug!("[tauri-window] set_background_color called with value: {:?}", value);
+    get_window(window, label)?.set_background_color(value).map_err(Into::into)
+  }
   setter!(set_size_constraints, WindowSizeConstraints);
   setter!(set_theme, Option<Theme>);
   setter!(set_enabled, bool);

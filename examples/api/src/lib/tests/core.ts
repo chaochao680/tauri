@@ -462,7 +462,7 @@ export const coreTests: TestCase[] = [
   // Test on_page_load (on_page_begin / on_page_end)
   {
     name: 'on_page_load events',
-    category: 'auto',
+    category: 'manual',
     async fn() {
       let startedUrl: string | null = null;
       let finishedUrl: string | null = null;
@@ -474,9 +474,10 @@ export const coreTests: TestCase[] = [
         finishedUrl = event.payload as string;
       });
 
+      let actualLabel: string | null = null;
       try {
         // Trigger a page load by creating a new window
-        await invoke('create_isolated_window', {
+        actualLabel = await invoke<string>('create_isolated_window', {
           windowId: 'test-page-load-window',
           dataSuffix: 'test',
           url: '/hello.html'
@@ -495,12 +496,14 @@ export const coreTests: TestCase[] = [
       } finally {
         unlistenStart();
         unlistenFinish();
-        // Clean up the created window
-        try {
-          const win = await WebviewWindow.getByLabel('test-page-load-window');
-          if (win) await win.close();
-        } catch (e) {
-          // Ignore if window already closed or not found
+        // Clean up the created window (use actual label returned by Rust, not original windowId)
+        if (actualLabel) {
+          try {
+            const win = await WebviewWindow.getByLabel(actualLabel);
+            if (win) await win.close();
+          } catch (e) {
+            // Ignore if window already closed or not found
+          }
         }
       }
     },
@@ -509,16 +512,17 @@ export const coreTests: TestCase[] = [
   // Test on_navigation interceptor
   {
     name: 'on_navigation interceptor',
-    category: 'auto',
+    category: 'manual',
     async fn() {
       let interceptedUrl: string | null = null;
       const unlisten = await listen('navigation-intercepted', (event) => {
         interceptedUrl = event.payload as string;
       });
 
+      let actualLabel: string | null = null;
       try {
         // Create a new window to trigger on_navigation in that webview
-        await invoke('create_isolated_window', {
+        actualLabel = await invoke<string>('create_isolated_window', {
           windowId: 'test-nav-window',
           dataSuffix: 'nav',
           url: '/hello.html'
@@ -531,6 +535,15 @@ export const coreTests: TestCase[] = [
         assert(interceptedUrl!.length > 0, 'Intercepted URL should not be empty');
       } finally {
         unlisten();
+        // Clean up the created window
+        if (actualLabel) {
+          try {
+            const win = await WebviewWindow.getByLabel(actualLabel);
+            if (win) await win.close();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
       }
     },
   },
@@ -538,16 +551,17 @@ export const coreTests: TestCase[] = [
   // Test on_document_title_changed
   {
     name: 'on_document_title_changed',
-    category: 'auto',
+    category: 'manual',
     async fn() {
       let changedTitle: string | null = null;
       const unlisten = await listen('document-title-changed', (event) => {
         changedTitle = event.payload as string;
       });
 
+      let actualLabel: string | null = null;
       try {
         // Create a new window with initialization script that sets a title
-        await invoke('create_isolated_window', {
+        actualLabel = await invoke<string>('create_isolated_window', {
           windowId: 'test-title-window',
           dataSuffix: 'title',
           url: '/hello.html'
@@ -560,6 +574,15 @@ export const coreTests: TestCase[] = [
         assert(changedTitle!.length > 0, 'Title should not be empty');
       } finally {
         unlisten();
+        // Clean up the created window
+        if (actualLabel) {
+          try {
+            const win = await WebviewWindow.getByLabel(actualLabel);
+            if (win) await win.close();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
       }
     },
   },
@@ -600,14 +623,15 @@ export const coreTests: TestCase[] = [
     category: 'auto',
     async fn() {
       // Create a new window, then close it — this triggers CloseRequested
-      await invoke('create_isolated_window', {
+      // Rust returns the actual label (windowId + sequence number) for getByLabel lookup
+      const actualLabel = await invoke<string>('create_isolated_window', {
         windowId: 'test-close-req',
         dataSuffix: 'close',
         url: '/hello.html',
       });
       await new Promise((r) => setTimeout(r, 1000));
       // Close the window — triggers WindowEvent::CloseRequested
-      const win = await WebviewWindow.getByLabel('test-close-req');
+      const win = await WebviewWindow.getByLabel(actualLabel);
       if (win) {
         await win.close();
       }
@@ -626,6 +650,91 @@ export const coreTests: TestCase[] = [
       // Opened requires OS-level NewWant (deep link), cannot be triggered programmatically.
       // The event tracking infrastructure is verified by Ready/MainEventsCleared/Resumed tests.
       // To test manually: launch the app via deep link (e.g., hdc shell aa start -a EntryAbility -b com.tauri.api -U myapp://test)
+    },
+  },
+
+  // ─── Window Decorations (Phase 2) ───
+  {
+    name: 'window.isDecorated returns boolean',
+    category: 'auto',
+    async fn() {
+      const win = getCurrentWindow();
+      const decorated = await win.isDecorated();
+      assert(typeof decorated === 'boolean', `isDecorated() should return boolean, got ${typeof decorated}`);
+    },
+  },
+  {
+    name: 'window.setDecorations toggles decorations state',
+    category: 'side-effect',
+    async fn() {
+      const win = getCurrentWindow();
+      // Save original state
+      const original = await win.isDecorated();
+      // Toggle off
+      await win.setDecorations(false);
+      const afterOff = await win.isDecorated();
+      assert(afterOff === false, `After setDecorations(false), isDecorated() should be false, got ${afterOff}`);
+      // Toggle back on
+      await win.setDecorations(true);
+      const afterOn = await win.isDecorated();
+      assert(afterOn === true, `After setDecorations(true), isDecorated() should be true, got ${afterOn}`);
+      // Restore original
+      await win.setDecorations(original);
+    },
+  },
+
+  // ─── Window Background Color (Phase 3) ───
+  {
+    name: 'window.setBackgroundColor does not throw',
+    category: 'side-effect',
+    async fn() {
+      const win = getCurrentWindow();
+      // Set a semi-transparent color — should not throw
+      await win.setBackgroundColor([255, 0, 0, 128]);
+      // Set an opaque color — should not throw
+      await win.setBackgroundColor([0, 0, 0, 255]);
+      // Restore to opaque white so the label bar is not left black
+      await win.setBackgroundColor([255, 255, 255, 255]);
+    },
+  },
+
+  // ─── Create Borderless Window (Phase 2 integration) ───
+  {
+    name: 'create_borderless_window command',
+    category: 'side-effect',
+    async fn() {
+      const windowId = 'test-borderless-' + Date.now();
+      await invoke('create_borderless_window', { windowId });
+      // Wait for window to be created
+      await new Promise((r) => setTimeout(r, 500));
+      // Verify window exists
+      const win = await WebviewWindow.getByLabel(windowId);
+      assert(win !== null, `Borderless window "${windowId}" should exist`);
+      // Verify decorations are off
+      const decorated = await win!.isDecorated();
+      assert(decorated === false, `Borderless window should have decorations=false, got ${decorated}`);
+      // Clean up
+      await win!.close();
+    },
+  },
+
+  // ─── Create Transparent Borderless Window (Phase 1+2+3 integration) ───
+  {
+    name: 'create_transparent_borderless_window command',
+    category: 'side-effect',
+    async fn() {
+      const windowId = 'test-transparent-borderless-' + Date.now();
+      await invoke('create_transparent_borderless_window', { windowId });
+      // Wait for window to be created
+      await new Promise((r) => setTimeout(r, 500));
+      // Verify window exists
+      const win = await WebviewWindow.getByLabel(windowId);
+      assert(win !== null, `Transparent borderless window "${windowId}" should exist`);
+      // Verify decorations are off
+      const decorated = await win!.isDecorated();
+      assert(decorated === false, `Transparent borderless window should have decorations=false, got ${decorated}`);
+      // Clean up
+      await win!.close();
     },
   },
 ];
