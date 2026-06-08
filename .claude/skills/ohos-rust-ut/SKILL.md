@@ -7,9 +7,9 @@ description: 在 OpenHarmony 设备上交叉编译并运行 Rust 单元测试。
 
 在鸿蒙设备上运行 Rust `#[cfg(test)]` 单元测试。用于覆盖 `#[cfg(target_env = "ohos")]` 门控的代码——这些代码在 Windows/Linux/macOS 宿主机上编译不到。
 
-## 设备类型（TAURI_OHOS_DEVICE_TYPE）
+## 设备类型（OHOS_DEVICE_TYPE）
 
-OpenHarmony 设备分为多种类型，通过 `TAURI_OHOS_DEVICE_TYPE` 环境变量控制编译模式：
+OpenHarmony 设备分为多种类型，通过 `OHOS_DEVICE_TYPE` 环境变量控制编译模式：
 
 | 值 | 说明 | 编译特性 |
 |---|------|---------|
@@ -19,10 +19,10 @@ OpenHarmony 设备分为多种类型，通过 `TAURI_OHOS_DEVICE_TYPE` 环境变
 设置方式：
 ```bash
 # mobile 模式（默认）
-export TAURI_OHOS_DEVICE_TYPE=mobile
+export OHOS_DEVICE_TYPE=mobile
 
 # desktop 模式
-export TAURI_OHOS_DEVICE_TYPE=desktop
+export OHOS_DEVICE_TYPE=desktop
 ```
 
 ## 环境要求
@@ -48,7 +48,7 @@ PACKAGE=openharmony-ability FEATURES=menu bash D:/workspace/tauri/tauri/.claude/
 PACKAGE=muda bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
 
 # desktop 模式 + 测试过滤
-TAURI_OHOS_DEVICE_TYPE=desktop PACKAGE=openharmony-ability FEATURES=menu bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh menu::
+OHOS_DEVICE_TYPE=desktop PACKAGE=openharmony-ability FEATURES=menu bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh menu::
 
 # 指定设备
 DEVICE_SN=3QC0124C03000579 bash .../run-ut.sh path::ohos
@@ -76,7 +76,7 @@ PACKAGE=muda bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/r
 PACKAGE=tray-icon bash D:/workspace/tauri/tauri/.claude/skills/ohos-rust-ut/scripts/run-ut.sh
 
 # desktop 模式
-PACKAGE=tray-icon TAURI_OHOS_DEVICE_TYPE=desktop bash .../run-ut.sh
+PACKAGE=tray-icon OHOS_DEVICE_TYPE=desktop bash .../run-ut.sh
 
 # 测试过滤
 PACKAGE=muda bash .../run-ut.sh menu::tests
@@ -158,7 +158,7 @@ mod tests {
 
 ## Desktop 模式测试
 
-当 `TAURI_OHOS_DEVICE_TYPE=desktop` 时，`cfg(desktop)` 生效，`cfg(mobile)` 不生效。
+当 `OHOS_DEVICE_TYPE=desktop` 时，`cfg(desktop)` 生效，`cfg(mobile)` 不生效。
 这意味着：
 - 可以测试 `#[cfg(all(target_env = "ohos", desktop))]` 门控的代码
 - `#[cfg(mobile)]` 门控的代码不会被编译
@@ -173,7 +173,7 @@ mod tests {
 | `FEATURES` | `""` | 启用的 features (e.g. "menu,webview") |
 | `DEVICE_SN` | 空（自动） | 设备 SN，多设备时指定 |
 | `DEVICE_DIR` | `/data/local/tmp` | 设备上二进制临时目录 |
-| `TAURI_OHOS_DEVICE_TYPE` | `mobile` | 设备类型：`mobile` 或 `desktop` |
+| `OHOS_DEVICE_TYPE` | `mobile` | 设备类型：`mobile` 或 `desktop` |
 
 ### 自动检测逻辑
 

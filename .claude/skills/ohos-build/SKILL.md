@@ -41,7 +41,7 @@ bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" des
 echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/.env.local
 ```
 
-## 设备类型（TAURI_OHOS_DEVICE_TYPE）
+## 设备类型（OHOS_DEVICE_TYPE）
 
 | 值 | 说明 | 编译特性 |
 |---|------|---------|
@@ -115,6 +115,50 @@ ohpm install --all
 这两个文件不在模板中（属于 examples/api 项目特有），`tauri ohos init` 不会生成它们。如果之前删除了整个 `gen/ohos/` 目录，需要手动恢复：
 - `gen/ohos/entry/src/main/ets/pages/TestTrayPage.ets`
 - `gen/ohos/entry/src/main/ets/testtrayability/TestTrayAbility.ets`
+
+### ④ 扩展能力和权限（module.json5）
+
+`module.json5` 会被模板覆盖，需要手动补充 `TestTrayAbility` 扩展和 `SET_WINDOW_TRANSPARENT` 权限：
+
+```json5
+// gen/ohos/entry/src/main/module.json5
+{
+  "module": {
+    // ... 其他配置保持不变 ...
+    "extensionAbilities": [
+      {
+        "name": "EntryBackupAbility",
+        "srcEntry": "./ets/entrybackupability/EntryBackupAbility.ets",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.backup",
+            "resource": "$profile:backup_config"
+          }
+        ]
+      },
+      {
+        "name": "TestTrayAbility",
+        "srcEntry": "./ets/testtrayability/TestTrayAbility.ets",
+        "type": "statusBarView",
+        "exported": true
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.SET_WINDOW_TRANSPARENT"
+      }
+    ]
+  }
+}
+```
+
+- `TestTrayAbility` 是系统托盘 QuickOperation 面板的扩展能力，`type` 必须为 `statusBarView`
+- `ohos.permission.SET_WINDOW_TRANSPARENT` 是 2in1 设备上 `setWindowContainerColor` API 所需的权限，缺少会导致透明窗口功能失效（error 201）
 
 ## 关键注意事项
 
