@@ -91,7 +91,12 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_clipboard_manager::init());
+    .plugin(tauri_plugin_clipboard_manager::init())
+    // MacosLauncher::LaunchAgent is ignored on OHOS (macOS-specific parameter)
+    .plugin(tauri_plugin_autostart::init(
+      tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+      None,
+    ));
 
   #[cfg(target_env = "ohos")]
   {

@@ -879,6 +879,34 @@ Expected behavior:
       onMessage(manualResult);
     });
   }
+
+  // ─── Autostart Manual Tests ───
+  async function manualAutostartIsEnabled() {
+    await wrapManual('autostart.isEnabled', async () => {
+      const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+      const result = await isEnabled();
+      manualResult = `isEnabled() → ${result}\nVerify: Go to Settings → App launch management → check this app's toggle.\nIf ${result} matches the actual switch state → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualAutostartEnable() {
+    await wrapManual('autostart.enable', async () => {
+      const { enable } = await import('@tauri-apps/plugin-autostart');
+      await enable();
+      manualResult = 'enable() called.\nOn OHOS: System "App launch management" settings page should open now.\nFind this app and toggle the autostart switch ON.\nReturn to this app and click "isEnabled" to verify → should return true.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualAutostartDisable() {
+    await wrapManual('autostart.disable', async () => {
+      const { disable } = await import('@tauri-apps/plugin-autostart');
+      await disable();
+      manualResult = 'disable() called.\nOn OHOS: System "App launch management" settings page should open now.\nFind this app and toggle the autostart switch OFF.\nReturn to this app and click "isEnabled" to verify → should return false.';
+      onMessage(manualResult);
+    });
+  }
 </script>
 
 <div class="flex flex-col gap-2">
@@ -1014,6 +1042,14 @@ Expected behavior:
       <button class="btn" onclick={manualDialogMessageInfo}>Dialog.message (info)</button>
       <button class="btn" onclick={manualDialogMessageWarning}>Dialog.message (warning)</button>
       <button class="btn" onclick={manualDialogMessageError}>Dialog.message (error)</button>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Autostart Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualAutostartIsEnabled}>isEnabled()</button>
+        <button class="btn" onclick={manualAutostartEnable}>enable() (opens settings)</button>
+        <button class="btn" onclick={manualAutostartDisable}>disable() (opens settings)</button>
+      </div>
     </div>
     {#if manualResult}
       <div class="mt-2 p-2 rd-1 bg-black/10 dark:bg-white/10 text-xs font-mono break-all">
