@@ -94,25 +94,71 @@ ohpm install --all
 
 ### ② 页面路由（main_pages.json）
 
-`main_pages.json` 会被模板覆盖为仅包含 `pages/Index`，需要手动添加 `TestTrayPage`：
+`main_pages.json` 会被模板覆盖为仅包含 `pages/Index`，需要手动添加：
 
 ```json5
 // gen/ohos/entry/src/main/resources/base/profile/main_pages.json
 {
   "src": [
     "pages/Index",
-    "pages/TestTrayPage"   // ← 需要手动添加
+    "pages/TestTrayPage",           // ← QuickOperation 面板页面
+    "pages/TransparencyTestPage"    // ← WebView 透明度测试页面
   ]
 }
 ```
 
-`TestTrayPage` 是 `TestTrayAbility`（QuickOperation 面板）的内容页面，缺少此路由注册会导致面板打开后内容为空。
+- `TestTrayPage` 是 `TestTrayAbility`（QuickOperation 面板）的内容页面，缺少此路由注册会导致面板打开后内容为空。
+- `TransparencyTestPage` 是 WebView 容器透明背景测试页面（Float 子窗口穿透测试）。
 
 ### ③ TestTrayPage.ets 和 TestTrayAbility.ets 文件
 
 这两个文件不在模板中（属于 examples/api 项目特有），`tauri ohos init` 不会生成它们。如果之前删除了整个 `gen/ohos/` 目录，需要手动恢复：
 - `gen/ohos/entry/src/main/ets/pages/TestTrayPage.ets`
 - `gen/ohos/entry/src/main/ets/testtrayability/TestTrayAbility.ets`
+
+### ④ 扩展能力和权限（module.json5）
+
+`module.json5` 会被模板覆盖，需要手动补充 `TestTrayAbility` 扩展和 `SET_WINDOW_TRANSPARENT` 权限：
+
+```json5
+// gen/ohos/entry/src/main/module.json5
+{
+  "module": {
+    // ... 其他配置保持不变 ...
+    "extensionAbilities": [
+      {
+        "name": "EntryBackupAbility",
+        "srcEntry": "./ets/entrybackupability/EntryBackupAbility.ets",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.backup",
+            "resource": "$profile:backup_config"
+          }
+        ]
+      },
+      {
+        "name": "TestTrayAbility",
+        "srcEntry": "./ets/testtrayability/TestTrayAbility.ets",
+        "type": "statusBarView",
+        "exported": true
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.SET_WINDOW_TRANSPARENT"
+      }
+    ]
+  }
+}
+```
+
+- `TestTrayAbility` 是系统托盘 QuickOperation 面板的扩展能力，`type` 必须为 `statusBarView`
+- `ohos.permission.SET_WINDOW_TRANSPARENT` 是 2in1 设备上 `setWindowContainerColor` API 所需的权限，缺少会导致透明窗口功能失效（error 201）
 
 ## 关键注意事项
 

@@ -3988,10 +3988,13 @@ fn handle_user_message<T: UserEvent>(
             }
           }
           WebviewMessage::SetBackgroundColor(color) => {
+            log::debug!("[tauri-runtime-wry] SetBackgroundColor message received: {:?}", color);
             if let Err(e) =
               webview.set_background_color(color.map(Into::into).unwrap_or((255, 255, 255, 255)))
             {
               log::error!("failed to set webview background color: {e}");
+            } else {
+              log::debug!("[tauri-runtime-wry] SetBackgroundColor succeeded");
             }
           }
           WebviewMessage::ClearAllBrowsingData => {

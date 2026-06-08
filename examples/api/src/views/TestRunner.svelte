@@ -11,6 +11,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+  import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { appCacheDir, join } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
 
@@ -28,6 +29,7 @@
   let menuEvents = $state([]);
 
   const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
+  const webview = getCurrentWebview();
 
   async function runAll() {
     running = true;
@@ -192,6 +194,36 @@ Expected behavior:
 • Drag window → positions should change
 • outerSize >= innerSize (includes window decorations)
 • scaleFactor typically 1.0-3.0 (depends on display DPI)`;
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── OS Info Manual Test ───
+  async function manualOsInfo() {
+    await wrapManual('osInfo', async () => {
+      const { platform, type, version, family, arch, eol, exeExtension } = await import('@tauri-apps/plugin-os');
+      const p = platform();
+      const t = type();
+      const v = version();
+      const f = family();
+      const a = arch();
+      const e = eol();
+      const ext = exeExtension();
+      const internals = window.__TAURI_OS_PLUGIN_INTERNALS__;
+      const isOhos = p === 'ohos' && t === 'ohos';
+      manualResult =
+        `OS Plugin Info:\n` +
+        `  platform()  = "${p}" ${p === 'ohos' ? '✅' : p === 'linux' ? '⚠️ (should be ohos on OHOS)' : ''}\n` +
+        `  type()      = "${t}" ${t === 'ohos' ? '✅' : ''}\n` +
+        `  version()   = "${v}"\n` +
+        `  family()    = "${f}"\n` +
+        `  arch()      = "${a}"\n` +
+        `  eol()       = ${JSON.stringify(e)}\n` +
+        `  exeExtension() = "${ext}"\n\n` +
+        `__TAURI_OS_PLUGIN_INTERNALS__:\n` +
+        `  platform = "${internals?.platform}"\n` +
+        `  os_type  = "${internals?.os_type}"\n\n` +
+        (isOhos ? '✅ OHOS detected correctly!' : '');
       onMessage(manualResult);
     });
   }
@@ -728,6 +760,75 @@ Expected behavior:
     });
   }
 
+  // ─── Window Decorations & Transparency Manual Tests (Phase 1+2+3) ───
+  let decorationsState = $state('unknown');
+
+  async function manualCreateBorderlessWindow() {
+    await wrapManual('createBorderlessWindow', async () => {
+      const windowId = 'borderless-test-' + Date.now();
+      await invoke('create_borderless_window', { windowId });
+      manualResult = `Borderless window created (id: "${windowId}").\n\n` +
+        `Expected: Window should appear WITHOUT title bar, drag area, or close button.\n` +
+        `Only the dark content area with "🖼️ Borderless Window" text should be visible.\n\n` +
+        `If no title bar visible → PASS.\n` +
+        `If title bar still visible → FAIL (decorations=false not working).\n\n` +
+        `Close with Ctrl+W or Cmd+W.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualCreateTransparentBorderlessWindow() {
+    await wrapManual('createTransparentBorderlessWindow', async () => {
+      const windowId = 'transparent-borderless-' + Date.now();
+      await invoke('create_transparent_borderless_window', { windowId });
+      manualResult = `Transparent + borderless window created (id: "${windowId}").\n\n` +
+        `Expected: Window should appear WITHOUT title bar AND with transparent background.\n` +
+        `You should see the desktop/apps behind the window through the transparent areas.\n` +
+        `Only the floating card with "✨ Transparent + Borderless" should be opaque.\n\n` +
+        `If transparent AND no title bar → PASS.\n` +
+        `If opaque background → transparent=true not working.\n` +
+        `If title bar visible → decorations=false not working.\n\n` +
+        `Close with Ctrl+W or Cmd+W.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualToggleDecorations() {
+    await wrapManual('toggleDecorations', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isDecorated();
+      const newState = !before;
+      await win.setDecorations(newState);
+      const after = await win.isDecorated();
+      decorationsState = `isDecorated: ${before} → ${after}`;
+      manualResult = `Decorations toggled: ${before} → ${after}\n\n` +
+        `Expected: Window title bar should ${newState ? 'APPEAR' : 'DISAPPEAR'}.\n` +
+        `After toggle, isDecorated() returned ${after}.\n\n` +
+        `If visual matches ${after} → PASS.\n` +
+        `If title bar state didn't change → FAIL.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetBackgroundColor(color, label) {
+    await wrapManual(`setBackgroundColor(${label})`, async () => {
+      const win = getCurrentWindow();
+      if (color === null) {
+        // Use webview-level API which supports null to truly reset to default
+        await webview.setBackgroundColor(null);
+        manualResult = `Background color reset to default (null via Webview API).\n\nExpected: Window background returns to its original default color.`;
+      } else {
+        await win.setBackgroundColor(color);
+        const [r, g, b, a] = color;
+        manualResult = `Background color set to [${r},${g},${b},${a}] (${label}).\n\n` +
+          `Expected: Window background should change to ${label}.\n` +
+          `Alpha=${a} (${a === 255 ? 'fully opaque' : a === 0 ? 'fully transparent' : 'semi-transparent'}).\n\n` +
+          `If visual matches → PASS.`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Process & Updater Manual Tests ───
   async function manualRelaunch() {
     await wrapManual('relaunch', async () => {
@@ -965,6 +1066,25 @@ Expected behavior:
       <button class="btn" onclick={manualMonitor}>currentMonitor</button>
       <button class="btn" onclick={manualAppCacheDir}>appCacheDir</button>
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
+      <button class="btn" onclick={manualOsInfo}>OS Info (platform/type/version)</button>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Window Decorations & Transparency (Phase 1+2+3)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
+        <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
+        <button class="btn" onclick={manualToggleDecorations}>Toggle Decorations (current window)</button>
+      </div>
+      <div class="flex gap-2 flex-wrap mt-2">
+        <button class="btn" onclick={() => manualSetBackgroundColor([255, 0, 0, 128], 'semi-transparent red')}>BG: Semi-Red</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor([0, 255, 0, 128], 'semi-transparent green')}>BG: Semi-Green</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 255, 255], 'opaque blue')}>BG: Opaque Blue</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 0, 0], 'fully transparent')}>BG: Transparent</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor(null, 'null (reset)')}>BG: Reset</button>
+      </div>
+      {#if decorationsState !== 'unknown'}
+        <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400">{decorationsState}</div>
+      {/if}
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Process & Updater Manual Tests</h5>

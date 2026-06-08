@@ -293,6 +293,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
       let webview = window_builder.build()?;
 
+      // Set window background to white to avoid black top bar on OHOS
+      // (OHOS default window background is black when transparent=false)
+      let _ = webview.set_background_color(Some(tauri::window::Color(255, 255, 255, 255)));
+
       // Setup window event tracking
       let app_handle = app.handle().clone();
       webview.on_window_event(move |event| {
@@ -345,16 +349,25 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         let server = match tiny_http::Server::http("localhost:3003") {
           Ok(s) => s,
           Err(e) => {
-            log::error!("{e}");
-            std::process::exit(1);
+            log::error!("Failed to bind echo server on port 3003: {e}");
+            return;
           }
         };
         loop {
           if let Ok(mut request) = server.recv() {
             let mut body = Vec::new();
             let _ = request.as_reader().read_to_end(&mut body);
+
+            // Parse path for /status/{code} pattern
+            let path = request.url().to_string();
+            let status = if let Some(code_str) = path.strip_prefix("/status/") {
+              code_str.parse::<u16>().unwrap_or(200)
+            } else {
+              200
+            };
+
             let response = tiny_http::Response::new(
-              tiny_http::StatusCode(200),
+              tiny_http::StatusCode(status),
               request.headers().to_vec(),
               std::io::Cursor::new(body),
               request.body_length(),
@@ -421,6 +434,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::create_window_with_custom_ua,
       cmd::create_window_no_throttle,
       cmd::create_transparent_window,
+      cmd::create_borderless_window,
+      cmd::create_transparent_borderless_window,
+      cmd::close_test_window,
       cmd::create_counter,
       cmd::increment_counter,
       cmd::get_counter_value,

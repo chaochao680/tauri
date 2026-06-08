@@ -13,6 +13,7 @@
   import Menu from './views/Menu.svelte'
   import Tray from './views/Tray.svelte'
   import TestRunner from './views/TestRunner.svelte'
+  import TransparencyTest from './views/TransparencyTest.svelte'
 
   import { runTests } from './lib/test-runner'
   import { coreTests } from './lib/tests/core'
@@ -83,6 +84,11 @@
       label: 'Tests',
       component: TestRunner,
       icon: 'i-ph-check-circle'
+    },
+    {
+      label: 'Transparency',
+      component: TransparencyTest,
+      icon: 'i-ph-eye'
     }
   ]
 
