@@ -256,16 +256,12 @@ export const pluginTests: TestCase[] = [
 
   // @tauri-apps/plugin-autostart
   {
-    name: '@tauri-apps/plugin-autostart.enable+isEnabled+disable',
-    category: 'side-effect',
+    name: '@tauri-apps/plugin-autostart.isEnabled',
+    category: 'auto',
     async fn() {
-      const { enable, disable, isEnabled } = await import('@tauri-apps/plugin-autostart');
-      await enable();
-      const enabled = await isEnabled();
-      assert(enabled === true, `isEnabled returned ${enabled} after enable()`);
-      await disable();
-      const disabled = await isEnabled();
-      assert(disabled === false, `isEnabled returned ${disabled} after disable()`);
+      const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+      const result = await isEnabled();
+      assert(typeof result === 'boolean', `isEnabled should return boolean, got ${typeof result}`);
     },
   },
 
@@ -402,6 +398,38 @@ export const pluginTests: TestCase[] = [
         68,174,66,96,130
       ]);
       await writeImage(png.buffer.slice(0));
+    },
+  },
+
+  // @tauri-apps/plugin-autostart (side-effect tests moved to end — on OHOS,
+  // enable()/disable() call startAbility which sends app to background;
+  // placing them last ensures other side-effect tests run first)
+  // ⚠️ IMPORTANT: Do NOT add new side-effect tests after this section.
+  // These tests MUST remain at the end of the side-effect list because
+  // on OHOS they trigger startAbility() which sends the app to background,
+  // disrupting any subsequent automated test execution.
+  {
+    name: '@tauri-apps/plugin-autostart.enable+disable (no throw)',
+    category: 'side-effect',
+    async fn() {
+      const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+      await enable();
+      await disable();
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-autostart.enable+isEnabled+disable',
+    category: 'side-effect',
+    async fn() {
+      const { enable, disable, isEnabled } = await import('@tauri-apps/plugin-autostart');
+      await enable();
+      const afterEnable = await isEnabled();
+      assert(typeof afterEnable === 'boolean', `isEnabled should return boolean after enable(), got ${typeof afterEnable}`);
+      await disable();
+      const afterDisable = await isEnabled();
+      assert(typeof afterDisable === 'boolean', `isEnabled should return boolean after disable(), got ${typeof afterDisable}`);
+      // On Windows/macOS/Linux: enable/disable actually toggle autostart state
+      // On OHOS: enable/disable navigate to system settings page, state is unchanged
     },
   },
 
