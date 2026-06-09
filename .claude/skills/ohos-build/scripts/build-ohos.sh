@@ -69,6 +69,11 @@ echo ">>> Step 3: Building frontend (VITE_AUTOTEST=${VITE_AUTOTEST:-false})..."
 export VITE_AUTOTEST="${VITE_AUTOTEST:-false}"
 (cd "$API_DIR" && pnpm build)
 
+# ─── Step 3.5: ACL permission consistency check ───
+echo ""
+echo ">>> Step 3.5: Checking ACL permission consistency..."
+bash "$SCRIPT_DIR/../../acl-check/scripts/clean-stale-acl.sh" "$SRC_TAURI"
+
 # ─── Step 4: Rust 编译 ───
 echo ""
 echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release, device_type=$OHOS_DEVICE_TYPE)..."

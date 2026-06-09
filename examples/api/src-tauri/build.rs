@@ -31,6 +31,10 @@ fn main() {
         "create_window_with_custom_ua",
         "create_window_no_throttle",
         "create_transparent_window",
+        "create_borderless_window",
+        "create_transparent_borderless_window",
+        "dummy_command", 
+        "close_test_window",
         "create_counter",
         "increment_counter",
         "get_counter_value",
@@ -41,8 +45,10 @@ fn main() {
         "emit_test_event",
         "setup_app_listener",
         "test_async_spawn",
+        "simulate_tray_click",
         "clear_test_report",
-        "append-test-result"
+        "append_test_result",
+        "get_ohos_version_info"
       ])),
   )
   .expect("failed to run tauri-build");
