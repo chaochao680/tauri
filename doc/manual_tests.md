@@ -127,6 +127,20 @@
 
 ---
 
+## 六、WebView User-Agent 自定义 手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | userAgent/custom | 自定义 User-Agent 设置验证 | **T0** | 应用已启动，进入 Tests 页面 | 1. 滚动到 "WebView User-Agent" 测试分组 2. 点击 "userAgent (custom)" 按钮 3. 观察新打开的窗口中 useragent-test.html 页面显示结果 | ① 新窗口成功打开并加载 `useragent-test.html` 页面 ② 页面显示绿色 "✓ PASS: Custom UA detected" ③ `navigator.userAgent` 包含 `MyApp/1.0 Tauri/2.0` | OHOS 平台通过 `WebviewController.setCustomUserAgent()` 实现；在 `onControllerAttached` 回调中设置；Rust 侧通过 `eval_with_callback` 将 UA 输出到 hilog |
+| core | webview | userAgent/default | 默认 User-Agent 验证 | **T1** | 应用已启动，进入 Tests 页面 | 1. 滚动到 "WebView User-Agent" 测试分组 2. 点击 "userAgent (default)" 按钮 3. 观察新打开的窗口中 useragent-test.html 页面显示结果 | ① 新窗口成功打开并加载 `useragent-test.html` 页面 ② 页面显示蓝色 "ℹ System default UA (no custom UA set)" ③ `navigator.userAgent` 为系统默认值（如 `Mozilla/5.0 (Phone; OpenHarmony 5.0) AppleWebKit/537.36 ...`） | 未提供自定义 User-Agent 时，WebView 使用系统默认值 |
+| core | webview | userAgent/多窗口隔离 | 多窗口 User-Agent 隔离验证 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "userAgent (multi-window)" 按钮 2. 观察两个新打开的窗口中 useragent-test.html 页面分别显示的结果 3. 可通过 `hdc shell "hilog \| grep UA-TEST"` 查看 Rust 侧日志 | ① 两个新窗口成功打开 ② 窗口 A 页面显示 "Multi-window UA detected" ③ 窗口 B 页面显示 "Multi-window UA detected" ④ hilog 中两个窗口的 `navigator.userAgent` 值分别包含各自的自定义标识 | 验证 OHOS 平台上多个 WebView 实例的 User-Agent 设置互不干扰 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| WebView User-Agent | 1 | 2 | **3** |
+
+---
+
 ## 七、用例统计
 
 | 模块 | T0 | T1 | 合计 |
@@ -138,5 +152,6 @@
 | Dialog | 7 | 0 | **7** |
 | plugin-os（平台检测） | 2 | 4 | **6** |
 | Autostart（开机自启动） | 2 | 2 | **4** |
-| **合计** | **31** | **31** | **62** |
+| WebView User-Agent | 1 | 2 | **3** |
+| **合计** | **32** | **33** | **65** |
 
