@@ -5,7 +5,7 @@ description: Tauri OHOS 代码提交。使用场景：(1) 验证通过后需要�
 
 # Tauri OHOS 代码提交
 
-本技能引导完成代码提交流程：多仓库扫描 → 文件过滤 → commit → rebase → push → 创建 PR。
+本技能引导完成代码提交流程：多仓库扫描 → 文件过滤 → commit → 本地检视 → rebase → push → 创建 PR。
 
 > **⚠️ 语言约束**：所有 commit message、PR title 和 PR body 必须使用英文编写。
 
@@ -25,8 +25,9 @@ description: Tauri OHOS 代码提交。使用场景：(1) 验证通过后需要�
 TaskCreate: "Step 1: 扫描多仓库变更"
 TaskCreate: "Step 2: 文件过滤"
 TaskCreate: "Step 3: Git Add + Commit"
-TaskCreate: "Step 4: Fetch + Rebase 上游"
-TaskCreate: "Step 5: Push + 创建 PR"
+TaskCreate: "Step 4: 本地代码检视"
+TaskCreate: "Step 5: Fetch + Rebase 上游"
+TaskCreate: "Step 6: Push + 创建 PR"
 ```
 
 创建后 TaskUpdate 第一个为 `in_progress`，开始执行。
@@ -92,7 +93,70 @@ git commit -m "<描述性 commit message>"
 
 每个仓库独立 commit，不跨仓库混合提交。
 
-### Step 4: Fetch + Rebase 上游
+**Squash 多个 commit**：如果分支上相对 `upstream/ohdev` 有多个 commit，需要 squash 为一个：
+
+1. 检查 commit 数量：
+   ```bash
+   git log --oneline upstream/ohdev..HEAD
+   ```
+
+2. 如果 >1 个 commit，使用 soft reset + 重新提交：
+   ```bash
+   git reset --soft upstream/ohdev
+   git commit -m "<合并后的 commit message>"
+   ```
+
+3. **合并 commit message**：读取所有 commit message，合并为一条，保留关键信息：
+   - 多个同类型 → `feat(<scope>): <描述1>, <描述2>, ...`
+   - 混合类型 → 选最主要的 type，description 中概括所有变更
+   - 示例：`feat(ohos): add autostart, updater, version detection and review skill improvements`
+
+### Step 4: 本地代码检视
+
+Commit 完成后、push 前，调用 `tauri-ohos-code-review` skill 的**本地 commit 检视模式**对每个有 commit 的仓库进行代码检视。
+
+#### 4a. 调用 review skill
+
+对每个有 commit 的仓库，以本地 commit 模式执行检视：
+- diff 范围：`upstream/ohdev...HEAD`（即本次提交的全部变更）
+- 按 review skill 的 loop-until-dry 机制执行多轮检视（连续 2 轮无新发现则退出，最大 5 轮）
+- 对照 `references/review-checklist.md` 逐项检查（A-H 共 8 大类）
+
+#### 4b. 处理 findings
+
+根据 findings 严重级别决定处理方式：
+
+| 级别 | 处理 |
+|------|------|
+| 🔴 Blocker | **必须修复** — 修复代码 → `git add` + `git commit --amend --no-edit` → 重新检视 |
+| 🟡 Major | **必须修复** — 同上 |
+| 🔵 Minor | 记录但不阻塞，由开发者决定是否修复 |
+| ℹ️ Info | 仅记录 |
+
+**修复-检视循环**：
+```
+while (存在 Blocker 或 Major findings):
+  1. 修复所有 Blocker/Major findings 对应的代码
+  2. git add <fixed_files>
+  3. git commit --amend --no-edit
+  4. 重新调用 review skill 检视修复后的 commit
+  5. 如果仍有 Blocker/Major → 继续循环
+  6. 如果无 Blocker/Major → 退出循环
+```
+
+#### 4c. 确认检视通过
+
+输出检视报告摘要：
+```
+## Local Review Passed
+✅ openharmony-ability: 0 Blocker, 0 Major (2 Minor noted)
+✅ tray-icon: 0 Blocker, 0 Major (clean)
+✅ tauri: 0 Blocker, 0 Major (1 Minor noted)
+
+Proceeding to rebase...
+```
+
+### Step 5: Fetch + Rebase 上游
 
 对每个有 commit 的仓库：
 
@@ -111,9 +175,9 @@ git rebase upstream/ohdev
 2. 用户解决后执行 `git add <conflicted_files>` + `git rebase --continue`
 3. 不自动合并冲突
 
-### Step 5: Push + 创建 PR
+### Step 6: Push + 创建 PR
 
-#### 5a. 确保 gh CLI 可用
+#### 6a. 确保 gh CLI 可用
 
 检查 `gh --version` 是否可执行。如不可用，自动安装：
 
@@ -125,7 +189,7 @@ winget install --id GitHub.cli --accept-source-agreements --accept-package-agree
 
 > **Windows 注意**：winget 安装后 `gh` 可能不在当前 shell 的 PATH 中，需要使用完整路径（如 `/c/Program Files/GitHub CLI/gh.exe`）或重启终端。
 
-#### 5b. 确认 remote 配置
+#### 6b. 确认 remote 配置
 
 **⚠️ 严禁直接 push 到上游仓库（Eulogizethesun）。** 必须 push 到用户自己的 fork。
 
@@ -145,7 +209,7 @@ git remote rename origin upstream
 git remote add origin https://github.com/<your-username>/<repo>.git
 ```
 
-#### 5c. Push + 创建 PR
+#### 6c. Push + 创建 PR
 
 ```bash
 git push origin ohdev
@@ -163,3 +227,4 @@ gh pr create --repo Eulogizethesun/<repo> --base ohdev --head <your-username>:oh
 
 - [文件过滤规则](references/commit-filter.md) — 提交/不提交的文件分类
 - [Git 工作流](references/git-workflow.md) — upstream/origin 配置、rebase 指南、PR 规范
+- [代码检视 Skill](../tauri-ohos-code-review/SKILL.md) — 本地 commit 检视（Step 4 调用）

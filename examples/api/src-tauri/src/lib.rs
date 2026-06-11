@@ -434,7 +434,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::create_window_with_custom_ua,
       cmd::create_window_no_throttle,
       cmd::create_transparent_window,
+      #[cfg(desktop)]
       cmd::create_borderless_window,
+      #[cfg(desktop)]
       cmd::create_transparent_borderless_window,
       cmd::close_test_window,
       cmd::create_counter,

@@ -57,7 +57,16 @@
 
 ## H — 仓库级规范
 
-- [ ] H1: 本地配置/环境文件不应提交（`.env.local`、`.idea/`、`*.log` 等）→ 🟡
+- [ ] H1: 不应提交的文件未出现在 PR 中 → 🟡
+  - **Cargo.lock** — 已在 .gitignore 中，自动生成
+  - **自动生成目录** — `gen/ohos/`、`build/`、`target/`
+  - **编译产物** — `.so`、`.o`、`.a`、`.hap`、`.hsp`、`.app`、`ability.har`、`*.har`
+  - **依赖目录** — `node_modules/`、`oh_modules/`
+  - **签名证书** — `.p12`、`.cer`、`.p7b`、`.csr`
+  - **测试产物** — `test-report.md`、`console-log.txt`
+  - **IDE 文件** — `.idea/`、`.vscode/`、`*.swp`
+  - **环境/lock 文件** — `.env.local`、`oh-package-lock.json5`
+  - **检查方法**：`git diff <base-branch> --name-only` 逐一核对上述路径模式
 - [ ] H2: `.gitattributes` 应保持 `eol=lf`（CRLF 会导致 OHOS 构建异常）→ 🟡
 - [ ] H3: openspec 文件必须归档到 `openspec/changes/`（不能散落在仓库根目录）→ 🔵
 - [ ] H4: 模板文件 `.ets.hbs` 重命名需验证 CLI template.rs 能正确处理 → 🟡
@@ -73,3 +82,7 @@
   - 如果 PR 实现了某个 feature 的完整设计（有 proposal.md、design.md、tasks.md 等），但 `openspec/changes/` 下无对应目录 → 提交 finding
   - 如果 openspec 文件散落在仓库根目录（不在 `openspec/changes/<change-name>/` 下） → 提交 finding
   - **深度检查**：读取 openspec 文档，核对 design.md 的每个功能点是否在代码中实现，spec.md 的每个 requirement 是否被满足
+- [ ] H7: 注释必须使用英文 → 🔵
+  - PR 新增或修改的注释（`//`、`/* */`、`///`）不得包含中文
+  - **检查方法**：`git diff <base-branch>` 中搜索中文字符 `[一-鿿]`，定位到注释行
+  - 已有未修改的中文注释不要求（仅检查 PR 变更范围内新增/修改的注释）
