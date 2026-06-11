@@ -515,22 +515,56 @@ pub fn get_ohos_version_info() -> serde_json::Value {
   })
 }
 
+static UA_WINDOW_COUNTER: AtomicU32 = AtomicU32::new(0);
+
 #[command]
 pub fn create_window_with_custom_ua<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
   window_id: String,
   user_agent: String,
 ) -> tauri::Result<()> {
-  log::info!("Creating window with custom User-Agent: {}", user_agent);
+  // Use unique label to avoid conflict when called multiple times
+  let counter = UA_WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed);
+  let unique_id = format!("{}-{}", window_id, counter);
+  log::info!("Creating window '{}' with custom User-Agent: '{}'", unique_id, user_agent);
 
-  let window = tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
-    .title("Window with Custom User-Agent")
-    .user_agent(&user_agent)
-    .inner_size(800.0, 600.0)
-    .build()?;
+  let title = if user_agent.is_empty() {
+    "UA Test: Default".to_string()
+  } else {
+    format!("UA Test: {}", user_agent)
+  };
 
+  // Pass expected UA as URL query param so the test page can display it
+  let url_path = if user_agent.is_empty() {
+    "/useragent-test.html".to_string()
+  } else {
+    let mut encoded = String::new();
+    for byte in user_agent.as_bytes() {
+      if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+        encoded.push(*byte as char);
+      } else {
+        encoded.push_str(&format!("%{:02X}", byte));
+      }
+    }
+    format!("/useragent-test.html?expected={}", encoded)
+  };
+
+  let mut builder = tauri::WebviewWindowBuilder::new(&app, &unique_id, tauri::WebviewUrl::App(url_path.into()))
+    .title(title)
+    .inner_size(800.0, 600.0);
+
+  if !user_agent.is_empty() {
+    builder = builder.user_agent(&user_agent);
+  }
+
+  let window = builder.build()?;
+
+  // Emit UA result to frontend so TestRunner UI can display it
+  let app_handle = app.clone();
+  let wid = unique_id.clone();
   window.eval_with_callback("navigator.userAgent", move |ua| {
-    log::info!("Window User-Agent (from Rust): {}", ua);
+    log::info!("[UA-TEST] Window '{}': navigator.userAgent = {}", wid, ua);
+    let _ = app_handle.emit("ua-test-result", serde_json::json!({ "windowId": wid, "userAgent": ua }));
   })?;
 
   Ok(())

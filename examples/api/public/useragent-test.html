@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User-Agent Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #fff;
+      color: #222;
+    }
+    h2 { color: #333; }
+    #ua {
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin: 20px 0;
+      word-break: break-all;
+      font-size: 14px;
+    }
+    .label { color: #666; font-size: 12px; margin-top: 10px; }
+    .expected {
+      background: #e8f5e9;
+      padding: 10px;
+      margin: 10px 0;
+      border-left: 4px solid #4caf50;
+      color: #2e7d32;
+    }
+    .pass { color: #2e7d32; font-weight: bold; font-size: 16px; }
+    .info { color: #1565c0; font-weight: bold; font-size: 16px; }
+    iframe#__tauri_isolation__ { display: none !important; }
+  </style>
+</head>
+<body>
+  <h2>User-Agent Test</h2>
+
+  <div id="expected-section">
+    <div class="label">Expected custom UA:</div>
+    <div class="expected" id="expected-ua"></div>
+  </div>
+
+  <div class="label">Actual navigator.userAgent:</div>
+  <div id="ua"></div>
+
+  <div id="result"></div>
+
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var expected = params.get('expected') || '';
+    var ua = navigator.userAgent;
+
+    document.getElementById('ua').textContent = ua;
+
+    if (expected) {
+      document.getElementById('expected-ua').textContent = expected;
+      if (ua.indexOf(expected) !== -1) {
+        document.getElementById('result').innerHTML =
+          '<p class="pass">&#10004; PASS: Expected UA "' + expected + '" detected</p>';
+      } else {
+        document.getElementById('result').innerHTML =
+          '<p style="color:#c62828;font-weight:bold;font-size:16px;">&#10008; FAIL: Expected UA "' + expected + '" not found</p>';
+      }
+    } else {
+      document.getElementById('expected-section').style.display = 'none';
+      document.getElementById('result').innerHTML =
+        '<p class="info">&#9432; System default UA (no custom UA set)</p>';
+    }
+  </script>
+</body>
+</html>

@@ -1008,6 +1008,87 @@ Expected behavior:
       onMessage(manualResult);
     });
   }
+
+  // ─── WebView User-Agent Manual Tests ───
+
+  // Listen for UA test results emitted from Rust
+  onMount(async () => {
+    const unlisten = await listen('ua-test-result', (event) => {
+      const { windowId, userAgent } = event.payload;
+      const msg = `[UA-TEST] ${windowId}: ${userAgent}`;
+      console.log(msg);
+      onMessage(msg);
+    });
+    return unlisten;
+  });
+
+  async function manualUserAgentCustom() {
+    await wrapManual('webview.userAgent (custom)', async () => {
+      try {
+        await invoke('create_window_with_custom_ua', {
+          windowId: 'ua-test-custom',
+          userAgent: 'MyApp/1.0 Tauri/2.0',
+        });
+        manualResult = '✓ 已打开新窗口（自定义 UA: "MyApp/1.0 Tauri/2.0"）。\n' +
+          '请在新窗口中查看测试结果。\n\n' +
+          '预期: 页面显示绿色 "✓ PASS: Expected UA detected"';
+        onMessage('UA custom test window opened');
+      } catch (e) {
+        manualResult = '✗ 创建窗口失败: ' + e;
+        onMessage('UA custom test FAILED: ' + e);
+      }
+    });
+  }
+
+  async function manualUserAgentDefault() {
+    await wrapManual('webview.userAgent (default)', async () => {
+      try {
+        await invoke('create_window_with_custom_ua', {
+          windowId: 'ua-test-default',
+          userAgent: '',
+        });
+        manualResult = '✓ 已打开新窗口（系统默认 UA）。\n' +
+          '请在新窗口中查看测试结果。\n\n' +
+          '预期: 页面显示蓝色 "ℹ System default UA (no custom UA set)"';
+        onMessage('UA default test window opened');
+      } catch (e) {
+        manualResult = '✗ 创建窗口失败: ' + e;
+        onMessage('UA default test FAILED: ' + e);
+      }
+    });
+  }
+
+  async function manualUserAgentMultiWindow() {
+    await wrapManual('webview.userAgent (multi-window isolation)', async () => {
+      let resultA = '';
+      let resultB = '';
+
+      try {
+        await invoke('create_window_with_custom_ua', {
+          windowId: 'ua-test-a',
+          userAgent: 'App-A/1.0',
+        });
+        resultA = '✓ 窗口 A (App-A/1.0) 已打开';
+      } catch (e) {
+        resultA = '✗ 窗口 A 创建失败: ' + e;
+      }
+
+      try {
+        await invoke('create_window_with_custom_ua', {
+          windowId: 'ua-test-b',
+          userAgent: 'App-B/2.0',
+        });
+        resultB = '✓ 窗口 B (App-B/2.0) 已打开';
+      } catch (e) {
+        resultB = '✗ 窗口 B 创建失败: ' + e;
+      }
+
+      manualResult = resultA + '\n' + resultB + '\n\n' +
+        '请在已打开的窗口中查看测试结果。\n' +
+        '可通过 hilog 验证: hdc shell "hilog | grep UA-TEST"';
+      onMessage('UA multi-window: ' + resultA + ' | ' + resultB);
+    });
+  }
 </script>
 
 <div class="flex flex-col gap-2">
@@ -1169,6 +1250,14 @@ Expected behavior:
         <button class="btn" onclick={manualAutostartIsEnabled}>isEnabled()</button>
         <button class="btn" onclick={manualAutostartEnable}>enable() (opens settings)</button>
         <button class="btn" onclick={manualAutostartDisable}>disable() (opens settings)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">WebView User-Agent Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualUserAgentCustom}>userAgent (custom)</button>
+        <button class="btn" onclick={manualUserAgentDefault}>userAgent (default)</button>
+        <button class="btn" onclick={manualUserAgentMultiWindow}>userAgent (multi-window)</button>
       </div>
     </div>
     {#if manualResult}

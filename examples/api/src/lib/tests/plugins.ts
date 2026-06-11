@@ -522,4 +522,30 @@ export const pluginTests: TestCase[] = [
     category: 'manual',
     async fn() {},
   },
+
+  // @tauri-apps/plugin-webview User-Agent tests (OHOS)
+  // User-Agent is set via WebviewBuilder in Rust, requires manual verification
+  // Use the manual test buttons in "WebView User-Agent Manual Tests" section
+  {
+    name: '@tauri-apps/plugin-webview.userAgent (custom)',
+    category: 'manual',
+    async fn() {
+      // Manual test: Click "userAgent (custom)" button in the WebView User-Agent section
+      // This creates a WebviewWindow with custom UA "MyApp/1.0 Tauri/2.0"
+      // The loaded page displays navigator.userAgent for visual verification
+      console.log('[webview.userAgent] Use the "userAgent (custom)" button in the manual test section');
+      console.log('[webview.userAgent] Expected: New window opens with page showing custom UA');
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-webview.userAgent (default)',
+    category: 'manual',
+    async fn() {
+      // Manual test: Click "userAgent (default)" button in the WebView User-Agent section
+      // This creates a WebviewWindow without custom UA
+      // The loaded page displays navigator.userAgent for visual verification
+      console.log('[webview.userAgent] Use the "userAgent (default)" button in the manual test section');
+      console.log('[webview.userAgent] Expected: New window opens with page showing system default UA');
+    },
+  },
 ];
