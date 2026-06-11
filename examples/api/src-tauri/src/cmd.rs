@@ -646,6 +646,7 @@ pub fn create_transparent_window<R: tauri::Runtime>(
 /// Test command: create a borderless window (decorations=false) to verify
 /// Phase 2 implementation. The window should have no title bar, no drag area,
 /// and no close button on OHOS.
+#[cfg(desktop)]
 #[command]
 pub fn create_borderless_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
@@ -686,6 +687,7 @@ pub fn create_borderless_window<R: tauri::Runtime>(
 
 /// Test command: create a transparent + borderless window (decorations=false + transparent=true)
 /// to verify Phase 1 + Phase 2 + Phase 3 combined implementation.
+#[cfg(desktop)]
 #[command]
 pub fn create_transparent_borderless_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,

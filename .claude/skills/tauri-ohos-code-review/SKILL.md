@@ -1,18 +1,19 @@
 ---
 name: tauri-ohos-code-review
-description: Tauri OHOS 代码检视。使用场景：(1) committer 需要审查 PR，(2) 对照 OHOS 约束 checklist 审计代码，(3) 编译部署验证功能回归，(4) 提交 review comments 到 GitHub。
+description: Tauri OHOS 代码检视。使用场景：(1) committer 审查 GitHub PR，(2) submit skill 在 push 前检视本地 commit。
 ---
 
 # Tauri OHOS 代码检视
 
-本技能引导完成代码检视流程：解析 PR → checkout 分支 → 代码审计 + 提交 GitHub → 编译部署 → 清理。
+本技能引导完成代码检视流程：获取 diff → 多轮代码审计 → 提交/输出 findings → 编译部署 → 清理。
 
-> **适用场景**：committer 收到一个或多个 PR 链接，需要系统性审查 OHOS 适配代码质量。
+> **适用场景**：
+> - **PR 检视**：committer 收到 PR 链接，需要系统性审查 OHOS 适配代码质量
+> - **本地 commit 检视**：submit skill 在 push 前检视本地 commit（由 submit skill 调用）
 
 > **前提条件**：
-> - 本地已有所有仓库代码（tauri/tao/wry/muda/tray-icon/openharmony-ability/plugins-workspace）
-> - 默认连着鸿蒙 PC（用于编译部署）
-> - 已安装并认证 `gh` CLI
+> - PR 检视：已安装并认证 `gh` CLI，本地已有所有仓库代码
+> - 本地 commit 检视：本地已有 commit（尚未 push）
 
 ## 状态追踪
 
@@ -25,163 +26,111 @@ description: Tauri OHOS 代码检视。使用场景：(1) committer 需要审查
 - 如果 TaskList 为空 → 立即创建以下 task（不可跳过）：
 
 ```
-TaskCreate: "Step 1: 解析 PR + 检查环境"
-TaskCreate: "Step 2: Checkout 各仓 PR 分支"
-TaskCreate: "Step 3: 代码检视 + 提交 GitHub"
+TaskCreate: "Step 1: 获取 diff 来源"
+TaskCreate: "Step 2: 代码检视（多轮迭代）"
+TaskCreate: "Step 3: 提交/输出 findings"
 TaskCreate: "Step 4: 编译部署"
-TaskCreate: "Step 5: 清理本地分支"
+TaskCreate: "Step 5: 清理"
 ```
 
 创建后 TaskUpdate 第一个为 `in_progress`，开始执行。
 
 ## 步骤
 
-### Step 1: 解析 PR + 检查环境
+### Step 1: 获取 diff 来源
 
-#### 1a. 解析 PR 链接
+根据检视对象获取 diff 和变更文件列表。
 
-从用户输入中提取 PR 信息。支持格式：
-- 完整 URL: `https://github.com/Eulogizethesun/tauri/pull/25`
-- 简写: `tauri#25` 或 `#25`（默认 tauri 仓库）
-- 多个 PR: `tauri#25, tao#8, wry#12, plugins-workspace#6`
+#### PR 检视
 
-对每个 PR，使用 `gh pr view` 获取元信息：
+1. **解析 PR 链接**：从用户输入提取 PR 信息（完整 URL / `tauri#25` 简写 / 多个 PR）
 
-```bash
-gh pr view <N> --repo Eulogizethesun/<repo> --json title,body,headRefName,files
-```
+2. **检查 gh CLI**：`gh auth status`，未认证则提示用户 `gh auth login`
 
-**解析 PR body 中的关联 PR**：
-- 检查 body 是否包含其他仓的 PR 链接（如 `Related: tao#8`）
-- 如果发现关联 PR 未在输入中，提示用户补充
-
-#### 1b. 检查 gh CLI
-
-```bash
-gh auth status
-```
-
-如果未认证，提示用户：
-```
-请先运行 `gh auth login` 完成认证，然后重新调用 skill。
-```
-
-#### 1c. 汇总 PR 列表
-
-输出解析结果：
-```
-## PR List
-1. tauri#25: feat: add ohos_base_path() (review/pr-25)
-2. tao#8: fix: tray icon positioning (review/pr-8)
-3. wry#12: refactor: event loop (review/pr-12)
-
-涉及仓库: tauri, tao, wry, plugins-workspace
-```
-
-### Step 2: Checkout 各仓 PR 分支
-
-对每个涉及的仓库执行以下操作：
-
-#### 2a. 保存当前工作区
-
-```bash
-cd D:\workspace\tauri\<repo>
-git stash -u  # 保存 uncommitted 改动（包括 untracked）
-```
-
-如果 stash 失败（极少见），提示用户手动处理：
-```
-<repo> 仓库有未提交的改动，请手动 commit 或清理后重新调用 skill。
-```
-
-#### 2b. Fetch PR 分支
-
-```bash
-git fetch origin pull/<N>/head:review/pr-<N>
-```
-
-如果 fetch 失败（PR 不存在或已删除），标记该 PR 为 "❌ Fetch Failed"，跳过该仓库。
-
-#### 2c. Checkout
-
-```bash
-git checkout review/pr-<N>
-```
-
-如果 checkout 失败（冲突），提示用户：
-```
-<repo> 仓库 checkout 冲突，请手动解决后重新调用 skill。
-```
-
-#### 2d. 记录原始分支
-
-保存每个仓库的原始分支名（通常是 `ohdev`），用于 Step 5 清理：
-
-```
-原始分支记录:
-  tauri → ohdev
-  tao → ohdev
-  wry → ohdev
-```
-
-#### 2e. 验证 checkout 成功
-
-对每个仓库执行 `git branch --show-current`，确认在 `review/pr-<N>` 分支。
-
-输出：
-```
-## Checkout Complete
-✅ tauri → review/pr-25
-✅ tao → review/pr-8
-✅ wry → review/pr-12
-```
-
-### Step 3: 代码检视 + 提交 GitHub（多轮迭代）
-
-检视分为多轮，每轮侧重不同，**直到连续 2 轮无新发现为止**（loop-until-dry）。
-
-#### 3a. Round 1: Diff 扫描 + Checklist 快速检查
-
-**目标**：快速扫描 PR diff，发现明显违规。
-
-1. 获取每个 PR 的 diff：
+3. **获取 PR 元信息**：
    ```bash
-   gh pr diff <N> --repo Eulogizethesun/<repo> > review-diff-<repo>.diff
+   gh pr view <N> --repo Eulogizethesun/<repo> --json title,body,headRefName,files
    ```
 
-2. 按文件分组扫描：
+4. **解析关联 PR**：检查 PR body 是否包含其他仓的 PR 链接，发现未列出的关联 PR 则提示用户补充
+
+5. **Checkout PR 分支**：对每个仓库：
+   ```bash
+   cd D:\workspace\tauri\<repo>
+   git stash -u                                    # 保存 uncommitted 改动
+   git fetch origin pull/<N>/head:review/pr-<N>    # fetch PR 分支
+   git checkout review/pr-<N>                       # checkout
+   ```
+   记录原始分支名（通常 `ohdev`），用于 Step 5 清理。
+
+6. **获取 diff**：
+   ```bash
+   gh pr diff <N> --repo Eulogizethesun/<repo>
+   ```
+
+#### 本地 commit 检视
+
+1. **确定 base branch**：默认 `upstream/ohdev`（如 upstream 不存在则 fallback 到 `origin/ohdev`），也可由调用方指定
+
+2. **获取 diff**：
+   ```bash
+   git diff <base-branch>...HEAD
+   ```
+   包含本地所有未推送的 commit 变更。无需 checkout，已在目标分支。
+
+#### 输出
+
+两种模式都输出相同的 diff 内容，供 Step 2 使用：
+```
+## Diff Source
+✅ tauri#25: review/pr-25 (12 files changed)
+✅ tao#8: review/pr-8 (3 files changed)
+```
+或：
+```
+## Diff Source
+✅ openharmony-ability: upstream/ohdev...HEAD (8 files changed)
+✅ tray-icon: upstream/ohdev...HEAD (1 file changed)
+```
+
+### Step 2: 代码检视（多轮迭代）
+
+检视分为多轮，每轮侧重不同，**直到连续 2 轮无新发现为止**（loop-until-dry）。两种模式执行相同的检视逻辑。
+
+#### 2a. Round 1: Diff 扫描 + Checklist 快速检查
+
+**目标**：快速扫描 diff，发现明显违规。
+
+1. 按文件分组扫描：
    - **代码文件**：`.rs` / `.ets` / `.ts` / `Cargo.toml`（A-G 类检查）
    - **仓库配置文件**：`.gitattributes` / `.gitignore` / `.env.local` / `.env`（H 类检查）
    - **文档/openspec**：`openspec/` / `doc/` 下的文件（H3/H5/H6 检查）
 
-3. 对照 `references/review-checklist.md` 逐项快速检查：
+2. 对照 `references/review-checklist.md` 逐项快速检查：
    - A: cfg 隔离 — OHOS 代码是否有正确的 cfg gate
    - B: 平台隔离 — 其他平台代码是否受影响
    - C: NAPI/TSFN — callee_handled、FnArgs、camelCase
    - D: 线程模型 — 阻塞模式、Mutex 跨越
    - E: ArkTS 框架 — @Builder、onLoadIntercept
    - F: openharmony-ability 桥接 — 是否唯一桥接
-   - G: 代码质量 — unwrap、硬编码、注释
-   - H: 仓库级规范 — 本地配置、gitattributes、openspec 归档、手动用例归档
+   - G: 代码质量 — unwrap、硬编码、注释语言
+   - H: 仓库级规范 — 不应提交的文件、gitattributes、openspec 归档、注释语言、手动用例归档
 
-4. 记录 Round 1 findings。
+3. 记录 Round 1 findings。
 
-#### 3b. Round 2: 源码深读 + Openspec 对照（使用 Subagent 并行）
+#### 2b. Round 2: 源码深读 + Openspec 对照（使用 Subagent 并行）
 
 **目标**：阅读变更文件的完整源码（不是 diff），对照 openspec 设计文档验证实现完整性。
 
-**执行方式**：使用 `Agent` 工具并行派发 subagent，每个 subagent 负责一个文件的深度审查。这样可以同时阅读多个完整文件 + openspec 文档，提升效率。
+**执行方式**：使用 `Agent` 工具并行派发 subagent，每个 subagent 负责一个文件的深度审查。
 
-1. **先读取 openspec 文档**（如果 PR 涉及 tauri 仓）：
+1. **先读取 openspec 文档**（如果涉及 tauri 仓）：
    ```bash
-   # 列出 openspec/changes/ 下的所有变更
    ls openspec/changes/
-   # 读取与 PR 功能相关的 openspec
    cat openspec/changes/<change-name>/proposal.md
    cat openspec/changes/<change-name>/design.md
    cat openspec/changes/<change-name>/tasks.md
-   # 如有 spec 定义
-   cat openspec/changes/<change-name>/specs/<capability>/spec.md
+   cat openspec/changes/<change-name>/specs/<capability>/spec.md  # 如有
    ```
 
 2. **派发 Subagent 并行深读源码**：
@@ -217,18 +166,18 @@ git checkout review/pr-<N>
    - 未实现的需求 → 🟡 Major [Spec合规] Requirement X not implemented
    - 设计与实现不一致 → 🟡 Major [Spec合规] Design-implementation mismatch
 
-4. **跨仓一致性检查**（多 PR 场景）：
+4. **跨仓一致性检查**（多仓场景）：
    - wry 层 API 与 tauri 层调用方是否匹配（参数类型、错误处理）
    - openharmony-ability 的 NAPI 接口与 Rust 侧调用是否一致
    - 新增的公共 API 在所有仓中签名是否对齐
 
 5. **仓库级检查（仅 tauri 仓）**：
-   - `git diff <base-branch> -- doc/manual_tests.md`：是否新增了与 PR 功能对应的手动用例（H5）
+   - `git diff <base-branch> -- doc/manual_tests.md`：是否新增了与功能对应的手动用例（H5）
    - `git diff <base-branch> --name-only -- openspec/changes/`：是否归档了对应的设计文档（H6）
 
 6. 记录 Round 2 findings（排除与 Round 1 重复的）。
 
-#### 3c. Round 3+: 专项深挖
+#### 2c. Round 3+: 专项深挖
 
 **目标**：针对前两轮发现的模式进行定向深挖。
 
@@ -241,7 +190,7 @@ git checkout review/pr-<N>
 
 每轮仅保留与 Round 1/2 不重复的新 findings。
 
-#### 3d. Loop-until-dry 退出条件
+#### 2d. Loop-until-dry 退出条件
 
 ```
 Round N findings 与 Round N-1 findings 去重比较：
@@ -263,7 +212,7 @@ Round 5 (专项深挖): 0 new findings → dry_count = 2 → EXIT
 Total: 9 unique findings
 ```
 
-#### 3e. 生成最终 Findings
+#### 2e. 生成最终 Findings
 
 合并所有轮次的 findings，去重后按仓库分组。每个 finding 包含：
 
@@ -284,10 +233,11 @@ Finding 结构:
 ## Audit Complete (4 rounds)
 ✅ tauri#25: 5 findings (1 Blocker, 2 Major, 2 Minor)
 ✅ tao#8: 2 findings (0 Blocker, 1 Major, 1 Minor)
-✅ wry#12: 2 findings (0 Blocker, 1 Major, 1 Suggestion)
 ```
 
-#### 3f. 提交 Review 到 GitHub（Summary + Inline Comments）
+### Step 3: 提交/输出 findings
+
+#### PR 检视：提交到 GitHub
 
 **使用 `gh api` 而非 `gh pr review`**，因为 `gh pr review --body` 只能提交总结评论，无法标注到具体代码行。
 
@@ -321,23 +271,33 @@ Finding 结构:
    ENDJSON
    ```
 
-4. **行号定位**：`comments[].line` 是文件中的实际行号，不是 diff 行号。定位方法：
-   - `gh pr diff <N> --repo ... > review-diff.diff`
-   - 用 `grep -n` 找到目标代码在 diff 中的行号
-   - 对照源文件确认行号正确
+4. **行号定位**：`comments[].line` 是文件中的实际行号，不是 diff 行号。
 
 5. **输出提交结果**：
    ```
    ## Review Submitted
    ✅ tauri#25: https://github.com/.../pull/25#pullrequestreview-xxx (4 inline comments)
    ✅ tao#8: https://github.com/.../pull/8#pullrequestreview-xxx (1 inline comment)
-   ✅ wry#12: https://github.com/.../pull/12#pullrequestreview-xxx (no inline comments)
    ```
 
 > 报告格式详见 `references/review-report-template.md`
 > API 用法详见 `references/github-review-api.md`
 
+#### 本地 commit 检视：输出到终端
+
+**跳过 GitHub 提交**。将 findings 直接输出到终端，返回给调用方（submit skill）：
+
+```
+## Local Review Complete (3 rounds)
+openharmony-ability: 5 findings (1 🔴 Blocker, 2 🟡 Major, 1 🔵 Minor, 1 ℹ️ Info)
+tray-icon: 0 findings (clean)
+```
+
+调用方根据 findings 严重级别决定是否修复并 amend commit。
+
 ### Step 4: 编译部署
+
+> **本地 commit 检视模式**：跳过此步骤（编译部署由 submit skill 自行决定）。
 
 调用 `ohos-build` skill 执行完整编译+部署+autotest。
 
@@ -385,7 +345,9 @@ bash D:/workspace/tauri/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" 
 ✅ No regressions
 ```
 
-### Step 5: 清理本地分支
+### Step 5: 清理
+
+> **本地 commit 检视模式**：跳过此步骤（未 checkout 分支，无需清理）。
 
 #### 5a. 切回原始分支并删除 review 分支
 
@@ -433,7 +395,7 @@ All reviews submitted to GitHub. Local branches cleaned up.
 
 ## 参考文档
 
-- [检视清单](references/review-checklist.md) — OHOS 约束 22 项检查清单
+- [检视清单](references/review-checklist.md) — OHOS 约束检查清单
 - [报告模板](references/review-report-template.md) — 检视报告格式模板
 - [GitHub Review API](references/github-review-api.md) — gh api + inline comments 用法
 
