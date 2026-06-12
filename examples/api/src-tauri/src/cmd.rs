@@ -90,6 +90,33 @@ pub fn clear_tracked_events<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Resu
   Ok(())
 }
 
+// New window request handling for OHOS on_new_window tests
+#[derive(Default)]
+pub struct NewWindowDenyState {
+  pub deny: std::sync::atomic::AtomicBool,
+  pub last_url: Mutex<Option<String>>,
+}
+
+#[command]
+pub fn set_deny_new_window<R: Runtime>(
+  app: tauri::AppHandle<R>,
+  deny: bool,
+) -> tauri::Result<()> {
+  let state = app.state::<NewWindowDenyState>();
+  state.deny.store(deny, Ordering::SeqCst);
+  log::info!("[set_deny_new_window] deny={}", deny);
+  Ok(())
+}
+
+#[command]
+pub fn get_last_new_window_url<R: Runtime>(
+  app: tauri::AppHandle<R>,
+) -> tauri::Result<Option<String>> {
+  let state = app.state::<NewWindowDenyState>();
+  let url = state.last_url.lock().unwrap().clone();
+  Ok(url)
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
 pub struct RequestBody {

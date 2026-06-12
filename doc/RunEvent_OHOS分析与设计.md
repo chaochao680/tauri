@@ -44,7 +44,14 @@ app.run(|handle, event| match event {
 });
 ```
 
-**OHOS 支持状态**: ✅ 已支持 — 无 cfg 限制，正常触发
+**OHOS 支持状态**: ✅ 已支持 — 三条触发路径：
+1. 最后一个窗口被销毁时（`TaoWindowEvent::Destroyed` → 检查窗口列表为空）
+2. 用户调用 `AppHandle::exit(code)` → 发送 `Message::RequestExit(code)`
+3. **新增 (Phase 1)**: `Event::LoopDestroyed` 时先发送 `ExitRequested { code: None }`，再发送 `Exit`，使用 `ExitState(AtomicBool)` 防止与路径 1 重复触发
+
+**OHOS 已知限制**:
+- `prevent_exit()` 在 `LoopDestroyed` 路径上可能无法真正阻止退出（系统已开始销毁 UIAbility），但用户代码至少能执行清理逻辑
+- 后续可通过 `onPrepareToTerminate` 增强实现真正可阻止的退出拦截（需验证返回值语义 + 系统参数 `persist.sys.prepare_terminate`）
 
 ---
 
@@ -87,6 +94,12 @@ RuntimeRunEvent::Exit => {
 - `Focused(true/false)` (from `GainedFocus/LostFocus`)
 - `ScaleFactorChanged` (from `ConfigChanged`)
 - `CloseRequested` (from `WindowDestroy` — 合成)
+- `Destroyed` (from `WindowDestroy` — 合成，主窗口)
+
+**Phase 2 修复**: 子窗口 `Destroyed` 事件现在正确触发：
+- `WindowMessage::Destroy` 处理器改为调用 `on_close_requested`（先发送 `CloseRequested`，再调用 `on_window_close`）
+- `on_window_close` 函数重构为完整清理：移除 `WindowsStore` 条目 + 发送 `Destroyed` 事件 + 检查空 → 触发 `ExitRequested`
+- `TaoWindowEvent::Destroyed` 处理器改为调用 `on_window_close`（统一清理路径）
 
 ---
 

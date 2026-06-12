@@ -48,7 +48,9 @@ fn main() {
         "simulate_tray_click",
         "clear_test_report",
         "append_test_result",
-        "get_ohos_version_info"
+        "get_ohos_version_info",
+        "set_deny_new_window",
+        "get_last_new_window_url"
       ])),
   )
   .expect("failed to run tauri-build");

@@ -187,6 +187,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
       // Manage event tracker for testing
       app.manage(EventTracker::default());
+      app.manage(cmd::NewWindowDenyState::default());
 
       #[cfg(all(desktop, not(test)))]
       {
@@ -287,7 +288,24 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
             }
 
             #[cfg(target_env = "ohos")]
-            tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
+            {
+              use tauri::Emitter;
+              // Record the URL for test verification
+              let deny_state = app_.state::<cmd::NewWindowDenyState>();
+              *deny_state.last_url.lock().unwrap() = Some(url.to_string());
+              let should_deny = deny_state.deny.load(std::sync::atomic::Ordering::SeqCst);
+
+              // Emit event for frontend test verification
+              let _ = app_.emit("new-window-requested", url.to_string());
+
+              if should_deny {
+                log::info!("[OHOS] on_new_window: DENY for URL: {}", url);
+                tauri::webview::NewWindowResponse::Deny
+              } else {
+                log::info!("[OHOS] on_new_window: ALLOW dialog for URL: {}", url);
+                tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
+              }
+            }
           });
       }
 
@@ -450,6 +468,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::get_tracked_run_events,
       cmd::clear_tracked_events,
       #[cfg(target_env = "ohos")]
+      cmd::set_deny_new_window,
+      #[cfg(target_env = "ohos")]
+      cmd::get_last_new_window_url,
+      #[cfg(target_env = "ohos")]
       cmd::get_ohos_version_info,
       #[cfg(desktop)]
       tray::simulate_tray_click,
@@ -482,8 +504,18 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
           }
           "MainEventsCleared"
         }
-        RunEvent::ExitRequested { code, .. } => {
+        RunEvent::ExitRequested { code, api: _api, .. } => {
           log::info!("[RunEvent] ExitRequested, code={:?}", code);
+          // 测试 prevent_exit 是否生效
+          // NOTE: This is test-only code. On OHOS LoopDestroyed path, prevent_exit()
+          // cannot actually prevent exit (system is already tearing down), but it gives
+          // user code a chance to run cleanup logic before RunEvent::Exit fires.
+          #[cfg(target_env = "ohos")]
+          {
+            log::info!("[RunEvent] ExitRequested: calling prevent_exit() to test");
+            _api.prevent_exit();
+            log::info!("[RunEvent] ExitRequested: prevent_exit() called (may not prevent on LoopDestroyed path)");
+          }
           if code.is_some() { "ExitRequested(code)" } else { "ExitRequested" }
         }
         RunEvent::Exit => {
@@ -532,13 +564,35 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         label,
         ..
       } => {
-        log::info!("closing window...");
-        api.prevent_close();
-        _app_handle
-          .get_webview_window(label)
-          .unwrap()
-          .destroy()
-          .unwrap();
+        log::info!("CloseRequested for window: {}", label);
+        #[cfg(target_env = "ohos")]
+        {
+          // OHOS: 只对特定测试窗口调用 prevent_close() 并保持窗口打开
+          if label.starts_with("test-prevent-close") {
+            log::info!("[OHOS] calling prevent_close() for test window: {}", label);
+            api.prevent_close();
+            // 不调用 destroy() - 这是测试窗口，应该保持打开
+          } else {
+            // 其他窗口：阻止默认关闭行为，然后显式销毁窗口
+            log::info!("[OHOS] closing window: {}", label);
+            api.prevent_close();
+            _app_handle
+              .get_webview_window(label)
+              .unwrap()
+              .destroy()
+              .unwrap();
+          }
+        }
+        #[cfg(not(target_env = "ohos"))]
+        {
+          log::info!("closing window...");
+          api.prevent_close();
+          _app_handle
+            .get_webview_window(label)
+            .unwrap()
+            .destroy()
+            .unwrap();
+        }
       }
       #[cfg(target_os = "ios")]
       RunEvent::SceneRequested { .. } => {

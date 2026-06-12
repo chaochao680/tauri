@@ -15,6 +15,18 @@
     }
   }
 
+  // Test: Create a transparent Float window with default decorations (bordered)
+  async function testCreateTransparentBorderedWindow() {
+    try {
+      await invoke('create_transparent_window', {
+        windowId: 'transparency_bordered_' + Date.now()
+      })
+      onMessage('✅ Transparent bordered window created — check if content area is see-through')
+    } catch (e) {
+      onMessage('❌ Error creating transparent bordered window: ' + e)
+    }
+  }
+
   const testCards = [
     {
       id: 'create-transparent',
@@ -22,6 +34,14 @@
       title: '创建透明无边框窗口',
       desc: '创建 Float 子窗口 (transparent: true + decorations: false)，验证窗口背景透明可见桌面内容',
       fn: testCreateTransparentWindow,
+      category: 'manual'
+    },
+    {
+      id: 'create-transparent-bordered',
+      icon: '🪟',
+      title: '创建透明有边框窗口',
+      desc: '创建 Float 子窗口 (transparent: true，保留默认 decorations)，验证透明效果在有标题栏时的表现',
+      fn: testCreateTransparentBorderedWindow,
       category: 'manual'
     }
   ]

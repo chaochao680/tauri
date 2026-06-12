@@ -36,7 +36,14 @@ tao Event::Resumed
 RunEvent::Resumed
 ```
 
-**状态**: ✅ 已实现，正常工作
+**状态**: 🚫 跨平台遗留问题（死代码）
+
+**说明**:
+- Tauri 强制 `ControlFlow = Wait`，`StartCause::Poll` 永远不触发
+- `StartCause::Poll → RunEvent::Resumed` 映射是死代码
+- `Event::Resumed` 被 `_ => ()` 丢弃
+- 这是 winit 0.28 生命周期事件演进后 Tauri 未适配的历史遗留问题，所有平台（桌面、iOS、Android、OHOS）都受影响
+- 修复需要统一评估对桌面平台的影响，不宜在 OHOS 移植中单独处理
 
 ---
 
@@ -138,22 +145,23 @@ TaoWindowEvent::Destroyed
 触发 RunEvent::ExitRequested
 ```
 
-#### 路径 B - 事件循环销毁 (当前问题):
+#### 路径 B - 事件循环销毁 (已修复):
 ```
 OHOS MainEvent::Destroy
   ↓
 tao Event::LoopDestroyed
   ↓
-tauri-runtime-wry 尝试触发 RunEvent::ExitRequested
+tauri-runtime-wry 检查 ExitState 标志
+  ↓ (如果未通过路径 A 发送过)
+触发 RunEvent::ExitRequested
   ↓
-用户代码调用 api.prevent_exit()
-  ↓
-阻止 RunEvent::Exit
+触发 RunEvent::Exit
 ```
 
-**状态**: ⚠️ 部分实现（见 TODO #1）
-- 路径 A: ✅ 理论上可以工作（但 OHOS 上由于子窗口问题难以触发）
-- 路径 B: ❌ 被 `api.prevent_exit()` 阻止
+**状态**: ✅ 已实现，正常工作
+- 路径 A: ✅ 正常工作
+- 路径 B: ✅ 已修复 — `LoopDestroyed` handler 先触发 `ExitRequested` 再触发 `Exit`，使用 `ExitState(AtomicBool)` 防止重复触发
+- 注意：OHOS 上 `LoopDestroyed` 时系统已开始销毁，`prevent_exit()` 可能无法真正阻止退出，但用户代码可执行清理逻辑
 
 ---
 
@@ -174,116 +182,72 @@ RunEvent::Exit
 
 ## 2. 未实现问题 (TODO)
 
-### TODO #1: ExitRequested 和 Exit 的触发问题
+### ✅ 已解决 #1: ExitRequested 和 Exit 的触发问题
 
-**问题描述**:
-在 OHOS 平台上，`ExitRequested` 事件应该使用 `UIAbility.onPrepareToTerminate` 生命周期回调来实现，而不是当前的 `Event::LoopDestroyed` 机制。
+**解决方案**: 修改 `LoopDestroyed` handler，在发送 `Exit` 前先发送 `ExitRequested`。使用 `ExitState(AtomicBool)` 防止与窗口关闭路径重复触发。
 
-**当前实现的问题**:
-1. `ExitRequested` 事件可以触发
-2. 但应用的 `api.prevent_exit()` 会阻止退出
-3. 导致 `RunEvent::Exit` 永远不会触发
+**实现细节**:
+- 新增 `ExitState` 结构体存储 `AtomicBool` 标志
+- `TaoWindowEvent::Destroyed` 路径触发 `ExitRequested` 时设置标志为 `true`
+- `LoopDestroyed` 路径检查标志，仅在 `false` 时发送 `ExitRequested`
+- `prevent_exit()` 在 OHOS 上可能无法真正阻止退出（系统已开始销毁），但用户代码可执行清理
 
-**根因分析**:
-```rust
-// lib.rs 中的当前实现
-RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
-  api.prevent_exit();  // ← 这里阻止了退出
-}
-```
+**状态**: ✅ 已实现
 
-当 `Event::LoopDestroyed` 触发时，`code` 为 `None`，所以会调用 `prevent_exit()`。
-
-**正确的解决方案**:
-使用 OpenHarmony 的 `UIAbility.onPrepareToTerminate` 生命周期回调：
-
-```typescript
-// NativeAbility.ets
-onPrepareToTerminate(): void {
-  // 通知 Rust 层触发 ExitRequested
-  this.forEachLifecycle((lifecycle) => {
-    lifecycle.windowStageEventCallback.onPrepareToTerminate();
-  });
-}
-```
-
-**实现步骤**:
-1. 在 `openharmony-ability` 中添加 `onPrepareToTerminate` 回调
-2. 在 `tao` 的 OHOS 适配层添加对应的 `MainEvent::PrepareToTerminate`
-3. 在 `tauri-runtime-wry` 中处理该事件，触发 `RunEvent::ExitRequested`
-4. 需要设计机制区分"可以阻止的退出"和"不可阻止的退出"
-
-**参考资料**:
-- [UIAbility 生命周期](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/uiability-lifecycle-V5)
-- `onPrepareToTerminate`: Ability 即将被销毁前的回调，可以在此处执行清理工作
-
-**优先级**: 🔴 高
-
-**当前临时方案**:
-在 `Event::LoopDestroyed` 时直接触发 `RunEvent::Exit`，跳过 `ExitRequested`（见代码中的 TODO 注释）
+**后续增强方向**:
+- 验证 OHOS `onPrepareToTerminate` 回调（需 `persist.sys.prepare_terminate = true`）
+- 如验证通过，可实现真正可阻止的退出拦截
 
 ---
 
-### TODO #2: 子窗口 Destroyed 事件缺失
+### ✅ 已解决 #2: 子窗口 Destroyed 事件缺失
 
-**问题描述**:
-通过 `WindowMessage::Destroy` 关闭子窗口时：
-1. `WindowEvent::CloseRequested` 会触发
-2. 但 `WindowEvent::Destroyed` 不会触发
+**解决方案**: 重构 `on_window_close` 函数，使其执行完整清理逻辑（移除条目 + 发送 `Destroyed` 事件 + 检查空 → 触发 `ExitRequested`）。
 
-**根因分析**:
-- 子窗口关闭走 `WindowMessage::Destroy` → `on_close_requested` 路径
-- 这个路径只触发 `CloseRequested`，不会触发 `Destroyed`
-- 主窗口有 OHOS 的 `MainEvent::WindowDestroy` 额外触发 `Destroyed`
-- 子窗口没有对应的 OHOS 事件
+**实现细节**:
+- `on_window_close` 函数签名添加 `callback` 和 `exit_state` 参数
+- 函数内部调用 `windows.0.borrow_mut().remove(&window_id)` 移除条目
+- 移除成功后发送 `RunEvent::WindowEvent { event: WindowEvent::Destroyed }`
+- 检查 `windows.0.borrow().is_empty()`，如果为空则触发 `ExitRequested`
+- `WindowMessage::Destroy` 处理器改为调用 `on_close_requested`（先发送 `CloseRequested`，再调用 `on_window_close`）
+- `TaoWindowEvent::Destroyed` 处理器改为调用 `on_window_close`（统一清理路径）
 
-**影响**:
-- 子窗口关闭后，WindowsStore 中的条目只是设置 `inner = None`，没有被移除
-- 可能导致内存泄漏或状态不一致
-
-**可能的解决方案**:
-1. 在 `on_close_requested` 完成后，手动触发 `Destroyed` 事件
-2. 或者在 `WindowMessage::Destroy` 处理流程中添加 `Destroyed` 触发逻辑
-3. 需要确保事件触发顺序正确：`CloseRequested` → 用户处理 → `Destroyed`
-
-**优先级**: 🟡 中
+**状态**: ✅ 已实现
 
 ---
 
-### TODO #3: 窗口清理逻辑不完整
+### ✅ 已解决 #3: 窗口清理逻辑不完整
 
-**问题描述**:
-`on_window_close` 函数只设置 `inner = None`，没有从 `WindowsStore` 中移除条目。
+**解决方案**: 与 TODO #2 一起解决。重构后的 `on_window_close` 函数直接从 `WindowsStore` 移除条目，而不是仅设置 `inner = None`。
 
-**当前实现**:
-```rust
-fn on_window_close(window_id: WindowId, windows: Arc<WindowsStore>) {
-  if let Some(window_wrapper) = windows.0.borrow_mut().get_mut(&window_id) {
-    window_wrapper.inner = None;  // 只清空 inner，不移除条目
-    #[cfg(windows)]
-    window_wrapper.surface.take();
-  }
-}
-```
+**实现细节**:
+- `on_window_close` 使用 `windows.0.borrow_mut().remove(&window_id)` 移除条目
+- 移除操作是幂等的（多次调用不会重复移除）
+- `windows.is_empty()` 现在能正确反映剩余窗口数量
+- `ExitRequested` 路径 A（所有窗口关闭）能正确触发
 
-**问题**:
-- 窗口条目仍然存在于 `WindowsStore` 中
-- `windows.is_empty()` 永远返回 `false`（除非通过 `TaoWindowEvent::Destroyed` 移除）
-- 可能导致 `ExitRequested` 的路径 A 永远无法触发
-
-**可能的解决方案**:
-1. 在 `on_window_close` 中直接移除窗口条目
-2. 或者在合适的时机（如 `Destroyed` 事件后）清理 `inner = None` 的条目
-3. 需要与 TODO #2 一起考虑
-
-**优先级**: 🟡 中
+**状态**: ✅ 已实现
 
 ---
 
-### TODO #4: Opened 事件未适配
+### ✅ 已解决 #4: Opened 事件适配
+
+**解决方案**: 通过 `MainEvent::NewWant` → `Event::Opened` 路径实现深链接支持。
+
+**实现细节**:
+- openharmony-ability: `Event::NewWant { uri: String }` 变体 + ArkTS `onNewWant` handler
+- tao OHOS: `MainEvent::NewWant { uri }` → `url::Url::parse(&uri)` → `Event::Opened { urls }`
+- tauri-runtime: `Opened` cfg 扩展包含 `target_env = "ohos"`
+- tauri-runtime-wry: `Event::Opened` handler cfg 扩展包含 `target_env = "ohos"`
+
+**状态**: ✅ 已实现
+
+---
+
+### ⚠️ 待验证 #5: WindowEvent::CloseRequested 拦截能力
 
 **问题描述**:
-`RunEvent::Opened` 事件用于处理外部 URL/深链接唤起应用（如 `myapp://some/path`），当前在 OHOS 上未真正调通。
+`RunEvent::WindowEvent::CloseRequested` 事件能够正常接收，但调用 `api.prevent_close()` 是否真正阻止窗口关闭还未在设备上验证。
 
 **当前实现**:
 ```rust
