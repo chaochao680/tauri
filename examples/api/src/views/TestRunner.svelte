@@ -604,6 +604,28 @@ Expected behavior:
     });
   }
 
+  // ─── Tray Icon as Template Manual Tests ───
+  async function manualIconAsTemplate() {
+    await wrapManual('iconAsTemplate', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      const TEST_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGNImfb/Py0xw6gFoxaMWjBqwagFoxaMWjBqwdCwAAB3Wq5b2Gx59gAAAABJRU5ErkJggg==';
+      const tray = await TrayIcon.new({ id: 'template-tray', icon: TEST_ICON, iconAsTemplate: true });
+      manualResult = 'Tray icon created with iconAsTemplate=true.\nSwitch system wallpaper between dark and light.\nThe status bar icon should automatically change between white (dark wallpaper) and black (light wallpaper) to remain visible.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualWhiteIconNoTemplate() {
+    await wrapManual('whiteIconNoTemplate', async () => {
+      const { TrayIcon } = await import('@tauri-apps/api/tray');
+      // 32x32 pure white PNG (valid CRC)
+      const WHITE_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAKUlEQVR4nO3OIQEAAAACIP+f1hkWWEB6FgEBAQEBAQEBAQEBAQEBgXdgl/rw4unIZ5cAAAAASUVORK5CYII=';
+      const tray = await TrayIcon.new({ id: 'white-no-template', icon: WHITE_ICON, iconAsTemplate: false });
+      manualResult = 'Tray icon created: pure white 32x32, iconAsTemplate=false.\nSwitch between dark/light wallpaper.\nCompare with "Icon as Template" button to see if OHOS does its own color adaptation.';
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Clipboard writeImage Manual Tests ───
   // Valid 1×1 red pixel PNG (same bytes as automated test)
   const CLIPBOARD_TEST_PNG = new Uint8Array([
@@ -1193,6 +1215,8 @@ Expected behavior:
         <button class="btn" onclick={manualTrayEvent}>Tray Event (click icon to trigger)</button>
         <button class="btn" onclick={manualTrayMenu}>Tray Menu (right-click to see menu)</button>
         <button class="btn" onclick={manualTrayPredefined}>Tray Predefined Actions</button>
+        <button class="btn" onclick={manualIconAsTemplate}>Icon as Template (check wallpaper)</button>
+        <button class="btn" onclick={manualWhiteIconNoTemplate}>White Icon NO Template (compare)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">

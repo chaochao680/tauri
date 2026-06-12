@@ -345,9 +345,20 @@ bash D:/workspace/tauri/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" 
 ✅ No regressions
 ```
 
-### Step 5: 清理
+### Step 5: 清理（需用户确认）
 
 > **本地 commit 检视模式**：跳过此步骤（未 checkout 分支，无需清理）。
+
+**在开始清理前，先输出当前状态，然后用 AskUserQuestion 询问用户是否要清理：**
+
+```
+## 当前状态（清理前）
+tauri → review/pr-25
+tao → review/pr-8
+wry → review/pr-12
+```
+
+> **注意**：不要自动执行清理。等待用户确认后再执行以下 5a/5b/5c。如果用户选择跳过清理，直接跳到最终汇总输出。
 
 #### 5a. 切回原始分支并删除 review 分支
 
@@ -379,7 +390,11 @@ git clean -f <untracked 文件>   # 清理 untracked 文件
 ✅ tauri → ohdev (clean)
 ✅ tao → ohdev (stash restored)
 ✅ wry → ohdev (clean)
+```
 
+### 最终汇总（Step 5 完成后输出）
+
+```
 ## Code Review Complete
 
 Reviewed PRs:
@@ -390,7 +405,7 @@ Reviewed PRs:
 Build: ✅ Success
 Autotest: ✅ 42/42 passed
 
-All reviews submitted to GitHub. Local branches cleaned up.
+All reviews submitted to GitHub.
 ```
 
 ## 参考文档

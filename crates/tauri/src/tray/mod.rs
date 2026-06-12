@@ -308,7 +308,13 @@ impl<R: Runtime> TrayIconBuilder<R> {
     self
   }
 
-  /// Use the icon as a [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc). **macOS only**.
+  /// Use the icon as a [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc).
+  ///
+  /// ## Platform-specific
+  ///
+  /// - **macOS**: Template image rendered by system based on appearance (dark/light mode).
+  /// - **OHOS**: Generates white and black versions from alpha mask; system selects based on wallpaper color.
+  /// - **Windows / Linux**: Unsupported.
   pub fn icon_as_template(mut self, is_template: bool) -> Self {
     self.inner = self.inner.with_icon_as_template(is_template);
     self
@@ -641,12 +647,24 @@ impl<R: Runtime> TrayIcon<R> {
     Ok(())
   }
 
-  /// Sets the current icon as a [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc). **macOS only**.
-  pub fn set_icon_as_template(&self, #[allow(unused)] is_template: bool) -> crate::Result<()> {
+  /// Sets the current icon as a [template](https://developer.apple.com/documentation/appkit/nsimage/1520017-template?language=objc).
+  ///
+  /// ## Platform-specific
+  ///
+  /// - **macOS**: Template image rendered by system based on appearance (dark/light mode).
+  /// - **OHOS**: Generates white and black versions from alpha mask; system selects based on wallpaper color.
+  /// - **Windows / Linux**: Unsupported.
+  pub fn set_icon_as_template(&self, is_template: bool) -> crate::Result<()> {
     #[cfg(target_os = "macos")]
     run_item_main_thread!(self, |self_: Self| {
       self_.inner.set_icon_as_template(is_template)
     })?;
+    #[cfg(target_env = "ohos")]
+    {
+      self.inner.set_icon_as_template(is_template);
+    }
+    #[cfg(not(any(target_os = "macos", target_env = "ohos")))]
+    let _ = is_template;
     Ok(())
   }
 
