@@ -448,12 +448,17 @@ unsafe impl Send for WindowsStore {}
 #[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Sync for WindowsStore {}
 
+#[derive(Debug)]
+pub struct ExitState(pub AtomicBool);
+// Note: AtomicBool is inherently Send + Sync; no manual impls needed.
+
 #[derive(Debug, Clone)]
 pub struct DispatcherMainThreadContext<T: UserEvent> {
   pub window_target: EventLoopWindowTarget<Message<T>>,
   pub web_context: WebContextStore,
   // changing this to an Rc will cause frequent app crashes.
   pub windows: Arc<WindowsStore>,
+  pub exit_state: Arc<ExitState>,
   #[cfg(feature = "tracing")]
   pub active_tracing_spans: ActiveTraceSpanStore,
 }
@@ -2985,6 +2990,7 @@ impl<T: UserEvent> Wry<T> {
     let web_context = WebContextStore::default();
 
     let windows = Arc::new(WindowsStore(RefCell::new(BTreeMap::default())));
+    let exit_state = Arc::new(ExitState(AtomicBool::new(false)));
     let window_id_map = WindowIdStore::default();
 
     let context = Context {
@@ -2995,6 +3001,7 @@ impl<T: UserEvent> Wry<T> {
         window_target: event_loop.deref().clone(),
         web_context,
         windows,
+        exit_state,
         #[cfg(feature = "tracing")]
         active_tracing_spans: Default::default(),
       },
@@ -3266,6 +3273,7 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
   fn run_iteration<F: FnMut(RunEvent<T>) + 'static>(&mut self, mut callback: F) {
     use tao::platform::run_return::EventLoopExtRunReturn;
     let windows = self.context.main_thread.windows.clone();
+    let exit_state = self.context.main_thread.exit_state.clone();
     let window_id_map = self.context.window_id_map.clone();
     let web_context = &self.context.main_thread.web_context;
     let plugins = self.context.plugins.clone();
@@ -3293,6 +3301,7 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
               callback: &mut callback,
               window_id_map: window_id_map.clone(),
               windows: windows.clone(),
+              exit_state: exit_state.clone(),
               #[cfg(feature = "tracing")]
               active_tracing_spans: active_tracing_spans.clone(),
             },
@@ -3311,6 +3320,7 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
             callback: &mut callback,
             windows: windows.clone(),
             window_id_map: window_id_map.clone(),
+            exit_state: exit_state.clone(),
             #[cfg(feature = "tracing")]
             active_tracing_spans: active_tracing_spans.clone(),
           },
@@ -3349,6 +3359,7 @@ where
   F: FnMut(RunEvent<T>) + 'static,
 {
   let windows = runtime.context.main_thread.windows.clone();
+  let exit_state = runtime.context.main_thread.exit_state.clone();
   let window_id_map = runtime.context.window_id_map.clone();
   let web_context = runtime.context.main_thread.web_context.clone();
   let plugins = runtime.context.plugins.clone();
@@ -3368,6 +3379,7 @@ where
           callback: &mut callback,
           window_id_map: window_id_map.clone(),
           windows: windows.clone(),
+          exit_state: exit_state.clone(),
           #[cfg(feature = "tracing")]
           active_tracing_spans: active_tracing_spans.clone(),
         },
@@ -3385,6 +3397,7 @@ where
         callback: &mut callback,
         window_id_map: window_id_map.clone(),
         windows: windows.clone(),
+        exit_state: exit_state.clone(),
         #[cfg(feature = "tracing")]
         active_tracing_spans: active_tracing_spans.clone(),
       },
@@ -3396,6 +3409,7 @@ pub struct EventLoopIterationContext<'a, T: UserEvent> {
   pub callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
   pub window_id_map: WindowIdStore,
   pub windows: Arc<WindowsStore>,
+  pub exit_state: Arc<ExitState>,
   #[cfg(feature = "tracing")]
   pub active_tracing_spans: ActiveTraceSpanStore,
 }
@@ -4274,11 +4288,47 @@ fn handle_event_loop<T: UserEvent>(
     callback,
     window_id_map,
     windows,
+    exit_state,
     #[cfg(feature = "tracing")]
     active_tracing_spans,
   } = context;
   if *control_flow != ControlFlow::Exit {
     *control_flow = ControlFlow::Wait;
+  }
+
+  // OHOS: Process pending window close requests from ArkTS.
+  // ArkTS calls notifyWindowClose() synchronously (pushes OHOS window ID to Rust queue),
+  // then calls destroyWindow() asynchronously (returns a Promise). The drain runs
+  // synchronously at the start of the next Rust event loop iteration, reading from
+  // stored Rust values before the async destruction completes. See defensive guard
+  // on wrapper.inner below.
+  #[cfg(target_env = "ohos")]
+  {
+    use tao::platform::ohos::WindowExtOpenHarmony;
+    let pending_closes = tao::platform::ohos::ability::drain_pending_window_closes();
+    for ohos_win_id in pending_closes {
+      // Find the Tauri WindowId matching this OHOS window ID.
+      // Defensive: wrapper.inner may be None if the OHOS native window was already
+      // destroyed by ArkTS destroyWindow(). In that case, window_id() is unavailable,
+      // so we skip this entry — the TaoWindowEvent::Destroyed handler (if fired)
+      // will process the lifecycle via on_window_close (idempotent).
+      let matching_id = windows
+        .0
+        .borrow()
+        .iter()
+        .find_map(|(id, wrapper)| {
+          wrapper
+            .inner
+            .as_ref()
+            .and_then(|w| w.window_id())
+            .and_then(|wid| if wid == ohos_win_id as i64 { Some(*id) } else { None })
+        });
+      if let Some(window_id) = matching_id {
+        on_close_requested(callback, window_id, windows.clone(), exit_state.clone());
+      } else {
+        log::debug!("[wry] OHOS pending close: no matching Tauri window for OHOS window ID {}", ohos_win_id);
+      }
+    }
   }
 
   match event {
@@ -4295,10 +4345,21 @@ fn handle_event_loop<T: UserEvent>(
     }
 
     Event::LoopDestroyed => {
-      log::info!("[wry] Event::LoopDestroyed received, triggering Exit");
-      // TODO: OHOS 上需要正确处理 ExitRequested
-      // 当前 LoopDestroyed 由 MainEvent::Destroy 触发，直接发送 Exit
-      // 理想情况应先触发 ExitRequested(code: Some(0))，让用户决定是否阻止退出
+      log::info!("[wry] Event::LoopDestroyed received");
+      #[cfg(target_env = "ohos")]
+      {
+        // OHOS: check if ExitRequested was already sent via the window-close path
+        if !exit_state.0.load(Ordering::SeqCst) {
+          // Not yet sent — fire it so user code can run cleanup
+          let (tx, rx) = channel();
+          callback(RunEvent::ExitRequested { code: None, tx });
+          let _ = rx.try_recv();
+          // Mark ExitRequested as sent to prevent duplication
+          exit_state.0.store(true, Ordering::SeqCst);
+          // On OHOS, the system has begun teardown at LoopDestroyed; prevent_exit cannot stop it
+          // Still fire ExitRequested to let user code perform cleanup
+        }
+      }
       callback(RunEvent::Exit);
     }
 
@@ -4421,24 +4482,15 @@ fn handle_event_loop<T: UserEvent>(
             }
           }
           TaoWindowEvent::CloseRequested => {
-            on_close_requested(callback, window_id, windows);
+            if on_close_requested(callback, window_id, windows, exit_state) {
+              #[cfg(not(target_env = "ohos"))]
+              { *control_flow = ControlFlow::Exit; }
+            }
           }
           TaoWindowEvent::Destroyed => {
-            let removed = windows.0.borrow_mut().remove(&window_id).is_some();
-            if removed {
-              let is_empty = windows.0.borrow().is_empty();
-              if is_empty {
-                let (tx, rx) = channel();
-                callback(RunEvent::ExitRequested { code: None, tx });
-
-                let recv = rx.try_recv();
-                let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
-                log::info!("[wry] ExitRequested should_prevent: {}", should_prevent);
-
-                if !should_prevent {
-                  *control_flow = ControlFlow::Exit;
-                }
-              }
+            if on_window_close(callback, window_id, windows, exit_state) {
+              #[cfg(not(target_env = "ohos"))]
+              { *control_flow = ControlFlow::Exit; }
             }
           }
           TaoWindowEvent::Resized(size) => {
@@ -4478,15 +4530,26 @@ fn handle_event_loop<T: UserEvent>(
         let recv = rx.try_recv();
         let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
 
+        // Mark ExitRequested as sent to prevent duplicate from LoopDestroyed path
+        exit_state.0.store(true, Ordering::SeqCst);
+
         if !should_prevent {
-          *control_flow = ControlFlow::Exit;
+          #[cfg(not(target_env = "ohos"))]
+          { *control_flow = ControlFlow::Exit; }
         }
       }
       Message::Window(id, WindowMessage::Close) => {
-        on_close_requested(callback, id, windows);
+        if on_close_requested(callback, id, windows, exit_state) {
+          #[cfg(not(target_env = "ohos"))]
+          { *control_flow = ControlFlow::Exit; }
+        }
       }
       Message::Window(id, WindowMessage::Destroy) => {
-        on_window_close(id, windows);
+        // Call on_window_close directly, skip CloseRequested to avoid recursion
+        if on_window_close(callback, id, windows, exit_state) {
+          #[cfg(not(target_env = "ohos"))]
+          { *control_flow = ControlFlow::Exit; }
+        }
       }
       Message::UserEvent(t) => callback(RunEvent::UserEvent(t)),
       message => {
@@ -4523,7 +4586,8 @@ fn on_close_requested<'a, T: UserEvent>(
   callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
   window_id: WindowId,
   windows: Arc<WindowsStore>,
-) {
+  exit_state: Arc<ExitState>,
+) -> bool {
   let (tx, rx) = channel();
   let windows_ref = windows.0.borrow();
   if let Some(w) = windows_ref.get(&window_id) {
@@ -4544,18 +4608,65 @@ fn on_close_requested<'a, T: UserEvent>(
       event: WindowEvent::CloseRequested { signal_tx: tx },
     });
     if let Ok(true) = rx.try_recv() {
+      // User prevented close, do not call on_window_close
     } else {
-      on_window_close(window_id, windows);
+      return on_window_close(callback, window_id, windows, exit_state);
     }
   }
+  false
 }
 
-fn on_window_close(window_id: WindowId, windows: Arc<WindowsStore>) {
-  if let Some(window_wrapper) = windows.0.borrow_mut().get_mut(&window_id) {
-    window_wrapper.inner = None;
+/// Handle window close: remove from store, fire events, check if event loop should exit.
+/// Returns `true` if all windows are closed and user did not prevent exit.
+/// Callers must set `ControlFlow::Exit` on non-OHOS platforms when this returns `true`.
+fn on_window_close<'a, T: UserEvent>(
+  callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
+  window_id: WindowId,
+  windows: Arc<WindowsStore>,
+  exit_state: Arc<ExitState>,
+) -> bool {
+  // Remove window entry from WindowsStore (idempotent)
+  let removed = windows.0.borrow_mut().remove(&window_id);
+  if let Some(mut window_wrapper) = removed {
+    // Maintain drop order: surface must be dropped before window.
+    // softbuffer::Surface holds Arc<Window>; if Window drops first,
+    // Surface may access freed resources on drop.
     #[cfg(windows)]
     window_wrapper.surface.take();
+
+    let label = window_wrapper.label;
+
+    // Fire WindowEvent::Destroyed
+    callback(RunEvent::WindowEvent {
+      label,
+      event: WindowEvent::Destroyed,
+    });
+
+    // Check if all windows are closed
+    let is_empty = windows.0.borrow().is_empty();
+    if is_empty {
+      // Guard against duplicate ExitRequested (LoopDestroyed path may also fire)
+      if !exit_state.0.load(Ordering::SeqCst) {
+        let (tx, rx) = channel();
+        callback(RunEvent::ExitRequested { code: None, tx });
+
+        let recv = rx.try_recv();
+        let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
+        log::info!("[wry] ExitRequested (all windows closed) should_prevent: {}", should_prevent);
+
+        // Mark ExitRequested as sent
+        exit_state.0.store(true, Ordering::SeqCst);
+
+        if !should_prevent {
+          // On OHOS, the system has already started the destruction flow
+          // (LoopDestroyed), so we must not set ControlFlow::Exit.
+          // On other platforms, the caller must set ControlFlow::Exit.
+          return true;
+        }
+      }
+    }
   }
+  false
 }
 
 fn parse_proxy_url(url: &Url) -> Result<ProxyConfig> {

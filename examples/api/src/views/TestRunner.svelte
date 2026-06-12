@@ -1051,12 +1051,12 @@ Expected behavior:
           windowId: 'ua-test-custom',
           userAgent: 'MyApp/1.0 Tauri/2.0',
         });
-        manualResult = '✓ 已打开新窗口（自定义 UA: "MyApp/1.0 Tauri/2.0"）。\n' +
-          '请在新窗口中查看测试结果。\n\n' +
-          '预期: 页面显示绿色 "✓ PASS: Expected UA detected"';
+        manualResult = '✓ Opened new window (custom UA: "MyApp/1.0 Tauri/2.0").\n' +
+          'Check the new window for test results.\n\n' +
+          'Expected: page shows green "✓ PASS: Expected UA detected"';
         onMessage('UA custom test window opened');
       } catch (e) {
-        manualResult = '✗ 创建窗口失败: ' + e;
+        manualResult = '✗ Failed to create window: ' + e;
         onMessage('UA custom test FAILED: ' + e);
       }
     });
@@ -1069,12 +1069,12 @@ Expected behavior:
           windowId: 'ua-test-default',
           userAgent: '',
         });
-        manualResult = '✓ 已打开新窗口（系统默认 UA）。\n' +
-          '请在新窗口中查看测试结果。\n\n' +
-          '预期: 页面显示蓝色 "ℹ System default UA (no custom UA set)"';
+        manualResult = '✓ Opened new window (system default UA).\n' +
+          'Check the new window for test results.\n\n' +
+          'Expected: page shows blue "ℹ System default UA (no custom UA set)"';
         onMessage('UA default test window opened');
       } catch (e) {
-        manualResult = '✗ 创建窗口失败: ' + e;
+        manualResult = '✗ Failed to create window: ' + e;
         onMessage('UA default test FAILED: ' + e);
       }
     });
@@ -1090,9 +1090,9 @@ Expected behavior:
           windowId: 'ua-test-a',
           userAgent: 'App-A/1.0',
         });
-        resultA = '✓ 窗口 A (App-A/1.0) 已打开';
+        resultA = '✓ Window A (App-A/1.0) opened';
       } catch (e) {
-        resultA = '✗ 窗口 A 创建失败: ' + e;
+        resultA = '✗ Window A creation failed: ' + e;
       }
 
       try {
@@ -1100,15 +1100,47 @@ Expected behavior:
           windowId: 'ua-test-b',
           userAgent: 'App-B/2.0',
         });
-        resultB = '✓ 窗口 B (App-B/2.0) 已打开';
+        resultB = '✓ Window B (App-B/2.0) opened';
       } catch (e) {
-        resultB = '✗ 窗口 B 创建失败: ' + e;
+        resultB = '✗ Window B creation failed: ' + e;
       }
 
       manualResult = resultA + '\n' + resultB + '\n\n' +
-        '请在已打开的窗口中查看测试结果。\n' +
-        '可通过 hilog 验证: hdc shell "hilog | grep UA-TEST"';
+        'Check test results in the opened windows.\n' +
+        'Verify via hilog: hdc shell "hilog | grep UA-TEST"';
       onMessage('UA multi-window: ' + resultA + ' | ' + resultB);
+    });
+  }
+
+  // ─── on_new_window Manual Tests ───
+  async function manualNewWindowAllow() {
+    await wrapManual('newWindowAllow', async () => {
+      await invoke('set_deny_new_window', { deny: false });
+      window.open('https://example.com/manual-allow-test', '_blank');
+      manualResult = 'Allow mode: dialog should appear with ✕ close button in title bar.\n' +
+        'Verify:\n' +
+        '  1. Dialog title bar shows URL\n' +
+        '  2. Click ✕ to close\n' +
+        '  3. Click outside dialog to close (autoCancel)\n' +
+        '  4. Dialog embeds Web component loading the page';
+      onMessage('on_new_window Allow: dialog should appear');
+    });
+  }
+
+  async function manualNewWindowDeny() {
+    await wrapManual('newWindowDeny', async () => {
+      await invoke('set_deny_new_window', { deny: true });
+      window.open('https://example.com/manual-deny-test', '_blank');
+      await new Promise((r) => setTimeout(r, 1000));
+      const lastUrl = await invoke('get_last_new_window_url');
+      manualResult = 'Deny mode: no dialog should appear.\n' +
+        `Handler received URL: ${lastUrl || '(null)'}\n` +
+        `Verify:\n` +
+        `  1. No dialog appears\n` +
+        `  2. Page remains unchanged\n` +
+        `  3. Handler received URL containing 'example.com/manual-deny-test'`;
+      await invoke('set_deny_new_window', { deny: false });
+      onMessage('on_new_window Deny: no dialog should appear');
     });
   }
 </script>
@@ -1282,6 +1314,13 @@ Expected behavior:
         <button class="btn" onclick={manualUserAgentCustom}>userAgent (custom)</button>
         <button class="btn" onclick={manualUserAgentDefault}>userAgent (default)</button>
         <button class="btn" onclick={manualUserAgentMultiWindow}>userAgent (multi-window)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">on_new_window Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualNewWindowAllow}>Allow (dialog with ✕ close)</button>
+        <button class="btn" onclick={manualNewWindowDeny}>Deny (no dialog)</button>
       </div>
     </div>
     {#if manualResult}

@@ -570,6 +570,13 @@ impl<T: UserEvent, R: Runtime<T>> PendingWindow<T, R> {
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct WindowId(u32);
 
+impl WindowId {
+  /// Returns the raw numeric value of this window ID.
+  pub fn as_u32(&self) -> u32 {
+    self.0
+  }
+}
+
 impl From<u32> for WindowId {
   fn from(value: u32) -> Self {
     Self(value)

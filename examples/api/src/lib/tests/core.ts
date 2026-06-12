@@ -644,6 +644,38 @@ export const coreTests: TestCase[] = [
     },
   },
   {
+    name: 'RunEvent::WindowEvent::Destroyed fires',
+    category: 'auto',
+    async fn() {
+      // Create a new window, then close it — this triggers both CloseRequested and Destroyed
+      // After Phase 2 fix: close() → CloseRequested → on_window_close → Destroyed
+      const actualLabel = await invoke<string>('create_isolated_window', {
+        windowId: 'test-destroyed',
+        dataSuffix: 'destroy',
+        url: '/hello.html',
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      // Close the window — triggers WindowEvent::CloseRequested then WindowEvent::Destroyed
+      const win = await WebviewWindow.getByLabel(actualLabel);
+      if (win) {
+        await win.close();
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      const events = await invoke('get_tracked_run_events') as string[];
+      assert(
+        events.includes('WindowEvent::Destroyed'),
+        `WindowEvent::Destroyed should be in tracked events, got: ${JSON.stringify(events)}`,
+      );
+      // Also verify CloseRequested was fired before Destroyed
+      const closeReqIdx = events.indexOf('WindowEvent::CloseRequested');
+      const destroyedIdx = events.indexOf('WindowEvent::Destroyed');
+      assert(
+        closeReqIdx !== -1 && closeReqIdx < destroyedIdx,
+        `WindowEvent::CloseRequested should fire before WindowEvent::Destroyed, got: ${JSON.stringify(events)}`,
+      );
+    },
+  },
+  {
     name: 'RunEvent::Opened (manual — requires deep link)',
     category: 'manual',
     async fn() {
@@ -735,6 +767,83 @@ export const coreTests: TestCase[] = [
       assert(decorated === false, `Transparent borderless window should have decorations=false, got ${decorated}`);
       // Clean up
       await win!.close();
+    },
+  },
+
+  // ─── on_new_window (OHOS onWindowNew interception) ───
+  {
+    name: 'on_new_window: Deny blocks window.open()',
+    category: 'auto',
+    async fn() {
+      // Set handler to Deny mode
+      await invoke('set_deny_new_window', { deny: true });
+      // Attempt to open a new window
+      window.open('https://example.com/deny-test', '_blank');
+      // Wait for the event chain to complete
+      await new Promise((r) => setTimeout(r, 1500));
+      // Verify handler was called with correct URL
+      const lastUrl = await invoke<string | null>('get_last_new_window_url');
+      assert(
+        lastUrl !== null && lastUrl.includes('example.com/deny-test'),
+        `Handler should have received URL containing 'example.com/deny-test', got: ${lastUrl}`,
+      );
+      // Reset to Allow mode
+      await invoke('set_deny_new_window', { deny: false });
+    },
+  },
+  {
+    name: 'on_new_window: Allow triggers event with correct URL',
+    category: 'auto',
+    async fn() {
+      // Set handler to Allow mode
+      await invoke('set_deny_new_window', { deny: false });
+      // Listen for the new-window-requested event
+      let eventUrl: string | null = null;
+      const unlisten = await listen<string>('new-window-requested', (event) => {
+        eventUrl = event.payload;
+      });
+      // Attempt to open a new window
+      window.open('https://example.com/allow-test', '_blank');
+      // Wait for the event chain to complete
+      await new Promise((r) => setTimeout(r, 2000));
+      unlisten();
+      // Verify event was received with correct URL
+      assert(
+        eventUrl !== null && eventUrl.includes('example.com/allow-test'),
+        `Should have received 'new-window-requested' event with URL containing 'example.com/allow-test', got: ${eventUrl}`,
+      );
+    },
+  },
+  {
+    name: 'on_new_window: Allow dialog has close button (manual)',
+    category: 'manual',
+    async fn() {
+      // Ensure Allow mode
+      await invoke('set_deny_new_window', { deny: false });
+      // Open a new window — should trigger a dialog with a close button
+      window.open('https://example.com/close-test', '_blank');
+      // Manual verification:
+      // 1. A dialog should appear with the URL displayed in the title bar
+      // 2. There should be a ✕ close button in the top-right corner
+      // 3. Clicking ✕ should close the dialog
+      // 4. Clicking outside the dialog (autoCancel) should also close it
+    },
+  },
+  {
+    name: 'on_new_window: Deny prevents dialog (manual)',
+    category: 'manual',
+    async fn() {
+      // Set Deny mode
+      await invoke('set_deny_new_window', { deny: true });
+      // Attempt to open a new window
+      window.open('https://example.com/deny-manual-test', '_blank');
+      // Wait briefly
+      await new Promise((r) => setTimeout(r, 1000));
+      // Manual verification:
+      // 1. No dialog should appear
+      // 2. The page should remain unchanged
+      // Reset
+      await invoke('set_deny_new_window', { deny: false });
     },
   },
 ];

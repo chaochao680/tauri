@@ -115,6 +115,23 @@ ohpm install --all
 这两个文件不在模板中（属于 examples/api 项目特有），`tauri ohos init` 不会生成它们。如果之前删除了整个 `gen/ohos/` 目录，需要手动恢复：
 - `gen/ohos/entry/src/main/ets/pages/TestTrayPage.ets`
 - `gen/ohos/entry/src/main/ets/testtrayability/TestTrayAbility.ets`
+- `gen/ohos/entry/src/main/ets/pages/TransparencyTestPage.ets` ← WebView 透明度测试页面
+
+**归档位置**: 这些文件已归档在 `.claude/skills/ohos-build/templates/` 目录下：
+- `templates/pages/TestTrayPage.ets`
+- `templates/testtrayability/TestTrayAbility.ets`
+- `templates/pages/TransparencyTestPage.ets`
+
+恢复命令：
+```bash
+cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/pages/TestTrayPage.ets \
+     ${PROJECT_ROOT}/tauri/examples/api/src-tauri/gen/ohos/entry/src/main/ets/pages/
+cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/pages/TransparencyTestPage.ets \
+     ${PROJECT_ROOT}/tauri/examples/api/src-tauri/gen/ohos/entry/src/main/ets/pages/
+# TestTrayAbility 需要复制到 testtrayability 目录
+cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/testtrayability/TestTrayAbility.ets \
+     ${PROJECT_ROOT}/tauri/examples/api/src-tauri/gen/ohos/entry/src/main/ets/testtrayability/
+```
 
 ### ④ 扩展能力和权限（module.json5）
 
