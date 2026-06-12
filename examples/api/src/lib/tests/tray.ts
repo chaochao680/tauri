@@ -160,6 +160,34 @@ export const trayTests: TestCase[] = [
     },
   },
   {
+    name: '@tauri-apps/api/tray.TrayIcon.setIconAsTemplate_true',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setIcon(TEST_ICON);
+      await sharedTray.setIconAsTemplate(true);
+    },
+  },
+  {
+    name: '@tauri-apps/api/tray.TrayIcon.setIconAsTemplate_false',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setIconAsTemplate(false);
+    },
+  },
+  {
+    name: '@tauri-apps/api/tray.TrayIcon.setIconAsTemplate_toggle',
+    category: 'auto',
+    async fn() {
+      assert(sharedTray !== null, 'sharedTray not initialized');
+      await sharedTray.setIcon(TEST_ICON);
+      await sharedTray.setIconAsTemplate(true);
+      await sharedTray.setIconAsTemplate(false);
+      await sharedTray.setIconAsTemplate(true);
+    },
+  },
+  {
     name: '@tauri-apps/api/tray.TrayIcon.setShowMenuOnLeftClick',
     category: 'auto',
     async fn() {

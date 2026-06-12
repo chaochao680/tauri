@@ -5,7 +5,7 @@ description: Tauri OHOS 适配验证阶段。使用场景：(1) 代码实现和�
 
 # Tauri OHOS 验证阶段
 
-本技能直接驱动构建和测试流程：构建部署 → 运行测试 → 问题定位 → 归档。
+本技能直接驱动构建和测试流程：Rust UT（设备端） → 构建部署 → 自动测试 → 手动测试 → 问题定位 → 归档。
 
 > **openspec 目录说明**：openspec 初始化在 **tauri 仓库根目录**（`<项目根目录>/tauri/`），不是项目根目录。所有 openspec 命令必须在 tauri 仓库目录下执行。
 
@@ -22,7 +22,7 @@ description: Tauri OHOS 适配验证阶段。使用场景：(1) 代码实现和�
 - 如果 TaskList 为空 → 立即创建以下 task（不可跳过）：
 
 ```
-TaskCreate: "Step 1: 构建-测试循环 — 构建部署 + 检查报告 + 问题修复（循环直到通过）"
+TaskCreate: "Step 1: 构建-测试循环 — 构建部署 + 自动测试 + Rust UT + 手动测试（循环直到通过）"
 TaskCreate: "Step 2: 可选 Commit — 询问用户是否提交当前 Phase 修改"
 TaskCreate: "Step 3: 归档 — openspec archive + 更新 plan 文件"
 TaskCreate: "Step 4: 整理手动用例 — 追加到 doc/manual_tests.md"
@@ -35,7 +35,7 @@ TaskCreate: "Step 4: 整理手动用例 — 追加到 doc/manual_tests.md"
 每个 Step 开始时：`TaskUpdate → in_progress`
 每个 Step 完成后：`TaskUpdate → completed`
 
-注意：Step 1 是一个**循环**（构建 → 测试 → 修复 → 重建），整个循环期间保持 `in_progress`，直到测试全部通过后才标 `completed`。
+注意：Step 1 是一个**循环**（Rust UT → 构建 → 自动测试 → 手动测试 → 修复 → 重建），整个循环期间保持 `in_progress`，直到所有测试全部通过后才标 `completed`。
 
 ## 步骤
 
@@ -43,7 +43,32 @@ TaskCreate: "Step 4: 整理手动用例 — 追加到 doc/manual_tests.md"
 
 此步骤包含内部循环，直到测试全部通过。
 
-#### 1a. 构建部署到设备
+#### 1a. Rust 单元测试（设备端）
+
+在进行完整构建部署前，先使用 [ohos-rust-ut Skill](../ohos-rust-ut/SKILL.md) 在 OHOS 设备上运行 Rust `#[cfg(test)]` 单元测试，覆盖 `#[cfg(target_env = "ohos")]` 门控的代码（宿主机无法编译的部分）。UT 比完整构建快得多，可以快速发现逻辑错误。
+
+对每个有代码变更的 crate 运行 UT：
+
+```bash
+# tray-icon crate（desktop 模式）
+PACKAGE=tray-icon OHOS_DEVICE_TYPE=desktop bash .claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# tauri crate（desktop 模式）
+PACKAGE=tauri OHOS_DEVICE_TYPE=desktop bash .claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# openharmony-ability crate（含 menu feature）
+PACKAGE=openharmony-ability FEATURES=menu OHOS_DEVICE_TYPE=desktop bash .claude/skills/ohos-rust-ut/scripts/run-ut.sh
+
+# muda crate
+PACKAGE=muda OHOS_DEVICE_TYPE=desktop bash .claude/skills/ohos-rust-ut/scripts/run-ut.sh
+```
+
+**只需对有变更的 crate 运行**（根据 git diff 判断），无变更的跳过。
+
+**如果有 UT 失败** → 进入 1e（问题定位），修复后回到 1a 重新运行 UT
+**如果全部通过** → 进入 1b（构建部署）
+
+#### 1b. 构建部署到设备
 
 使用 [ohos-build Skill](../ohos-build/SKILL.md) 进行一键构建部署：
 
@@ -61,18 +86,30 @@ bash .claude/skills/ohos-build/scripts/run-tests.sh "" desktop
 4. 卸载旧版 → 安装 → 启动
 5. 等待 30s → 拉取测试报告
 
-#### 1b. 检查测试报告
+#### 1c. 检查测试报告
 
 读取 `test-report.md` 的内容：
 - ✅ 通过
 - ❌ 失败
 - ⏭️ 跳过
 
-**如果全部通过** → 标记 TaskUpdate → completed，进入 Step 2（可选 Commit）
+**如果有失败** → 进入 1e（问题定位），然后回到 1b 重新构建
 
-**如果有失败** → 进入 1c（问题定位），然后回到 1a 重新构建
+**如果自动测试全部通过** → 进入 1d（手动用例确认）
 
-#### 1c. 问题定位与修复
+#### 1d. 手动用例确认
+
+读取当前 openspec 的 `tasks.md`，找到所有标记为 `[ ]` 的手动测试任务（通常是 "设备验证：手动测试" 开头的条目）。
+
+使用 **AskUserQuestion** 逐一向用户确认每个手动用例的测试结果：
+> "请在设备上执行手动测试：<用例描述>，结果如何？"
+
+- 用户确认 **通过** → 在 tasks.md 中将该任务标记为 `[x]`
+- 用户确认 **失败** → 进入 1e（问题定位），修复后回到 1b 重新构建
+
+**所有自动测试 + Rust UT + 手动测试均通过后** → 标记 TaskUpdate → completed，进入 Step 2（可选 Commit）
+
+#### 1e. 问题定位与修复
 
 读取 `references/troubleshooting-guide.md`，按失败类型选择排查路径：
 
@@ -110,7 +147,7 @@ hdc shell "hilog -x | grep '关键词'"
 3. ArkTS 层 → 检查组件生命周期、事件注册、异步竞态
 4. 无报错但无效果 → 大概率是静默失败
 
-修复问题后 → **回到 1a 重新构建部署**
+修复问题后 → **回到 1a 重新运行 UT，通过后回到 1b 重新构建部署**
 
 ### Step 2: 可选 Commit
 
@@ -190,6 +227,7 @@ openspec list --json
 
 ### 测试结果
 - 自动测试：<X> 通过 / <Y> 失败 / <Z> 跳过
+- Rust UT（设备端）：<A> 通过 / <B> 失败（覆盖 crate1, crate2, ...）
 - 手动测试：已整理到 doc/manual_tests.md
 
 ### 构建-测试循环

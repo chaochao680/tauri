@@ -5,10 +5,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/env.sh"
 
+# Read CLI params BEFORE sourcing env.sh (env.sh sets default "mobile" which would shadow $2)
 DEVICE_SN="${DEVICE_SN:-$1}"
 OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-$2}"
+export OHOS_DEVICE_TYPE
+
+source "$SCRIPT_DIR/env.sh"
 OHOS_PROJECT="$PROJECT_ROOT/examples/api/src-tauri/gen/ohos"
 APP_JSON="$OHOS_PROJECT/AppScope/app.json5"
 BUNDLE_NAME=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' "$APP_JSON" | head -1 | sed 's/.*"bundleName"[[:space:]]*:[[:space:]]*"//;s/"//')
