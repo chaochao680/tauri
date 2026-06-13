@@ -39,6 +39,7 @@
     "allow-get-ohos-version-info",
     "allow-set-deny-new-window",
     "allow-get-last-new-window-url",
+    "allow-test-web-page-snapshot",
     "allow-create-counter",
     "allow-increment-counter",
     "allow-get-counter-value",

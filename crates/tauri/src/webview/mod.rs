@@ -236,6 +236,13 @@ impl PlatformWebview {
   pub fn jni_handle(&self) -> tauri_runtime_wry::wry::JniHandle {
     self.0
   }
+
+  /// Returns the OHOS webview handle for accessing platform-specific APIs
+  /// (e.g., `web_page_snapshot`).
+  #[cfg(target_env = "ohos")]
+  pub fn inner(&self) -> tauri_runtime_wry::wry::OhosWebviewHandle {
+    self.0.clone()
+  }
 }
 
 /// Response for the new window request handler.

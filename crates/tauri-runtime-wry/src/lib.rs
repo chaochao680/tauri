@@ -4160,7 +4160,8 @@ fn handle_user_message<T: UserEvent>(
             }
             #[cfg(target_env = "ohos")]
             {
-              log::warn!("WithWebview is not implemented for OpenHarmony yet");
+              use wry::WebViewExtOhos;
+              _f(webview.webview_handle());
             }
           }
           #[cfg(any(debug_assertions, feature = "devtools"))]
