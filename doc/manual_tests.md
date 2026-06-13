@@ -196,7 +196,26 @@
 
 ---
 
-## 十、用例统计
+## 十、Single-Instance（单实例）手动用例
+
+> **前置条件**: example app 已集成 `tauri-plugin-single-instance`，callback 中通过 `log::info!("[single-instance] callback fired! args={:?}, cwd={:?}", args, cwd)` 输出日志。
+>
+> **验证方法**: 在宿主机执行 `hdc shell` 命令触发二次启动，通过 `hilog` 观察 callback 是否触发。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | single-instance | 首次启动 | App Normal Launch — 首次启动不触发 callback | **T0** | 设备已连接；app 未运行 | 1. `hdc shell hilog -r`（清空日志） 2. 启动 app（点击图标或 `hdc shell aa start -a EntryAbility -b com.tauri.api`） 3. `hdc shell "hilog -x \| grep single-instance"` | hilog 中**无** `[single-instance] callback fired` 日志输出；app 正常启动显示主界面 | 首次启动走 `onCreate` 路径，不触发 `onNewWant` |
+| core | single-instance | 二次启动 | Second Launch Callback — 再次启动触发 callback | **T0** | app 已在运行 | 1. `hdc shell hilog -r`（清空日志） 2. `hdc shell "aa start -a EntryAbility -b com.tauri.api -U 'tauri://test'"` 3. `hdc shell "hilog -x \| grep single-instance"` | ① hilog 输出 `[single-instance] callback fired! args=["tauri://test", "{...}"], cwd=""` ② app 回到前台 ③ 不会创建新的 app 实例 | OHOS 默认 `launchType: singleton`，OS 层面阻止新实例 |
+| core | single-instance | 参数传递 | Want Parameters — 二次启动携带 URI | **T0** | app 已在运行 | 1. `hdc shell hilog -r` 2. `hdc shell "aa start -a EntryAbility -b com.tauri.api -U 'myapp://action?key=value'"` 3. `hdc shell "hilog -x \| grep single-instance"` | ① args 第一个元素为 `"myapp://action?key=value"`（want.uri） ② args 第二个元素为 JSON 字符串，包含系统注入的 want.parameters（具体字段因 API 版本和设备而异，验证重点为非空 JSON 字符串） ③ cwd 为空字符串 `""` | `aa start -U` 仅设置 want.uri，want.parameters 由系统自动注入 |
+| core | single-instance | 无 URI 启动 | Second Launch Without URI — 无 URI 二次启动 | **T1** | app 已在运行 | 1. `hdc shell hilog -r` 2. `hdc shell "aa start -a EntryAbility -b com.tauri.api"` 3. `hdc shell "hilog -x \| grep NativeAbility"` 4. `hdc shell "hilog -x \| grep single-instance"` | ① `hilog \| grep NativeAbility` 有 `onNewWant - uri: , parametersJson.length: <N>` 日志（URI 为空，length > 0） ② `hilog \| grep single-instance` 有 `[single-instance] callback fired!` 日志，args 仅包含系统注入的 want.parameters JSON（空 URI 被过滤） | 与 macOS/Windows 行为对齐：第二次启动无论有无参数，callback 均触发 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Single-Instance（单实例） | 3 | 1 | **4** |
+
+---
+
+## 十一、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -211,5 +230,6 @@
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
 | on_new_window（新窗口拦截） | 1 | 1 | **2** |
-| **合计** | **36** | **39** | **75** |
+| Single-Instance（单实例） | 3 | 1 | **4** |
+| **合计** | **39** | **40** | **79** |
 
