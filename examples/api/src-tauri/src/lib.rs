@@ -72,6 +72,15 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       None,
     ));
 
+  // Register single-instance FIRST for early callback availability
+  #[cfg(target_env = "ohos")]
+  let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+    log::info!("[single-instance] callback fired! args={:?}, cwd={:?}", args, cwd);
+    if let Some(window) = app.get_webview_window("main") {
+      let _ = window.set_focus();
+    }
+  }));
+
   #[cfg(target_env = "ohos")]
   let builder = builder
     .plugin(
