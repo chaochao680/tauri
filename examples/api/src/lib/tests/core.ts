@@ -396,6 +396,34 @@ export const coreTests: TestCase[] = [
     },
   },
 
+  // Test web_page_snapshot on OHOS: captures WebView content as RGBA bitmap
+  {
+    name: 'webview.webPageSnapshot',
+    category: 'auto',
+    async fn() {
+      const resultPromise = new Promise<any>((resolve) => {
+        const unlisten = listen('web-page-snapshot-result', (event) => {
+          unlisten.then((fn) => fn());
+          resolve(event.payload);
+        });
+        // Timeout: if event never fires, resolve with error after 10s
+        setTimeout(() => {
+          unlisten.then((fn) => fn());
+          resolve({ success: false, error: 'Timeout: no snapshot result within 10s' });
+        }, 10000);
+      });
+
+      await invoke('test_web_page_snapshot');
+
+      const result = await resultPromise;
+      assert(result.success === true, `webPageSnapshot failed: ${result.error || 'unknown error'}`);
+      assert(result.width > 0, `Expected width > 0, got ${result.width}`);
+      assert(result.height > 0, `Expected height > 0, got ${result.height}`);
+      assert(result.rgba_len === result.width * result.height * 4,
+        `Expected rgba_len=${result.width * result.height * 4}, got ${result.rgba_len}`);
+    },
+  },
+
   // Test app_handle.emit
   {
     name: 'app_handle.emit',

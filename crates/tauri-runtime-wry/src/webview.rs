@@ -18,7 +18,8 @@ mod imp {
 
 #[cfg(target_env = "ohos")]
 mod imp {
-  pub type Webview = ();
+  use wry::OhosWebviewHandle;
+  pub type Webview = OhosWebviewHandle;
 }
 
 #[cfg(target_vendor = "apple")]

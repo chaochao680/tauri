@@ -27,6 +27,12 @@
   let focusWatchUnlisten = null;
   let focusEvents = $state([]);
   let menuEvents = $state([]);
+  let snapshotCanvas = $state(null);
+  let snapshotContainer = $state(null);
+  let canvasEl = $state(null);
+  let snapshotWidth = $state(0);
+  let snapshotHeight = $state(0);
+  let hasSnapshot = $state(false);
 
   const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
   const webview = getCurrentWebview();
@@ -1112,6 +1118,50 @@ Expected behavior:
     });
   }
 
+  // ─── webPageSnapshot Manual Test ───
+  async function manualWebPageSnapshot() {
+    await wrapManual('webPageSnapshot', async () => {
+      snapshotCanvas = null;
+      const resultPromise = new Promise((resolve) => {
+        const unlisten = listen('web-page-snapshot-result', (event) => {
+          unlisten.then((fn) => fn());
+          resolve(event.payload);
+        });
+        setTimeout(() => {
+          unlisten.then((fn) => fn());
+          resolve({ success: false, error: 'Timeout: no snapshot result within 10s' });
+        }, 10000);
+      });
+      await invoke('test_web_page_snapshot');
+      const result = await resultPromise;
+
+      if (!result.success) {
+        manualResult = `webPageSnapshot failed: ${result.error}`;
+        onMessage(manualResult);
+        return;
+      }
+
+      // Render snapshot to canvas for visual verification
+      snapshotWidth = result.width;
+      snapshotHeight = result.height;
+      hasSnapshot = true;
+
+      // Wait for canvas element to be mounted
+      await new Promise(r => setTimeout(r, 50));
+
+      if (canvasEl) {
+        const ctx = canvasEl.getContext('2d');
+        const imageData = new ImageData(new Uint8ClampedArray(result.rgba), result.width, result.height);
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      manualResult = `Snapshot captured: ${result.width}×${result.height}, rgba_len=${result.rgba_len}\n` +
+        `Check: canvas below should match the current WebView content.\n` +
+        `If visual matches → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
   // ─── on_new_window Manual Tests ───
   async function manualNewWindowAllow() {
     await wrapManual('newWindowAllow', async () => {
@@ -1322,6 +1372,17 @@ Expected behavior:
         <button class="btn" onclick={manualNewWindowAllow}>Allow (dialog with ✕ close)</button>
         <button class="btn" onclick={manualNewWindowDeny}>Deny (no dialog)</button>
       </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">WebView webPageSnapshot Manual Test</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualWebPageSnapshot}>Take Snapshot (verify canvas matches page)</button>
+      </div>
+      {#if hasSnapshot}
+        <div class="mt-2 max-h-60 overflow-auto border-1 border-solid border-code rd-1">
+          <canvas bind:this={canvasEl} width={snapshotWidth} height={snapshotHeight}></canvas>
+        </div>
+      {/if}
     </div>
     {#if manualResult}
       <div class="mt-2 p-2 rd-1 bg-black/10 dark:bg-white/10 text-xs font-mono break-all">

@@ -826,3 +826,74 @@ pub fn test_async_spawn<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<(
   });
   Ok(())
 }
+
+/// Test command for web_page_snapshot on OHOS
+#[command]
+pub fn test_web_page_snapshot<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+  log::info!("test_web_page_snapshot called");
+
+  #[cfg(target_env = "ohos")]
+  {
+    use tauri::Manager;
+    if let Some(webview_window) = app.get_webview_window("main") {
+      let app_emit = app.clone();
+      webview_window.with_webview(move |platform_webview| {
+        let handle = platform_webview.inner();
+        let app_cb = app_emit.clone();
+        if let Err(e) = handle.web_page_snapshot(move |result| {
+          match result {
+            Ok(data) => {
+              log::info!("web_page_snapshot success: {}x{}, rgba len={}", data.width, data.height, data.rgba.len());
+              if let Err(e) = app_cb.emit("web-page-snapshot-result", serde_json::json!({
+                "success": true,
+                "width": data.width,
+                "height": data.height,
+                "rgba_len": data.rgba.len(),
+                "rgba": data.rgba,
+              })) {
+                log::error!("Failed to emit snapshot result: {}", e);
+              }
+            }
+            Err(e) => {
+              log::error!("web_page_snapshot failed: {}", e);
+              if let Err(emit_err) = app_cb.emit("web-page-snapshot-result", serde_json::json!({
+                "success": false,
+                "error": e,
+              })) {
+                log::error!("Failed to emit snapshot error: {}", emit_err);
+              }
+            }
+          }
+        }) {
+          log::error!("web_page_snapshot setup failed: {}", e);
+          if let Err(emit_err) = app_emit.emit("web-page-snapshot-result", serde_json::json!({
+            "success": false,
+            "error": format!("setup failed: {}", e),
+          })) {
+            log::error!("Failed to emit setup error: {}", emit_err);
+          }
+        }
+      })?;
+    } else {
+      log::error!("test_web_page_snapshot: 'main' webview window not found");
+      if let Err(e) = app.emit("web-page-snapshot-result", serde_json::json!({
+        "success": false,
+        "error": "main webview window not found",
+      })) {
+        log::error!("Failed to emit window not found error: {}", e);
+      }
+    }
+  }
+
+  #[cfg(not(target_env = "ohos"))]
+  {
+    if let Err(e) = app.emit("web-page-snapshot-result", serde_json::json!({
+      "success": false,
+      "error": "web_page_snapshot only available on OHOS",
+    })) {
+      log::error!("Failed to emit non-OHOS error: {}", e);
+    }
+  }
+
+  Ok(())
+}
