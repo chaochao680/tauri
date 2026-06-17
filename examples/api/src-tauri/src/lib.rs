@@ -483,6 +483,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(target_env = "ohos")]
       cmd::get_ohos_version_info,
       cmd::test_web_page_snapshot,
+      cmd::test_create_pdf,
       #[cfg(desktop)]
       tray::simulate_tray_click,
     ])
