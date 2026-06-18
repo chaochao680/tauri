@@ -1576,6 +1576,8 @@ pub enum WebviewMessage {
   SetZoom(f64),
   SetBackgroundColor(Option<Color>),
   ClearAllBrowsingData,
+  #[cfg(target_env = "ohos")]
+  CreatePdf(String, Option<tauri_runtime::PdfConfig>, Box<dyn Fn(bool) + Send + 'static>),
   // Getters
   Url(Sender<Result<String>>),
   Bounds(Sender<Result<tauri_runtime::dpi::Rect>>),
@@ -1968,6 +1970,23 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
         *self.window_id.lock().unwrap(),
         self.webview_id,
         WebviewMessage::ClearAllBrowsingData,
+      ),
+    )
+  }
+
+  #[cfg(target_env = "ohos")]
+  fn create_pdf(
+    &self,
+    path: String,
+    config: Option<tauri_runtime::PdfConfig>,
+    callback: Box<dyn Fn(bool) + Send + 'static>,
+  ) -> Result<()> {
+    send_user_message(
+      &self.context,
+      Message::Webview(
+        *self.window_id.lock().unwrap(),
+        self.webview_id,
+        WebviewMessage::CreatePdf(path, config, callback),
       ),
     )
   }
@@ -4014,6 +4033,27 @@ fn handle_user_message<T: UserEvent>(
           WebviewMessage::ClearAllBrowsingData => {
             if let Err(e) = webview.clear_all_browsing_data() {
               log::error!("failed to clear webview browsing data: {e}");
+            }
+          }
+          #[cfg(target_env = "ohos")]
+          WebviewMessage::CreatePdf(path, config, callback) => {
+            let pdf_config = config.map(|c| wry::PdfConfig {
+              width: c.width,
+              height: c.height,
+              margin_top: c.margin_top,
+              margin_bottom: c.margin_bottom,
+              margin_left: c.margin_left,
+              margin_right: c.margin_right,
+              scale: c.scale,
+              should_print_background: c.should_print_background,
+            });
+            // NOTE: callback is consumed by create_pdf. On early errors (invalid env,
+            // missing function), openharmony-ability calls callback(false) before
+            // returning Err. On catastrophic NAPI failures (closure creation or call
+            // fails), the callback is dropped without invocation — the JS caller
+            // will hang. This is documented as unrecoverable.
+            if let Err(e) = webview.create_pdf(&path, pdf_config, callback) {
+              log::error!("failed to create PDF: {e}");
             }
           }
           // Getters

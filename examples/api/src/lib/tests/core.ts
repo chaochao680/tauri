@@ -874,4 +874,27 @@ export const coreTests: TestCase[] = [
       await invoke('set_deny_new_window', { deny: false });
     },
   },
+  // webview.createPdf (OHOS only)
+  {
+    name: 'webview.createPdf (default A4)',
+    category: 'auto',
+    async fn() {
+      let result = '';
+      const unlisten = await listen<string>('create-pdf-result', (event) => {
+        result = event.payload;
+      });
+
+      await invoke('test_create_pdf');
+
+      // Wait for event with 10s timeout
+      const start = Date.now();
+      while (!result && Date.now() - start < 10000) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      unlisten();
+      assert(result.startsWith('true:'), `Expected success, got: ${result}`);
+      assert(result.includes('.pdf'), `Expected path in result, got: ${result}`);
+    },
+  },
 ];

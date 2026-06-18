@@ -51,7 +51,8 @@ fn main() {
         "get_ohos_version_info",
         "set_deny_new_window",
         "get_last_new_window_url",
-        "test_web_page_snapshot"
+        "test_web_page_snapshot",
+        "test_create_pdf"
       ])),
   )
   .expect("failed to run tauri-build");

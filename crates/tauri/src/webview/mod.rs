@@ -2148,6 +2148,36 @@ tauri::Builder::default()
       .map_err(Into::into)
   }
 
+  /// Create a PDF from the current webview content and save to the given path.
+  ///
+  /// The callback receives `true` on success, `false` on failure.
+  ///
+  /// Only available on OpenHarmony.
+  #[cfg(target_env = "ohos")]
+  #[cfg_attr(docsrs, doc(cfg(target_env = "ohos")))]
+  pub fn create_pdf(
+    &self,
+    path: impl AsRef<std::path::Path>,
+    config: Option<tauri_runtime::PdfConfig>,
+    callback: impl Fn(bool) + Send + 'static,
+  ) -> crate::Result<()> {
+    let path_str = path.as_ref().to_str().ok_or_else(|| {
+      std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "create_pdf path must be valid UTF-8",
+      )
+    })?;
+    self
+      .webview
+      .dispatcher
+      .create_pdf(
+        path_str.to_string(),
+        config,
+        Box::new(callback),
+      )
+      .map_err(Into::into)
+  }
+
   /// Returns all cookies in the runtime's cookie store including HTTP-only and secure cookies.
   ///
   /// Note that cookies will only be returned for URLs with an http or https scheme.
