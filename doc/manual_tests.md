@@ -230,19 +230,37 @@
 
 ---
 
-## 十二、WebView webPageSnapshot（网页截图）手动用例
+## 十一、Predefined Multi-Window（预定义操作多窗口支持）手动用例
+
+> **背景**: 修复 predefined menu 操作在多窗口场景下的目标窗口解析：hide/close/minimize 语义修正、showAll/bringAllToFront 恢复应用、剪贴板/编辑操作使用目标窗口 webview controller、onTouch 迁移到页面根容器。
+>
+> **测试入口**: `examples/api` 应用，需创建 Full Test Tray 后操作。涉及左键点击托盘图标的用例需先清空 QuickOperation abilityName。
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | webPageSnapshot | 内容验证 | Take Snapshot — 截图内容与页面视觉一致 | **T0** | app 已启动；进入 Tests 视图 | 1. 点击 "Take Snapshot" 按钮 2. 等待 canvas 渲染完成 3. 对比 canvas 内容与当前 WebView 页面 | ① canvas 显示截图结果 ② 截图内容与当前页面视觉一致（文字、布局、颜色） | 按钮位于 TestRunner.svelte Manual Tests → WebView webPageSnapshot 区域 |
+| core | predefined-multi-window | clipboard/copy | Tray Copy 子窗口 — 复制子窗口选中文本 | **T0** | 应用已启动；已创建子窗口（如 Hello World）；子窗口有可选择的文本 | 1. 在子窗口中选中一段文本 2. 右键点击状态栏托盘图标打开菜单 3. 点击 Copy 4. 在主窗口或其他位置粘贴验证 | ① 粘贴得到的文本为子窗口中选中的文本 ② 不是主窗口的文本 ③ hilog 无 `Clipboard copy failed` 错误 | 验证：剪贴板操作使用目标窗口的 webview controller |
+| core | predefined-multi-window | clipboard/cut | Tray Cut 子窗口 — 剪切子窗口选中文本 | **T1** | 应用已启动；已创建子窗口；子窗口有可编辑的文本输入框 | 1. 在子窗口的输入框中选中一段文本 2. 右键点击托盘图标打开菜单 3. 点击 Cut 4. 观察子窗口输入框 5. 在其他位置粘贴验证 | ① 子窗口输入框中选中的文本被删除 ② 粘贴得到的文本为被剪切的文本 | 验证 Cut 操作在目标窗口 webview 上执行 JS |
+| core | predefined-multi-window | clipboard/selectAll | Tray SelectAll 子窗口 — 全选子窗口内容 | **T1** | 应用已启动；已创建子窗口；子窗口有文本内容 | 1. 确保子窗口有焦点 2. 右键点击托盘图标打开菜单 3. 点击 SelectAll 4. 观察子窗口文本选中状态 | ① 子窗口中所有文本被选中 ② 主窗口的文本未被选中 | 验证 SelectAll 操作在目标窗口 webview 上执行 |
+| core | predefined-multi-window | clipboard/copy | Tray Copy 主窗口 — 复制主窗口选中文本 | **T1** | 应用已启动；主窗口有可选择的文本 | 1. 点击主窗口使其成为焦点 2. 在主窗口中选中一段文本 3. 右键点击托盘图标打开菜单 4. 点击 Copy 5. 在其他位置粘贴验证 | ① 粘贴得到的文本为主窗口中选中的文本 | 验证 fallback 到主窗口 controller 仍然正常工作 |
+| core | predefined-multi-window | hide-restore | Menu Hide → 托盘左键恢复 | **T0** | 应用已启动；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空（点击 "Disable QuickOp" 或将 abilityName 置空），确保左键点击托盘图标触发 icon click 事件 | 1. 右键点击托盘图标打开菜单 2. 点击 Hide 3. 确认应用隐藏到后台 4. 左键点击状态栏托盘图标 | ① 步骤 3 应用隐藏，所有窗口不可见 ② 步骤 4 应用恢复到前台，窗口重新可见 ③ hilog 输出 `startAbility succeeded` | 验证：hide → hideAbility() + 托盘 startAbility() 恢复；QuickOperation abilityName 必须清空，否则左键点击打开 QuickOp 面板而非触发恢复 |
+| core | predefined-multi-window | hide-restore | Menu Close 主窗口 → 托盘左键恢复 | **T0** | 应用已启动；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空 | 1. 点击主窗口使其成为焦点 2. 右键点击托盘图标打开菜单 3. 点击 CloseWindow 4. 确认应用隐藏到后台 5. 左键点击状态栏托盘图标 | ① 步骤 4 应用隐藏（主窗口 close 等价于 hideAbility），所有窗口不可见 ② 步骤 5 应用恢复到前台 ③ hilog 无 crash 或 freeze | 验证：closeWindow(id=0) → hideAbility()；主窗口不可 destroyWindow（WindowStage 会失效） |
+| core | predefined-multi-window | window-lifecycle | Menu Minimize — 最小化到最近任务 | **T1** | 应用已启动 | 1. 右键点击托盘图标打开菜单 2. 点击 Minimize | ① 窗口最小化到最近任务列表 ② 从最近任务列表点击可恢复应用 ③ 行为与修改前一致（未回归） | 验证：minimize 行为不变 |
+| core | predefined-multi-window | window-lifecycle | Menu Quit — 应用退出 | **T1** | 应用已启动 | 1. 右键点击托盘图标打开菜单 2. 点击 Quit | ① 应用完全退出 ② 不在最近任务列表中 ③ 行为与修改前一致（未回归） | 验证：quit 使用 terminateSelf()，行为不变 |
+| core | predefined-multi-window | icon-click | 前台点击托盘图标 — 无副作用 | **T1** | 应用已启动且在前台；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空 | 1. 确保应用在前台显示 2. 左键点击状态栏托盘图标 | ① 应用保持在前台，无闪烁或抖动 ② 无异常行为 ③ hilog 无错误日志 | 验证：startAbility() 幂等安全，应用已在前台时不产生副作用 |
+| core | predefined-multi-window | restore | Tray ShowAll — 隐藏后恢复应用 | **T0** | 应用已启动；已创建 Full Test Tray（含 ShowAll 菜单项） | 1. 右键点击托盘图标打开菜单 2. 点击 Hide 3. 确认应用隐藏 4. 右键点击托盘图标打开菜单 5. 点击 ShowAll | ① 步骤 3 应用隐藏到后台 ② 步骤 5 应用恢复到前台 ③ 所有窗口可见 | 验证：showAll → showAbility() + 遍历窗口 showWindow() |
+| core | predefined-multi-window | restore | Tray BringAllToFront — 隐藏后恢复应用 | **T0** | 应用已启动；已创建 Full Test Tray（含 BringAllToFront 菜单项） | 1. 右键点击托盘图标打开菜单 2. 点击 Hide 3. 确认应用隐藏 4. 右键点击托盘图标打开菜单 5. 点击 BringAllToFront | ① 步骤 3 应用隐藏到后台 ② 步骤 5 应用恢复到前台 ③ 所有窗口可见 | 验证：bringAllToFront 在 OHOS 上等价于 showAll（无跨应用置顶权限） |
+| core | predefined-multi-window | restore | BringAllToFront 子窗口恢复 | **T1** | 应用已启动；已创建子窗口；子窗口处于最小化状态 | 1. 确保主窗口可见 2. 右键点击托盘图标打开菜单 3. 点击 BringAllToFront | ① 主窗口保持可见 ② 被最小化的子窗口恢复显示 | 验证：遍历 WindowManager 所有窗口调用 showWindow() 可恢复最小化子窗口 |
+| core | predefined-multi-window | restore | 前台点击 ShowAll — 无副作用 | **T1** | 应用已启动且在前台；已创建 Full Test Tray（含 ShowAll 菜单项） | 1. 确保应用在前台，所有窗口可见 2. 右键点击托盘图标打开菜单 3. 点击 ShowAll | ① 应用保持在前台，无闪烁或异常 ② 所有窗口保持可见 ③ hilog 无错误 | 验证：showAbility() 幂等安全，showWindow() 对已可见窗口不产生副作用 |
+| core | predefined-multi-window | clipboard/copy | MenuBar Copy 主窗口 — 通过 MenuBar 触发 Copy | **T0** | 应用已启动；主窗口有可选择的文本 | 1. 点击主窗口 MenuBar 打开菜单 2. 点击 Edit → Copy 3. 在其他位置粘贴验证 | ① 粘贴得到的文本为主窗口中选中的文本 ② 操作目标为主窗口 webview | 验证：Window Menu Bar 路径 targetWindowId 有值，直接操作菜单所属窗口 |
+| core | predefined-multi-window | clipboard/copy | MenuBar Copy 子窗口 — 通过子窗口 MenuBar 触发 Copy | **T0** | 应用已启动；已创建子窗口；子窗口有可选择的文本 | 1. 点击子窗口 MenuBar 打开菜单 2. 点击 Edit → Copy 3. 在其他位置粘贴验证 | ① 粘贴得到的文本为子窗口中选中的文本 ② 不是主窗口的文本 | 验证：Window Menu Bar 路径 targetWindowId 为子窗口 ID，操作目标正确 |
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
-| WebView webPageSnapshot（网页截图） | 1 | 0 | **1** |
+| Predefined Multi-Window（预定义操作多窗口支持） | 7 | 8 | **15** |
 
 ---
 
-## 十三、用例统计
+## 十二、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -260,5 +278,6 @@
 | on_new_window（新窗口拦截） | 1 | 1 | **2** |
 | Single-Instance（单实例） | 3 | 1 | **4** |
 | WebView webPageSnapshot（网页截图） | 1 | 0 | **1** |
-| **合计** | **41** | **41** | **82** |
+| Predefined Multi-Window（预定义操作多窗口支持） | 7 | 8 | **15** |
+| **合计** | **48** | **49** | **97** |
 

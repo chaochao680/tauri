@@ -359,6 +359,8 @@ export const trayTests: TestCase[] = [
       const closeWindow = await PredefinedMenuItem.new({ item: 'CloseWindow' });
       const sep3 = await PredefinedMenuItem.new({ item: 'Separator' });
       const hide = await PredefinedMenuItem.new({ item: 'Hide' });
+      const showAll = await PredefinedMenuItem.new({ item: 'ShowAll' });
+      const bringAllToFront = await PredefinedMenuItem.new({ item: 'BringAllToFront' });
       const quit = await PredefinedMenuItem.new({ item: 'Quit' });
 
       const menu = await Menu.new({
@@ -367,7 +369,7 @@ export const trayTests: TestCase[] = [
           copy, cut, paste, sep2,
           undo, redo, sep3,
           minimize, maximize, fullscreen, closeWindow,
-          hide, quit,
+          hide, showAll, bringAllToFront, quit,
         ],
       });
 

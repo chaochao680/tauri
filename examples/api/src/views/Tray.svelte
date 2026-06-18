@@ -84,6 +84,8 @@
         PredefinedMenuItem.new({ item: 'CloseWindow' }),
         PredefinedMenuItem.new({ item: 'Separator' }),
         PredefinedMenuItem.new({ item: 'Hide' }),
+        PredefinedMenuItem.new({ item: 'ShowAll' }),
+        PredefinedMenuItem.new({ item: 'BringAllToFront' }),
         PredefinedMenuItem.new({ item: 'Quit' }),
       ])
 

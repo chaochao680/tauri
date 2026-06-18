@@ -14,9 +14,10 @@ description: 编译 Tauri OpenHarmony 项目（examples/api），生成 HAP 包�
 ## 一键构建部署
 
 ```bash
-source ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/env.sh
-bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" desktop
+OHOS_DEVICE_TYPE=desktop bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" desktop
 ```
+
+**注意**：必须先设置 `OHOS_DEVICE_TYPE` 环境变量再调用脚本。不要先 `source env.sh`，因为 `env.sh` 会将 `OHOS_DEVICE_TYPE` 默认设为 `mobile`，导致后续参数被忽略。
 
 第二个参数为设备类型：`desktop`（PC/桌面，tray/menu 需要）或 `mobile`（手机/平板）。
 
