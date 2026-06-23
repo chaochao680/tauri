@@ -17,7 +17,7 @@ description: 编译 Tauri OpenHarmony 项目（examples/api），生成 HAP 包�
 OHOS_DEVICE_TYPE=desktop bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/run-tests.sh "" desktop
 ```
 
-**注意**：必须先设置 `OHOS_DEVICE_TYPE` 环境变量再调用脚本。不要先 `source env.sh`，因为 `env.sh` 会将 `OHOS_DEVICE_TYPE` 默认设为 `mobile`，导致后续参数被忽略。
+**注意**：必须先设置 `OHOS_DEVICE_TYPE` 环境变量再调用脚本。不要先 `source env.sh`，因为 `env.sh` 会设置 `OHOS_DEVICE_TYPE` 默认值，可能覆盖你传入的参数。
 
 第二个参数为设备类型：`desktop`（PC/桌面，tray/menu 需要）或 `mobile`（手机/平板）。
 
@@ -46,8 +46,8 @@ echo 'DEVECO_HOME="/d/app/DevEco-Studio"' > ${PROJECT_ROOT}/tauri/.claude/skills
 
 | 值 | 说明 | 编译特性 |
 |---|------|---------|
-| `desktop` | PC/桌面设备 | `cfg(desktop)` — Tray/Menu 功能需要此模式 |
-| `mobile` | 手机/平板（默认） | `cfg(mobile)` |
+| `desktop` | PC/桌面设备（默认） | `cfg(desktop)` — Tray/Menu 功能需要此模式 |
+| `mobile` | 手机/平板 | `cfg(mobile)` |
 
 ## 脚本说明
 
