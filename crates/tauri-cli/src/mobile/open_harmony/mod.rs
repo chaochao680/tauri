@@ -45,6 +45,8 @@ mod dev;
 mod dev_eco_studio_script;
 pub(crate) mod plugins;
 pub(crate) mod project;
+mod run;
+pub(crate) mod signing;
 
 #[derive(Deserialize)]
 pub struct AppConfig {
@@ -98,6 +100,7 @@ enum Commands {
   Init(InitOptions),
   Dev(dev::Options),
   Build(build::Options),
+  Run(run::Options),
   #[clap(hide(true))]
   DevEcoStudioScript(dev_eco_studio_script::Options),
 }
@@ -117,6 +120,7 @@ pub fn command(cli: Cli, verbosity: u8) -> Result<()> {
     }
     Commands::Dev(options) => dev::command(options, noise_level)?,
     Commands::Build(options) => build::command(options, noise_level)?,
+    Commands::Run(options) => run::command(options, noise_level)?,
     Commands::DevEcoStudioScript(options) => dev_eco_studio_script::command(options)?,
   }
 
