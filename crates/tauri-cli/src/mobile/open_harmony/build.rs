@@ -4,7 +4,7 @@
 
 use super::{
   delete_codegen_vars, ensure_init, env, get_app, get_config, inject_resources, log_finished,
-  open_and_wait, plugins, MobileTarget, OptionsHandle,
+  open_and_wait, plugins, signing::OhosSigningConfig, MobileTarget, OptionsHandle,
 };
 use crate::{
   build::Options as BuildOptions,
@@ -172,7 +172,7 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
     false
   )?;
 
-  let plugin_metadata = inject_plugins(&dirs.tauri, &config.project_dir())?;
+  inject_plugins(&dirs.tauri, &config.project_dir())?;
 
   let mut env = env()?;
 
@@ -194,7 +194,6 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
     &mut env,
     noise_level,
     dirs,
-    plugin_metadata,
   )?;
 
   if open {
@@ -215,7 +214,6 @@ fn run_build(
   env: &mut Env,
   noise_level: NoiseLevel,
   dirs: Dirs,
-  plugin_metadata: Vec<plugins::PluginMeta>,
 ) -> Result<OptionsHandle> {
   let interface_options = InterfaceOptions {
     debug: build_options.debug,
@@ -247,17 +245,10 @@ fn run_build(
 
   inject_resources(config, &tauri_config)?;
 
-  if !plugin_metadata.is_empty() {
-    let project_dir = config.project_dir();
-    for plugin in &plugin_metadata {
-      plugins::copy_plugin_har(plugin, &project_dir)
-        .context(format!("Failed to copy plugin '{}' HAR", plugin.name))?;
-    }
-    plugins::update_plugin_configs(&project_dir, &plugin_metadata)
-      .context("Failed to update plugin configurations")?;
-  }
-
   let hap_outputs = hap::build(config, env, noise_level, profile).context("failed to build hap")?;
+
+  // Sign the HAP using hap-sign-tool.jar if environment variables are set
+  let hap_outputs = sign_hap_if_configured(hap_outputs, env)?;
 
   log_finished(hap_outputs, "HAP");
 
@@ -311,4 +302,58 @@ pub(crate) fn inject_plugins(
     metadata.len()
   );
   Ok(metadata)
+}
+
+/// Sign HAP files if OHOS signing environment variables are configured.
+///
+/// For each unsigned HAP path, if a corresponding signed path exists alongside it,
+/// the signed path is returned. Otherwise, the unsigned HAP is signed in-place
+/// (output overwrites the unsigned path with a `-signed` suffix).
+fn sign_hap_if_configured(
+  hap_outputs: Vec<std::path::PathBuf>,
+  env: &Env,
+) -> Result<Vec<std::path::PathBuf>> {
+  let signing_config = match OhosSigningConfig::from_env()? {
+    Some(cfg) => cfg,
+    None => {
+      // No env vars set — check if any signed HAP already exists
+      let has_signed = hap_outputs
+        .iter()
+        .any(|p| {
+          let name = p.file_name().unwrap_or_default().to_string_lossy();
+          name.contains("-signed")
+        });
+      if !has_signed {
+        log::warn!(
+          "No signed HAP found and OHOS signing environment variables are not set. \
+           The HAP will not be installable on a device. \
+           Set OHOS_KEYSTORE_FILE, OHOS_KEYSTORE_PASSWORD, OHOS_KEY_ALIAS, \
+           OHOS_KEY_PASSWORD, OHOS_APP_CERT_FILE, and OHOS_PROFILE_FILE to enable signing."
+        );
+      }
+      return Ok(hap_outputs);
+    }
+  };
+
+  let mut signed_outputs = Vec::new();
+  for hap_path in &hap_outputs {
+    // Derive signed output path: entry-default-unsigned.hap -> entry-default-signed.hap
+    let signed_path = hap_path
+      .with_file_name(
+        hap_path
+          .file_name()
+          .unwrap()
+          .to_string_lossy()
+          .replace("unsigned", "signed"),
+      );
+
+    signing_config
+      .sign_hap(hap_path, &signed_path, env)
+      .context("failed to sign HAP")?;
+
+    signed_outputs.push(hap_path.clone());
+    signed_outputs.push(signed_path);
+  }
+
+  Ok(signed_outputs)
 }
