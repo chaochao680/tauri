@@ -29,6 +29,7 @@ fn main() {
         "test_reload",
         "cookie_test",
         "cookie_manual_test",
+        "devtools_test",
         "create_isolated_window",
         "create_window_with_custom_ua",
         "create_window_no_throttle",

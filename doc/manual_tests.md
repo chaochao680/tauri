@@ -156,6 +156,18 @@
 |------|-----|-----|------|
 | Webview — Cookie | 1 | 0 | **1** |
 
+### 7.3 DevTools（调试访问开关）
+
+> **背景**: wry OHOS 的 `open_devtools`/`close_devtools` 映射为 `WebviewController.setWebDebuggingAccess` 全局开关，`is_devtools_open` 返回 ArkTS 侧自跟踪状态（OHOS 无 getter）。三方法受 `#[cfg(any(debug_assertions, feature="devtools"))]` 门控，**仅在 devtools feature 构建可测**（标准 release 不编译）。本用例在 devtools 构建下验证 open→true、close→false 的 toggle 行为。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | devtools feature 构建已部署到设备（`--features prod,devtools`） | 1. 滚动到 "webview.devtools Manual Test" 区域 2. 点击 "DevTools (open/is_open/close)" 按钮 | ① 结果显示 `PASS ✅` ② `after_open=true`（open_devtools 后 is_devtools_open 返 true） ③ `after_close=false`（close_devtools 后返 false） | `initial` 反映 tauri 默认 devtools=true 的 init 标志（可能为 true，非失败）；标准 release 构建点击会提示 "devtools feature not enabled" |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — DevTools | 0 | 1 | **1** |
+
 ---
 
 ## 八、WebView User-Agent 自定义 手动用例
@@ -345,6 +357,7 @@
 | Autostart（开机自启动） | 2 | 2 | **4** |
 | Webview — createPdf | 1 | 1 | **2** |
 | Webview — Cookie | 1 | 0 | **1** |
+| Webview — DevTools | 0 | 1 | **1** |
 | WebView User-Agent | 1 | 2 | **3** |
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
@@ -355,5 +368,5 @@
 | Notification（通知） | 1 | 2 | **3** |
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
-| **合计** | **52** | **53** | **105** |
+| **合计** | **52** | **54** | **106** |
 
