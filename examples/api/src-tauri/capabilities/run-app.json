@@ -152,7 +152,6 @@
     "dialog:allow-message",
     "notification:default",
     "sentry:default",
-    "allow-sentry-test-panic",
     "allow-sentry-test-breadcrumb"
   ]
 }

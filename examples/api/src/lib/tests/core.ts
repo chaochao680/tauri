@@ -1105,4 +1105,78 @@ export const coreTests: TestCase[] = [
       await child.close();
     },
   },
+  // ─── Mouse Event Tests (OHOS desktop / 2in1) ───
+  {
+    name: 'DOM MouseEvent.dispatch (synthetic)',
+    category: 'side-effect',
+    async fn() {
+      const events: string[] = [];
+
+      const onMouseMove = () => events.push('mousemove');
+      const onMouseDown = () => events.push('mousedown');
+      const onMouseUp = () => events.push('mouseup');
+      const onClick = () => events.push('click');
+
+      document.addEventListener('mousemove', onMouseMove, { once: true });
+      document.addEventListener('mousedown', onMouseDown, { once: true });
+      document.addEventListener('mouseup', onMouseUp, { once: true });
+      document.addEventListener('click', onClick, { once: true });
+
+      // Dispatch synthetic mouse events
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 100, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('click', { button: 0, bubbles: true }));
+
+      assert(events.includes('mousemove'), `mousemove not received, got: ${events.join(', ')}`);
+      assert(events.includes('mousedown'), `mousedown not received, got: ${events.join(', ')}`);
+      assert(events.includes('mouseup'), `mouseup not received, got: ${events.join(', ')}`);
+      assert(events.includes('click'), `click not received, got: ${events.join(', ')}`);
+    },
+  },
+  {
+    name: 'DOM MouseEvent.coordinates',
+    category: 'auto',
+    async fn() {
+      let capturedX = -1;
+      let capturedY = -1;
+      let capturedButton = -1;
+
+      const onMouseMove = (e: globalThis.MouseEvent) => {
+        capturedX = e.clientX;
+        capturedY = e.clientY;
+      };
+      const onMouseDown = (e: globalThis.MouseEvent) => {
+        capturedButton = e.button;
+      };
+
+      document.addEventListener('mousemove', onMouseMove, { once: true });
+      document.addEventListener('mousedown', onMouseDown, { once: true });
+
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, clientY: 150, bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true }));
+
+      assert(capturedX === 250, `clientX expected 250, got ${capturedX}`);
+      assert(capturedY === 150, `clientY expected 150, got ${capturedY}`);
+      assert(capturedButton === 2, `button expected 2 (right), got ${capturedButton}`);
+    },
+  },
+  {
+    name: 'DOM WheelEvent.dispatch (synthetic)',
+    category: 'side-effect',
+    async fn() {
+      let capturedDeltaX = 0;
+      let capturedDeltaY = 0;
+
+      const onWheel = (e: WheelEvent) => {
+        capturedDeltaX = e.deltaX;
+        capturedDeltaY = e.deltaY;
+      };
+
+      document.addEventListener('wheel', onWheel, { once: true });
+      document.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -3, bubbles: true }));
+
+      assert(capturedDeltaY === -3, `deltaY expected -3, got ${capturedDeltaY}`);
+    },
+  },
 ];

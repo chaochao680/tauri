@@ -1431,6 +1431,56 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     });
   }
 
+  // ─── Mouse Event Manual Tests (OHOS desktop / 2in1) ───
+  let mouseTracking = $state(false);
+  let mouseEvents = $state([]);
+  let mouseTrackArea = $state(null);
+  let mouseUnlisteners = [];
+
+  async function toggleMouseTracking() {
+    if (mouseTracking) {
+      mouseUnlisteners.forEach((fn) => fn());
+      mouseUnlisteners = [];
+      mouseTracking = false;
+      const summary = mouseEvents.reduce((acc, e) => {
+        acc[e.type] = (acc[e.type] || 0) + 1;
+        return acc;
+      }, {});
+      manualResult = `Mouse tracking stopped. Events: ${JSON.stringify(summary)}`;
+      onMessage(manualResult);
+    } else {
+      mouseEvents = [];
+      mouseTracking = true;
+
+      const target = mouseTrackArea;
+      if (!target) { manualResult = 'Track area not found'; return; }
+
+      // Remove old listeners first
+      mouseUnlisteners.forEach((fn) => fn());
+      mouseUnlisteners = [];
+
+      const types = ['mousemove', 'mousedown', 'mouseup', 'click', 'contextmenu', 'mouseenter', 'mouseleave', 'wheel'];
+      types.forEach((type) => {
+        const handler = (e) => {
+          const entry = type === 'wheel'
+            ? { type, x: Math.round(e.deltaX), y: Math.round(e.deltaY), button: 0, ts: Date.now() }
+            : { type, x: Math.round(e.clientX), y: Math.round(e.clientY), button: e.button, ts: Date.now() };
+          mouseEvents = [...mouseEvents.slice(-49), entry];
+          onMessage(`[mouse] ${type} (${entry.x},${entry.y}) button=${entry.button}`);
+        };
+        target.addEventListener(type, handler);
+        mouseUnlisteners.push(() => target.removeEventListener(type, handler));
+      });
+
+      manualResult = 'Mouse tracking started. Move mouse over the green area below, click left/right buttons.';
+      onMessage(manualResult);
+    }
+    try {
+      const path = await flushConsoleLog();
+      onMessage(`Console log saved: ${path}`);
+    } catch (e) {}
+  }
+
 </script>
 
 <div class="flex flex-col gap-2">
@@ -1490,6 +1540,29 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <button class="btn" onclick={manualAppCacheDir}>appCacheDir</button>
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
       <button class="btn" onclick={manualOsInfo}>OS Info (platform/type/version)</button>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Mouse Events (OHOS desktop / 2in1)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={toggleMouseTracking}>
+          {mouseTracking ? 'Stop Mouse Tracking' : 'Start Mouse Tracking'}
+        </button>
+      </div>
+      <div
+        bind:this={mouseTrackArea}
+        style="width:100%;height:80px;margin-top:8px;background:{mouseTracking ? '#22c55e33' : '#6b728020'};border:2px dashed {mouseTracking ? '#22c55e' : '#6b7280'};border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:{mouseTracking ? 'crosshair' : 'default'};user-select:none;"
+      >
+        <span class="text-xs text-gray-600">
+          {mouseTracking ? '🖱️ Tracking active — move & click here' : 'Click "Start Mouse Tracking" then interact here'}
+        </span>
+      </div>
+      {#if mouseEvents.length > 0}
+        <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400 max-h-24 overflow-y-auto">
+          {#each mouseEvents.slice(-10) as e}
+            <div>{e.type} ({e.x},{e.y}) btn={e.button}</div>
+          {/each}
+        </div>
+      {/if}
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Window Decorations & Transparency (Phase 1+2+3)</h5>
