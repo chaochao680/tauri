@@ -989,14 +989,18 @@ Reload the child window to verify the cookie persists.`;
   // ─── DevTools Manual Test (OHOS only, requires devtools feature build) ───
   async function manualDevtoolsTest() {
     await wrapManual('devtools', async () => {
-      const report = await invoke('devtools_test');
-      if (report.enabled) {
-        const pass = report.after_open === true && report.after_close === false;
-        manualResult = `devtools_test: ${pass ? 'PASS ✅' : 'FAIL ❌'}
+      try {
+        const report = await invoke('devtools_test');
+        if (report.enabled) {
+          const pass = report.after_open === true && report.after_close === false;
+          manualResult = `devtools_test: ${pass ? 'PASS ✅' : 'FAIL ❌'}
 initial=${report.initial}, after_open=${report.after_open}, after_close=${report.after_close}
-(open_devtools → true, close_devtools → false; initial reflects the tauri devtools init flag)`;
-      } else {
-        manualResult = `devtools_test: devtools feature not enabled in this build.`;
+(open_devtools → true, close_devtools → false; initial is stateful, see manual_tests 7.3)`;
+        } else {
+          manualResult = `devtools_test: devtools feature not enabled in this build.`;
+        }
+      } catch (e) {
+        manualResult = `devtools_test: devtools feature not enabled in this build (command not available in standard release).`;
       }
       onMessage(manualResult);
     });

@@ -162,7 +162,7 @@
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | devtools feature 构建已部署到设备（`--features prod,devtools`） | 1. 滚动到 "webview.devtools Manual Test" 区域 2. 点击 "DevTools (open/is_open/close)" 按钮 | ① 结果显示 `PASS ✅` ② `after_open=true`（open_devtools 后 is_devtools_open 返 true） ③ `after_close=false`（close_devtools 后返 false） | `initial` 反映 tauri 默认 devtools=true 的 init 标志（可能为 true，非失败）；标准 release 构建点击会提示 "devtools feature not enabled" |
+| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | ① 用 devtools feature 构建并部署：临时把 `examples/api/src-tauri/Cargo.toml` 的 `prod` 改为 `["tauri/custom-protocol", "devtools"]`（或 build-ohos.sh 加 `--features prod,devtools`），跑 `run-tests.sh` 部署；验证后回退该改动 ② 设备屏幕已唤醒（`hdc shell "power-shell setmode 602"`）| 1. 打开 app，进入 Tests 页 2. 滚动到 "webview.devtools Manual Test (OHOS only, needs devtools build)" 区域 3. 点击 "DevTools (open/is_open/close)" 按钮 | 屏幕显示如下即成功：`devtools_test: PASS ✅` 换行 `initial=<true|false>, after_open=true, after_close=false`。关键判定：`after_open=true`（open_devtools 后调试访问开）且 `after_close=false`（close_devtools 后关）。若显示 `FAIL ❌` 或 `devtools feature not enabled` 则失败 | `initial` **有状态、非判定项**：`webDebuggingEnabled` 是进程级全局变量，跨调用持久——首次调用（app 刚启动无 open/close 历史）反映 init 标志（tauri 默认 devtools=true → 通常 true）；若之前已跑过 close_devtools（如自动用例 test 53 先跑）则 initial=false。判定只看 after_open/after_close；标准 release 构建（未加 devtools feature）点击提示 "devtools feature not enabled"，属预期（dormant）|
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
