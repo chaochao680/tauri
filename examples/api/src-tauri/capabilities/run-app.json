@@ -28,6 +28,8 @@
     "allow-test-eval-with-callback",
     "allow-test-navigate",
     "allow-test-reload",
+    "allow-cookie-test",
+    "allow-cookie-manual-test",
     "allow-create-isolated-window",
     "allow-create-window-with-custom-ua",
     "allow-create-window-no-throttle",

@@ -142,6 +142,20 @@
 |------|-----|-----|------|
 | Webview — createPdf | 1 | 1 | **2** |
 
+### 7.2 Cookie（Cookie 管理真实生效）
+
+> **背景**: 自动用例（cookie_test）只验证 WebCookieManager API 契约（configCookieSync 写入 → fetchCookieSync 读回）。本手动用例补全"set_cookie 写入的 cookie 真实随请求发送到服务端"的真实浏览行为。
+>
+> **日志监控命令**: `hdc shell hilog | grep tauritest`
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | cookie/真实生效 | Cookie Live (httpbin echo) — set_cookie 后服务端收到 | **T0** | 应用已启动；设备可访问 `https://httpbin.org` | 1. 滚动到 "webview.cookie Manual Tests" 区域 2. 点击 "Cookie Live (httpbin echo)" 按钮 3. 观察弹出的子窗口中 `https://httpbin.org/cookies` 的 JSON 响应 | ① 子窗口成功打开并加载 `https://httpbin.org/cookies` ② JSON 响应包含 `"tauri_test_cookie": "ManualTest123"`（证明 `set_cookie` 写入的 cookie 真实发送到服务端） | 验证 `set_cookie`（`WebCookieManager.configCookieSync`）端到端真实生效；cookie 域 `httpbin.org`、Path `/`、值 `ManualTest123` 由 `cookie_manual_test` 命令预设。注：子窗口为外部页（无 Tauri 工具栏），仅验证首次加载的 cookie 回显，不做刷新/持久化验证 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — Cookie | 1 | 0 | **1** |
+
 ---
 
 ## 八、WebView User-Agent 自定义 手动用例
@@ -330,6 +344,7 @@
 | plugin-os（平台检测） | 2 | 4 | **6** |
 | Autostart（开机自启动） | 2 | 2 | **4** |
 | Webview — createPdf | 1 | 1 | **2** |
+| Webview — Cookie | 1 | 0 | **1** |
 | WebView User-Agent | 1 | 2 | **3** |
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
@@ -340,5 +355,5 @@
 | Notification（通知） | 1 | 2 | **3** |
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
-| **合计** | **51** | **53** | **104** |
+| **合计** | **52** | **53** | **105** |
 

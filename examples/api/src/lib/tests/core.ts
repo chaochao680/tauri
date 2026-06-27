@@ -1105,4 +1105,54 @@ export const coreTests: TestCase[] = [
       await child.close();
     },
   },
+
+  // OHOS WebView cookie management (p1-webview-cookie) — 4.1 set_cookie round-trip
+  {
+    name: 'webview.set_cookie round-trip (OHOS)',
+    category: 'side-effect',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('cookie_test');
+      assert(report.set_cookie === 'ok', `set_cookie failed: ${report.set_cookie}`);
+      assert(
+        report.test_cookie_found === true,
+        `test cookie not found after set; cookies_for_url=${JSON.stringify(report.cookies_for_url)}`
+      );
+    },
+  },
+  // 4.2 cookies() returns an array (OHOS best-effort: current URL only)
+  {
+    name: 'webview.cookies() returns array (OHOS best-effort)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('cookie_test');
+      assert(
+        Array.isArray(report.cookies_all),
+        `cookies() should return array, got: ${report.cookies_all}`
+      );
+    },
+  },
+  // 4.3 delete_cookie is a no-op on OHOS (platform lacks single-cookie deletion)
+  {
+    name: 'webview.delete_cookie no-op (OHOS platform limit)',
+    category: 'side-effect',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('cookie_test');
+      assert(
+        typeof report.delete_cookie === 'string' && report.delete_cookie.startsWith('ok'),
+        `delete_cookie failed: ${report.delete_cookie}`
+      );
+    },
+  },
+  // 4.4 cookies_for_url readable (unchanged behavior)
+  {
+    name: 'webview.cookies_for_url readable (OHOS)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('cookie_test');
+      assert(
+        Array.isArray(report.cookies_for_url),
+        `cookies_for_url should return array, got: ${report.cookies_for_url}`
+      );
+    },
+  },
 ];
