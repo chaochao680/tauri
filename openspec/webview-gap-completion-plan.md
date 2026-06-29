@@ -23,7 +23,7 @@
 | Phase | 名称 | openspec change | 状态 | 涉及层 | 预估文件 | 验证方式 |
 |-------|------|----------------|------|--------|---------|---------|
 | 1 | Cookie 管理补全 | `p1-webview-cookie` | ✓ 已归档 | wry+ability+ArkTS | 5 | 设备端 cookie 读/写/删用例 |
-| 2 | DevTools 状态 + 聚焦父窗口 | `p2_webview-devtools-focus` | ○ 待开始 | wry+ArkTS | 3 | is_devtools_open 返回真实值 + focus 生效 |
+| 2 | DevTools 状态 + 聚焦父窗口 | `p2-webview-devtools-focus` | ✓ 已归档 | wry+ArkTS | 3 | is_devtools_open 返回真实值 + focus 生效 |
 | 3 | 渲染收尾（透明背景核实 + 边界） | `p3_webview-render-finish` | ○ 待开始 | wry+ArkTS | 3 | 透明窗口可见 + 主 webview set_bounds 生效 |
 | 4 | 文件拖拽 | `p4_webview-drag-drop` | ○ 待开始 | wry+ability+ArkTS | 4 | 拖文件入窗触发 drop 事件 |
 | 5 | 打印 | `p5_webview-print` | ○ 待开始 | wry+ArkTS | 3 | print 生成 PDF / 触发系统打印 |
