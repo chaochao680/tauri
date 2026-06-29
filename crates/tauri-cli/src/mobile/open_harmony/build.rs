@@ -244,6 +244,7 @@ fn run_build(
   let handle = write_options(&tauri_config, cli_options)?;
 
   inject_resources(config, &tauri_config)?;
+  super::inject_icons(config, &tauri_config, dirs.tauri)?;
 
   let hap_outputs = hap::build(config, env, noise_level, profile).context("failed to build hap")?;
 
@@ -351,7 +352,6 @@ fn sign_hap_if_configured(
       .sign_hap(hap_path, &signed_path, env)
       .context("failed to sign HAP")?;
 
-    signed_outputs.push(hap_path.clone());
     signed_outputs.push(signed_path);
   }
 
