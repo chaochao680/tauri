@@ -168,6 +168,18 @@
 |------|-----|-----|------|
 | Webview — DevTools | 0 | 1 | **1** |
 
+### 7.4 全屏无黑边（set_bounds cache-only 回归防护）
+
+> **背景**: Phase 3 曾尝试移除非子 webview `set_bounds` 的 cache-only 早返回（让主 webview 调 ArkTS `setBounds`），导致全屏时 Web 组件的 `"100%"` 宽高被替换为具体像素值，窗口左侧和下方出现黑边。回退后 cache-only 是正确行为（主 webview 应始终经 `"100%"` 填满窗口）。本用例防护此回归。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | fullscreen/no-black-bars | Fullscreen No Black Bars — 全屏无黑边 | **T0** | 应用已启动 | 1. 将应用窗口最大化或全屏（拖拽窗口到最大 / 全屏按钮） 2. 观察屏幕左侧、右侧、上方、下方是否有黑边 | ① Web 内容填满整个窗口区域 ② 四个方向均无黑边 ③ 若出现黑边说明 set_bounds cache-only 被错误移除 | 防护 Phase 3 回归：主 webview set_bounds 对非子 webview 为 cache-only（不调 ArkTS setBounds），Web 组件经 `data.style.width/height = "100%"` 填满窗口 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — Fullscreen | 1 | 0 | **1** |
+
 ---
 
 ## 八、WebView User-Agent 自定义 手动用例
@@ -358,6 +370,7 @@
 | Webview — createPdf | 1 | 1 | **2** |
 | Webview — Cookie | 1 | 0 | **1** |
 | Webview — DevTools | 0 | 1 | **1** |
+| Webview — Fullscreen | 1 | 0 | **1** |
 | WebView User-Agent | 1 | 2 | **3** |
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
@@ -368,5 +381,5 @@
 | Notification（通知） | 1 | 2 | **3** |
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
-| **合计** | **52** | **54** | **106** |
+| **合计** | **53** | **54** | **107** |
 
