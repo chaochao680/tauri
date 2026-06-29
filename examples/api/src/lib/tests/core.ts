@@ -1179,4 +1179,27 @@ export const coreTests: TestCase[] = [
       assert(capturedDeltaY === -3, `deltaY expected -3, got ${capturedDeltaY}`);
     },
   },
+  {
+    name: 'DOM WheelEvent.ctrlKey (pinch zoom simulation)',
+    category: 'auto',
+    async fn() {
+      let receivedCtrlWheel = false;
+      let capturedDelta = 0;
+
+      const onWheel = (e: WheelEvent) => {
+        if (e.ctrlKey) {
+          receivedCtrlWheel = true;
+          capturedDelta = e.deltaY;
+        }
+      };
+
+      document.addEventListener('wheel', onWheel, { once: true });
+      document.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: -1, ctrlKey: true, bubbles: true,
+      }));
+
+      assert(receivedCtrlWheel, 'Ctrl+Wheel event not received');
+      assert(capturedDelta === -1, `deltaY expected -1, got ${capturedDelta}`);
+    },
+  },
 ];
