@@ -1462,13 +1462,28 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       const types = ['mousemove', 'mousedown', 'mouseup', 'click', 'contextmenu', 'mouseenter', 'mouseleave', 'wheel'];
       types.forEach((type) => {
         const handler = (e) => {
-          const entry = type === 'wheel'
-            ? { type, x: Math.round(e.deltaX), y: Math.round(e.deltaY), button: 0, ts: Date.now() }
-            : { type, x: Math.round(e.clientX), y: Math.round(e.clientY), button: e.button, ts: Date.now() };
+          let entry;
+          let label;
+          if (type === 'wheel') {
+            const isPinch = e.ctrlKey;
+            entry = {
+              type: isPinch ? 'pinch-zoom' : 'scroll',
+              x: Math.round(e.deltaX),
+              y: Math.round(e.deltaY),
+              button: isPinch ? 'ctrl' : '',
+              ts: Date.now(),
+            };
+            label = isPinch
+              ? `pinch-zoom Δy=${entry.y} (${entry.y < 0 ? 'zoom in' : 'zoom out'})`
+              : `scroll Δx=${entry.x} Δy=${entry.y}`;
+          } else {
+            entry = { type, x: Math.round(e.clientX), y: Math.round(e.clientY), button: e.button, ts: Date.now() };
+            label = `${type} (${entry.x},${entry.y}) btn=${entry.button}`;
+          }
           mouseEvents = [...mouseEvents.slice(-49), entry];
-          onMessage(`[mouse] ${type} (${entry.x},${entry.y}) button=${entry.button}`);
+          onMessage(`[mouse] ${label}`);
         };
-        target.addEventListener(type, handler);
+        target.addEventListener(type, handler, { passive: true });
         mouseUnlisteners.push(() => target.removeEventListener(type, handler));
       });
 
@@ -1553,13 +1568,15 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         style="width:100%;height:80px;margin-top:8px;background:{mouseTracking ? '#22c55e33' : '#6b728020'};border:2px dashed {mouseTracking ? '#22c55e' : '#6b7280'};border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:{mouseTracking ? 'crosshair' : 'default'};user-select:none;"
       >
         <span class="text-xs text-gray-600">
-          {mouseTracking ? '🖱️ Tracking active — move & click here' : 'Click "Start Mouse Tracking" then interact here'}
+          {mouseTracking ? '🖱️ Tracking — move / click / scroll / pinch-zoom here' : 'Click "Start Mouse Tracking" then interact here'}
         </span>
       </div>
       {#if mouseEvents.length > 0}
         <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400 max-h-24 overflow-y-auto">
           {#each mouseEvents.slice(-10) as e}
-            <div>{e.type} ({e.x},{e.y}) btn={e.button}</div>
+            <div class={e.type === 'pinch-zoom' ? 'text-purple-600 font-bold' : ''}>
+              {e.type} ({e.x},{e.y}) {e.button ? `btn=${e.button}` : ''}
+            </div>
           {/each}
         </div>
       {/if}
