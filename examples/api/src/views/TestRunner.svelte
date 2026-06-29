@@ -974,6 +974,18 @@ Expected behavior:
     });
   }
 
+  // ─── Cookie Live Manual Test (OHOS only) ───
+  async function manualCookieLiveTest() {
+    await wrapManual('cookieLive', async () => {
+      await invoke('cookie_manual_test');
+      manualResult = `Set cookie tauri_test_cookie=ManualTest123 for httpbin.org and opened a child window to https://httpbin.org/cookies.
+
+Verify the JSON response contains "tauri_test_cookie": "ManualTest123" (cookie is actually sent to the server).
+Reload the child window to verify the cookie persists.`;
+      onMessage(manualResult);
+    });
+  }
+
   // ─── QuickOperation Manual Tests (OHOS only) ───
   async function manualQuickOperationEnable() {
     await wrapManual('quickOperationEnable', async () => {
@@ -1533,6 +1545,12 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualCreatePdf}>Create PDF A4 (default)</button>
         <button class="btn" onclick={manualCreatePdfSquare}>Create PDF Square (8.27×8.27)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">webview.cookie Manual Tests (OHOS only)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualCookieLiveTest}>Cookie Live (httpbin echo)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">

@@ -27,6 +27,8 @@ fn main() {
         "test_eval_with_callback",
         "test_navigate",
         "test_reload",
+        "cookie_test",
+        "cookie_manual_test",
         "create_isolated_window",
         "create_window_with_custom_ua",
         "create_window_no_throttle",
