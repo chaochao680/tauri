@@ -76,6 +76,7 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Tauri Test",
     "fileAssociations": [
       {
         "ext": ["png"],

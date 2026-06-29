@@ -390,18 +390,38 @@ fn inject_icons(
       continue;
     };
     let stem_lower = stem.to_lowercase();
+    let is_ohos_icon =
+      stem_lower.ends_with("-starticon") || stem_lower.ends_with("-foreground") || stem_lower.ends_with("-background");
+    if !is_ohos_icon {
+      continue;
+    }
+    // DevEco's resource compiler expects real PNG data in .png media files.
+    // Reject non-PNG sources instead of misnaming them, which would break HAP packaging.
+    let is_png = path
+      .extension()
+      .and_then(|e| e.to_str())
+      .map(|e| e.eq_ignore_ascii_case("png"))
+      .unwrap_or(false);
+    if !is_png {
+      log::warn!(
+        "OHOS icon '{}' is not a PNG file; skipping (DevEco requires PNG)",
+        path.display()
+      );
+      continue;
+    }
+    let full_path = tauri_dir.join(&path);
     if stem_lower.ends_with("-starticon") {
-      starticon_path = Some(tauri_dir.join(&path));
+      starticon_path = Some(full_path);
     } else if stem_lower.ends_with("-foreground") {
-      foreground_path = Some(tauri_dir.join(&path));
+      foreground_path = Some(full_path);
     } else if stem_lower.ends_with("-background") {
-      background_path = Some(tauri_dir.join(&path));
+      background_path = Some(full_path);
     }
   }
 
   let (Some(fg), Some(bg)) = (&foreground_path, &background_path) else {
-    log::info!(
-      "OHOS icon injection skipped: foreground ({}) and background ({}) must both be present in bundle.icon",
+    log::warn!(
+      "OHOS icon injection skipped: foreground ({}) and background ({}) must both be present in bundle.icon with the -foreground / -background suffix",
       foreground_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "missing".into()),
       background_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "missing".into()),
     );

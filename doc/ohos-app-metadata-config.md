@@ -62,18 +62,20 @@ Android 的图标生成流程（`icon.rs`）：
 |--------|----------------------|-----------|------|
 | 包名 | `identifier` | `app.json5` → `bundleName` | ✅ 已实现 |
 | 应用名 | `productName` | `string.json` → `app_name` | ✅ 已实现 |
-| 发布者 | `bundle.publisher` | `app.json5` → `vendor` | ⚠️ 模板用了 `{{app.publisher}}`，但变量未注册 |
+| 发布者 | `bundle.publisher` | `app.json5` → `vendor` | ✅ 已实现 |
+| 版本号 | `version` | `app.json5` → `versionName` + `versionCode`（自动计算） | ✅ 已实现 |
+| 模块描述 | `bundle.shortDescription` | `string.json` → `module_desc` / `EntryAbility_desc` | ✅ 已实现 |
+| 图标 | `bundle.icon` 中 `-foreground`/`-background`/`-starticon` | `media/foreground.png` 等 | ✅ 已实现 |
+| OHOS 配置节 | `bundle.openHarmony` | `versionCode` / `deviceTypes` | ✅ 已实现 |
+| 设备类型 | `bundle.openHarmony.deviceTypes` | `module.json5` → `deviceTypes` | ✅ 已实现（按 `OHOS_DEVICE_TYPE` 自动调整见 TODO 9.1） |
 
-### 3.2 差距清单
+### 3.2 待办（见第 9 节 TODO）
 
-| # | 差距 | 严重程度 | 说明 |
+| # | 待办 | 严重程度 | 说明 |
 |---|------|----------|------|
-| G1 | **无 OHOS 图标生成** | 🔴 高 | bundler 未处理 `-foreground`/`-background` 文件，模板附带占位 PNG |
-| G2 | **版本号硬编码** | 🔴 高 | `app.json5` 中 `versionCode: 1` 和 `versionName: "1.0.0"` 未模板化 |
-| G3 | **Entry 字符串硬编码** | 🟡 中 | `EntryAbility_label` 为固定值 `"label"`，`module_desc`/`EntryAbility_desc` 为固定占位文本 |
-| G4 | **publisher 变量缺失** | 🟡 中 | 模板引用 `{{app.publisher}}` 但 Handlebars 变量 map 中未注册 |
-| G5 | **无 OHOS bundle 配置节** | 🟡 中 | `tauri.conf.json` 的 `bundle` 下无 `openHarmony` 配置项 |
-| G6 | **设备类型硬编码** | 🟠 低-中 | `deviceTypes` 固定为 `["phone", "tablet", "2in1"]`，无法按 `OHOS_DEVICE_TYPE` 调整 |
+| G6 | **设备类型未按 `OHOS_DEVICE_TYPE` 自动调整** | 🟠 低-中 | `deviceTypes` 默认值固定为 `["phone", "tablet", "2in1"]`，尚未根据 `OHOS_DEVICE_TYPE` 自动收窄（见 TODO 9.1） |
+| — | **build app 适配** | 🟠 中 | 当前仅适配 `build hap`，未适配 `build app`（见 TODO 9.2） |
+| — | **不同设备形态 HAP 打包** | 🟠 中 | 当前只生成通用 HAP，未按设备形态分别打包（见 TODO 9.3） |
 
 ---
 

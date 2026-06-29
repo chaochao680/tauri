@@ -352,7 +352,6 @@ fn sign_hap_if_configured(
       .sign_hap(hap_path, &signed_path, env)
       .context("failed to sign HAP")?;
 
-    signed_outputs.push(hap_path.clone());
     signed_outputs.push(signed_path);
   }
 

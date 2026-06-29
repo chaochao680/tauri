@@ -184,12 +184,17 @@ fn exec(
         .publisher
         .clone()
         .unwrap_or_else(|| {
+          // Fall back to the second segment of the identifier (e.g. "com.tauri.api" -> "tauri");
+          // if the identifier has no dot, fall back to the product name instead of an empty string.
           tauri_config
             .identifier
             .split('.')
             .nth(1)
-            .unwrap_or("")
-            .to_string()
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+              tauri_config.product_name.clone().unwrap_or_default()
+            })
         });
       let short_description = tauri_config
         .bundle
@@ -225,6 +230,9 @@ fn exec(
 
       let mut ohos_map = serde_json::Map::new();
       ohos_map.insert("version-code".to_string(), serde_json::to_value(version_code).unwrap_or_default());
+      // device-types is intentionally stored as a pre-serialized JSON string (not a Value::Array)
+      // so the module.json5 template can emit it verbatim via triple-brace `{{{...}}}`.
+      // A Value::Array would render as unquoted `[phone, tablet, 2in1]`, producing invalid JSON5.
       let device_types_str = serde_json::to_string(&tauri_config.bundle.open_harmony.device_types)
         .unwrap_or_else(|_| r#"["phone","tablet","2in1"]"#.to_string());
       ohos_map.insert("device-types".to_string(), serde_json::Value::String(device_types_str));
