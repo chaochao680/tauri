@@ -10,7 +10,7 @@
   import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+  import { getCurrentWindow, currentMonitor, cursorPosition } from '@tauri-apps/api/window';
   import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
   import { appCacheDir, join } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
@@ -1436,6 +1436,21 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
   let mouseEvents = $state([]);
   let mouseTrackArea = $state(null);
   let mouseUnlisteners = [];
+  let cursorPos = $state('');
+
+  async function manualCursorPosition() {
+    await wrapManual('cursorPosition', async () => {
+      try {
+        const pos = await cursorPosition();
+        cursorPos = `cursorPosition() → (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`;
+        manualResult = cursorPos;
+      } catch (e) {
+        cursorPos = `cursorPosition() → ERROR: ${e}`;
+        manualResult = cursorPos;
+      }
+      onMessage(manualResult);
+    });
+  }
 
   async function toggleMouseTracking() {
     if (mouseTracking) {
@@ -1562,7 +1577,11 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={toggleMouseTracking}>
           {mouseTracking ? 'Stop Mouse Tracking' : 'Start Mouse Tracking'}
         </button>
+        <button class="btn" onclick={manualCursorPosition}>Get Cursor Position</button>
       </div>
+      {#if cursorPos}
+        <div class="mt-1 text-xs font-mono text-blue-600">{cursorPos}</div>
+      {/if}
       <div
         bind:this={mouseTrackArea}
         style="width:100%;height:80px;margin-top:8px;background:{mouseTracking ? '#22c55e33' : '#6b728020'};border:2px dashed {mouseTracking ? '#22c55e' : '#6b7280'};border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:{mouseTracking ? 'crosshair' : 'default'};user-select:none;"

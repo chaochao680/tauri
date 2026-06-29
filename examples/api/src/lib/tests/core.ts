@@ -2,7 +2,7 @@ import type { TestCase } from '../test-runner';
 import { invoke, Channel, Resource } from '@tauri-apps/api/core';
 import { emit, listen, once } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
-import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { getCurrentWindow, currentMonitor, cursorPosition } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
 import { appCacheDir } from '@tauri-apps/api/path';
@@ -1200,6 +1200,17 @@ export const coreTests: TestCase[] = [
 
       assert(receivedCtrlWheel, 'Ctrl+Wheel event not received');
       assert(capturedDelta === -1, `deltaY expected -1, got ${capturedDelta}`);
+    },
+  },
+  {
+    name: '@tauri-apps/api/window.cursorPosition',
+    category: 'auto',
+    async fn() {
+      const pos = await cursorPosition();
+      assert(typeof pos.x === 'number', `pos.x should be number, got ${typeof pos.x}`);
+      assert(typeof pos.y === 'number', `pos.y should be number, got ${typeof pos.y}`);
+      assert(pos.x >= 0, `pos.x should be >= 0, got ${pos.x}`);
+      assert(pos.y >= 0, `pos.y should be >= 0, got ${pos.y}`);
     },
   },
 ];
