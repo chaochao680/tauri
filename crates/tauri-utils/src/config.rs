@@ -1685,6 +1685,9 @@ pub struct BundleConfig {
   /// Android configuration.
   #[serde(default)]
   pub android: AndroidConfig,
+  /// OpenHarmony configuration.
+  #[serde(default)]
+  pub open_harmony: OpenHarmonyConfig,
 }
 
 /// A tuple struct of RGBA colors. Each value has minimum of 0 and maximum of 255.
@@ -3248,6 +3251,38 @@ fn default_min_sdk_version() -> u32 {
   24
 }
 
+/// General configuration for the OpenHarmony target.
+#[skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenHarmonyConfig {
+  /// The version code of the application.
+  ///
+  /// By default we use your configured version and perform the following math:
+  /// versionCode = version.major * 1000000 + version.minor * 1000 + version.patch
+  #[serde(alias = "version-code")]
+  pub version_code: Option<u32>,
+
+  /// The device types supported by the application.
+  /// Defaults to `["phone", "tablet", "2in1"]`.
+  #[serde(alias = "device-types", default = "default_device_types")]
+  pub device_types: Vec<String>,
+}
+
+impl Default for OpenHarmonyConfig {
+  fn default() -> Self {
+    Self {
+      version_code: None,
+      device_types: default_device_types(),
+    }
+  }
+}
+
+fn default_device_types() -> Vec<String> {
+  vec!["phone".into(), "tablet".into(), "2in1".into()]
+}
+
 /// Defines the URL or assets to embed in the application.
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
@@ -4035,6 +4070,7 @@ mod build {
       let macos = quote!(Default::default());
       let ios = quote!(Default::default());
       let android = quote!(Default::default());
+      let open_harmony = quote!(Default::default());
 
       literal_struct!(
         tokens,
@@ -4059,7 +4095,8 @@ mod build {
         linux,
         macos,
         ios,
-        android
+        android,
+        open_harmony
       );
     }
   }
@@ -4500,6 +4537,7 @@ mod test {
       windows: Default::default(),
       ios: Default::default(),
       android: Default::default(),
+      open_harmony: Default::default(),
     };
 
     // test the configs

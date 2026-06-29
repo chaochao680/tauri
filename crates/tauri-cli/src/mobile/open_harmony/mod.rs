@@ -24,6 +24,7 @@ use clap::{Parser, Subcommand};
 use std::{
   env::set_var,
   fs::{create_dir_all, write},
+  path::PathBuf,
   thread::sleep,
   time::Duration,
 };
@@ -362,5 +363,67 @@ fn inject_resources(config: &OpenHarmonyConfig, tauri_config: &TauriConfig) -> R
     }
   }
 
+  Ok(())
+}
+
+fn inject_icons(
+  config: &OpenHarmonyConfig,
+  tauri_config: &TauriConfig,
+  tauri_dir: &std::path::Path,
+) -> Result<()> {
+  let icons = &tauri_config.bundle.icon;
+  if icons.is_empty() {
+    return Ok(());
+  }
+
+  let project_dir = config.project_dir();
+  let app_media_dir = project_dir.join("AppScope/resources/base/media");
+  let entry_media_dir = project_dir.join("entry/src/main/resources/base/media");
+
+  let mut foreground_path: Option<PathBuf> = None;
+  let mut background_path: Option<PathBuf> = None;
+  let mut starticon_path: Option<PathBuf> = None;
+
+  for icon in icons {
+    let path = PathBuf::from(icon);
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+      continue;
+    };
+    let stem_lower = stem.to_lowercase();
+    if stem_lower.ends_with("-starticon") {
+      starticon_path = Some(tauri_dir.join(&path));
+    } else if stem_lower.ends_with("-foreground") {
+      foreground_path = Some(tauri_dir.join(&path));
+    } else if stem_lower.ends_with("-background") {
+      background_path = Some(tauri_dir.join(&path));
+    }
+  }
+
+  let (Some(fg), Some(bg)) = (&foreground_path, &background_path) else {
+    log::info!(
+      "OHOS icon injection skipped: foreground ({}) and background ({}) must both be present in bundle.icon",
+      foreground_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "missing".into()),
+      background_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "missing".into()),
+    );
+    return Ok(());
+  };
+
+  // Copy to AppScope media
+  create_dir_all(&app_media_dir)
+    .fs_context("failed to create AppScope media directory", app_media_dir.clone())?;
+  crate::helpers::fs::copy_file(fg, app_media_dir.join("foreground.png"))?;
+  crate::helpers::fs::copy_file(bg, app_media_dir.join("background.png"))?;
+
+  // Copy to entry media
+  create_dir_all(&entry_media_dir)
+    .fs_context("failed to create entry media directory", entry_media_dir.clone())?;
+  crate::helpers::fs::copy_file(fg, entry_media_dir.join("foreground.png"))?;
+  crate::helpers::fs::copy_file(bg, entry_media_dir.join("background.png"))?;
+
+  // startIcon: use dedicated *-starticon file if present, otherwise fall back to foreground
+  let starticon_src = starticon_path.as_ref().unwrap_or(fg);
+  crate::helpers::fs::copy_file(starticon_src, entry_media_dir.join("startIcon.png"))?;
+
+  log::info!("OHOS icons injected successfully");
   Ok(())
 }

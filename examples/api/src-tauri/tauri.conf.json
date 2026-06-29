@@ -105,7 +105,10 @@
       "../../.icons/128x128@2x.png",
       "../../.icons/icon.icns",
       "../../.icons/icon.ico",
-      "../../.icons/AppIcon.icon"
+      "../../.icons/AppIcon.icon",
+      "../../.icons/icon-foreground.png",
+      "../../.icons/icon-background.png",
+      "../../.icons/icon-starticon.png"
     ],
     "windows": {
       "wix": {
@@ -119,6 +122,9 @@
       "nsis": {
         "compression": "none"
       }
+    },
+    "openHarmony": {
+      "deviceTypes": ["phone", "tablet", "2in1"]
     }
   }
 }

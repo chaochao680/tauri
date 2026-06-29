@@ -177,6 +177,61 @@ fn exec(
       let (config, _metadata) =
         super::open_harmony::get_config(&app, &tauri_config, None, &Default::default());
 
+      // Register template variables for OHOS templates
+      let version = tauri_config.version.as_deref().unwrap_or("1.0.0");
+      let publisher = tauri_config
+        .bundle
+        .publisher
+        .clone()
+        .unwrap_or_else(|| {
+          tauri_config
+            .identifier
+            .split('.')
+            .nth(1)
+            .unwrap_or("")
+            .to_string()
+        });
+      let short_description = tauri_config
+        .bundle
+        .short_description
+        .clone()
+        .unwrap_or_else(|| {
+          tauri_config
+            .product_name
+            .clone()
+            .unwrap_or_default()
+        });
+      let version_code = tauri_config
+        .bundle
+        .open_harmony
+        .version_code
+        .unwrap_or_else(|| {
+          tauri_config
+            .version
+            .as_ref()
+            .and_then(|v| semver::Version::parse(v).ok())
+            .map(|v| {
+              let code = v.major * 1000000 + v.minor * 1000 + v.patch;
+              code.clamp(1, u32::MAX as u64) as u32
+            })
+            .unwrap_or(1)
+        });
+      map.insert("version", version);
+
+      // bundle sub-fields: {{bundle.publisher}}, {{bundle.short-description}}, {{bundle.open-harmony.*}}
+      let mut bundle_map = serde_json::Map::new();
+      bundle_map.insert("publisher".to_string(), serde_json::to_value(&publisher).unwrap_or_default());
+      bundle_map.insert("short-description".to_string(), serde_json::to_value(&short_description).unwrap_or_default());
+
+      let mut ohos_map = serde_json::Map::new();
+      ohos_map.insert("version-code".to_string(), serde_json::to_value(version_code).unwrap_or_default());
+      let device_types_str = serde_json::to_string(&tauri_config.bundle.open_harmony.device_types)
+        .unwrap_or_else(|_| r#"["phone","tablet","2in1"]"#.to_string());
+      ohos_map.insert("device-types".to_string(), serde_json::Value::String(device_types_str));
+      bundle_map.insert("open-harmony".to_string(), serde_json::Value::Object(ohos_map));
+
+      map.insert("bundle", bundle_map);
+
       let detected_plugins =
         super::open_harmony::plugins::detect_all_plugins(dirs.tauri).unwrap_or_default();
 
