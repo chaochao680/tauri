@@ -196,7 +196,10 @@ pub struct WindowIdStore(Arc<Mutex<HashMap<TaoWindowId, WindowId>>>);
 
 impl WindowIdStore {
   pub fn insert(&self, w: TaoWindowId, id: WindowId) {
-    self.0.lock().unwrap().insert(w, id);
+    // On OHOS, WindowId is a ZST - all windows share the same key.
+    // Use or_insert to keep the first (main) window mapping and prevent
+    // child window creation from overwriting it.
+    self.0.lock().unwrap().entry(w).or_insert(id);
   }
 
   pub fn get(&self, w: &TaoWindowId) -> Option<WindowId> {
