@@ -29,6 +29,7 @@ fn main() {
         "test_reload",
         "cookie_test",
         "cookie_manual_test",
+        "set_bounds_test",
         "devtools_test",
         "create_isolated_window",
         "create_window_with_custom_ua",
@@ -36,7 +37,7 @@ fn main() {
         "create_transparent_window",
         "create_borderless_window",
         "create_transparent_borderless_window",
-        "dummy_command", 
+        "dummy_command",
         "close_test_window",
         "create_counter",
         "increment_counter",
@@ -59,7 +60,7 @@ fn main() {
         "set_download_test_mode",
         #[cfg(debug_assertions)]
         "sentry_test_panic",
-        "sentry_test_breadcrumb"
+        "sentry_test_breadcrumb",
       ])),
   )
   .expect("failed to run tauri-build");

@@ -1155,4 +1155,15 @@ export const coreTests: TestCase[] = [
       );
     },
   },
+
+  // 5.1 set_bounds / bounds round-trip (OHOS)
+  {
+    name: 'webview.set_bounds round-trip (OHOS)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke('set_bounds_test');
+      assert(report.set_ok === true, `set_bounds_test failed: ${JSON.stringify(report)}`);
+      assert(report.matches === true, `bounds should match after round-trip, got: ${JSON.stringify(report)}`);
+    },
+  },
 ];

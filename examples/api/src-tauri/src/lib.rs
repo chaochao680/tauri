@@ -84,7 +84,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   // Minidump guard must live for the full app lifetime (captures native crashes)
   #[cfg(all(not(target_os = "ios"), not(target_env = "ohos")))]
-  let _minidump_guard = sentry_client.as_ref().map(|c| tauri_plugin_sentry::minidump::init(c));
+  let _minidump_guard = sentry_client
+    .as_ref()
+    .map(|c| tauri_plugin_sentry::minidump::init(c));
 
   let mut builder = builder;
 
@@ -109,7 +111,11 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
   #[cfg(target_env = "ohos")]
   {
     builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-      log::info!("[single-instance] callback fired! args={:?}, cwd={:?}", args, cwd);
+      log::info!(
+        "[single-instance] callback fired! args={:?}, cwd={:?}",
+        args,
+        cwd
+      );
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_focus();
       }
@@ -119,30 +125,30 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
   #[cfg(target_env = "ohos")]
   {
     builder = builder
-    .plugin(
-      tauri_plugin_log::Builder::default()
-        .level(log::LevelFilter::Trace)
-        .clear_targets()
-        .target(tauri_plugin_log::Target::new(
-          tauri_plugin_log::TargetKind::Stdout,
-        ))
-        .skip_logger()
-        .build(),
-    )
-    .plugin(tauri_plugin_fs::init())
-    .plugin(tauri_plugin_os::init())
-    .plugin(tauri_plugin_http::init())
-    .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_updater::Builder::new().build())
-    .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_clipboard_manager::init())
-    .plugin(tauri_plugin_notification::init())
-    // MacosLauncher::LaunchAgent is ignored on OHOS (macOS-specific parameter)
-    .plugin(tauri_plugin_autostart::init(
-      tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-      None,
-    ));
+      .plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Trace)
+          .clear_targets()
+          .target(tauri_plugin_log::Target::new(
+            tauri_plugin_log::TargetKind::Stdout,
+          ))
+          .skip_logger()
+          .build(),
+      )
+      .plugin(tauri_plugin_fs::init())
+      .plugin(tauri_plugin_os::init())
+      .plugin(tauri_plugin_http::init())
+      .plugin(tauri_plugin_shell::init())
+      .plugin(tauri_plugin_process::init())
+      .plugin(tauri_plugin_updater::Builder::new().build())
+      .plugin(tauri_plugin_dialog::init())
+      .plugin(tauri_plugin_clipboard_manager::init())
+      .plugin(tauri_plugin_notification::init())
+      // MacosLauncher::LaunchAgent is ignored on OHOS (macOS-specific parameter)
+      .plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        None,
+      ));
   }
 
   #[cfg(target_env = "ohos")]
@@ -602,6 +608,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::test_reload,
       cmd::cookie_test,
       cmd::cookie_manual_test,
+      cmd::set_bounds_test,
       #[cfg(any(debug_assertions, feature = "devtools"))]
       cmd::devtools_test,
       cmd::create_isolated_window,

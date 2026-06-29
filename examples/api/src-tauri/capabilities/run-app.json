@@ -30,6 +30,7 @@
     "allow-test-reload",
     "allow-cookie-test",
     "allow-cookie-manual-test",
+    "allow-set-bounds-test",
     "allow-devtools-test",
     "allow-create-isolated-window",
     "allow-create-window-with-custom-ua",
