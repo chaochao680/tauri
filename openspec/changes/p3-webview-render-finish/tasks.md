@@ -1,25 +1,35 @@
-## 1. wry OHOS 层
+## 1. tao OHOS 层
 
-- [x] 1.1 `wry/src/ohos/mod.rs`：`set_bounds` 非子分支**维持 cache-only**（经尝试移除后全屏黑边，已回退）。cache-only 是正确行为：主 webview 经 `"100%"` 宽高填满窗口，set_bounds 仅更新 `bounds_cache`
-- [x] 1.2 注释说明：cache-only 原因（setBounds 会把 `"100%"` 替换为具体像素值 → 全屏黑边）；子 webview 仍调 ArkTS setBounds（绝对定位，不受影响）
+- [x] 1.1 `tao/src/platform_impl/ohos/mod.rs`：`ContentRectChange` handler 从 `warn!("TODO:...")` 改为传播 `WindowEvent::Resized(PhysicalSize::new(rect.width, rect.height))`
+- [x] 1.2 注释说明：ContentRectChange 经 windowRectChange 触发，传播为 Resized 使 tauri resize handler 调 set_bounds
 
-## 2. R74 透明背景核实
+## 2. tauri-runtime-wry 层
 
-- [x] 2.1 核实 archive `p1-webview-transparent` 全部改动在代码中 → 确认 R74 已闭环，标注关闭
+- [x] 2.1 `crates/tauri-runtime-wry/src/lib.rs`：`WindowIdStore::insert` 改为 `entry(w).or_insert(id)`（OHOS ZST WindowId 防覆盖）
+- [x] 2.2 注释说明：OHOS WindowId 是 ZST，or_insert 保留主窗口映射
 
-## 3. 编译验证
+## 3. wry OHOS 层
 
-- [x] 3.1 `cargo check --target aarch64-unknown-linux-ohos --features openharmony-ability/webview`（wry）通过
-- [x] 3.2 `cargo check`（host 非 ohos）通过
-- [x] 3.3 三环境编译（Windows / OHOS desktop / OHOS mobile）通过
+- [x] 3.1 `wry/src/ohos/mod.rs`：`set_bounds` 移除 `if !self.is_child { cache-only; return; }` 早返回，子与非子统一调 `self.webview.set_bounds(x,y,w,h)` + 缓存
+- [x] 3.2 注释说明：三修复链（tao 传播 + or_insert + 移除 cache-only）使 set_bounds 在 resize 时正确调用
 
-## 4. 设备端验证
+## 4. R74 透明背景核实
 
-- [x] 4.1 全屏无黑边：p3 构建（cache-only 回退后）全屏应用四个方向无黑边（manual，用户确认修复）
-- [x] 4.2 cookie 等既有用例无回归（auto，210/212，2 既有失败）
+- [x] 4.1 核实 archive `p1-webview-transparent` 已落地 → **仅子窗口生效**（FloatPage），主窗口窗口级透明未实现 → R74 维持 ⚠️
 
-## 5. 文档
+## 5. 测试用例
 
-- [x] 5.1 manual_tests.md 新增 7.4 "全屏无黑边"回归防护用例（T0）+ 统计表更新（53/54/107）
-- [x] 5.2 design/spec 更新：R78 cache-only 为正确行为（非缺陷），全屏回归防护
-- [x] 5.3 确认改动仅位于 `cfg(target_env="ohos")` 路径
+- [x] 5.1 自动用例：`set_bounds_test` 命令（bounds() → set_bounds() → bounds() round-trip）+ core.ts test 53
+- [x] 5.2 手动用例：manual_tests.md 7.4 "全屏无黑边"（T0，防护三修复链回归）
+
+## 6. 编译验证
+
+- [x] 6.1 `cargo check`（host 非 ohos，wry）通过
+- [x] 6.2 `cargo check --target aarch64-unknown-linux-ohos`（OHOS desktop，wry + tao + tauri-runtime-wry）通过
+- [x] 6.3 OHOS mobile 编译通过
+- [x] 6.4 设备验证：set_bounds auto test ✅ + 全屏无黑边 ✅ + cookie 无回归 ✅
+
+## 7. 文档
+
+- [x] 7.1 proposal/design/specs/tasks 更新为实际 3 仓修复方案
+- [x] 7.2 plan 文件 Phase 3 状态更新
