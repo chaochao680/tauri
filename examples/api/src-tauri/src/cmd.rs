@@ -1090,3 +1090,46 @@ pub fn cookie_manual_test<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
 
   Ok(())
 }
+
+/// Test OHOS WebView DevTools (open/close/is_devtools_open). Only compiled when
+/// the `devtools` feature (or debug_assertions) is enabled; dormant otherwise.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_test<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> tauri::Result<serde_json::Value> {
+  let initial = window.is_devtools_open();
+  window.open_devtools();
+  let after_open = window.is_devtools_open();
+  window.close_devtools();
+  let after_close = window.is_devtools_open();
+  Ok(serde_json::json!({
+    "enabled": true,
+    "initial": initial,
+    "after_open": after_open,
+    "after_close": after_close,
+  }))
+}
+
+
+/// Only call open_devtools() without close. Keeps the debugging session open
+/// so Chrome DevTools can connect via devtools.bat + chrome://inspect.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_open_only<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+  window.open_devtools();
+  Ok(())
+}
+
+/// Only call close_devtools() without open. Closes the debugging session,
+/// destroying the domain socket and disconnecting Chrome DevTools.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_close_only<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+  window.close_devtools();
+  Ok(())
+}

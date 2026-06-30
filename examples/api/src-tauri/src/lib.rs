@@ -602,6 +602,12 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::test_reload,
       cmd::cookie_test,
       cmd::cookie_manual_test,
+      #[cfg(any(debug_assertions, feature = "devtools"))]
+      cmd::devtools_test,
+      #[cfg(any(debug_assertions, feature = "devtools"))]
+      cmd::devtools_open_only,
+      #[cfg(any(debug_assertions, feature = "devtools"))]
+      cmd::devtools_close_only,
       cmd::create_isolated_window,
       cmd::dummy_command,
       cmd::create_window_with_custom_ua,
