@@ -84,7 +84,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
 
   // Minidump guard must live for the full app lifetime (captures native crashes)
   #[cfg(all(not(target_os = "ios"), not(target_env = "ohos")))]
-  let _minidump_guard = sentry_client.as_ref().map(|c| tauri_plugin_sentry::minidump::init(c));
+  let _minidump_guard = sentry_client
+    .as_ref()
+    .map(|c| tauri_plugin_sentry::minidump::init(c));
 
   let mut builder = builder;
 
@@ -109,7 +111,11 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
   #[cfg(target_env = "ohos")]
   {
     builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-      log::info!("[single-instance] callback fired! args={:?}, cwd={:?}", args, cwd);
+      log::info!(
+        "[single-instance] callback fired! args={:?}, cwd={:?}",
+        args,
+        cwd
+      );
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_focus();
       }
@@ -119,31 +125,31 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
   #[cfg(target_env = "ohos")]
   {
     builder = builder
-    .plugin(
-      tauri_plugin_log::Builder::default()
-        .level(log::LevelFilter::Trace)
-        .clear_targets()
-        .target(tauri_plugin_log::Target::new(
-          tauri_plugin_log::TargetKind::Stdout,
-        ))
-        .skip_logger()
-        .build(),
-    )
-    .plugin(tauri_plugin_fs::init())
-    .plugin(tauri_plugin_os::init())
-    .plugin(tauri_plugin_http::init())
-    .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_updater::Builder::new().build())
-    .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_clipboard_manager::init())
-    .plugin(tauri_plugin_notification::init())
-    // MacosLauncher::LaunchAgent is ignored on OHOS (macOS-specific parameter)
-    .plugin(tauri_plugin_autostart::init(
-      tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-      None,
-    ))
-    .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+      .plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Trace)
+          .clear_targets()
+          .target(tauri_plugin_log::Target::new(
+            tauri_plugin_log::TargetKind::Stdout,
+          ))
+          .skip_logger()
+          .build(),
+      )
+      .plugin(tauri_plugin_fs::init())
+      .plugin(tauri_plugin_os::init())
+      .plugin(tauri_plugin_http::init())
+      .plugin(tauri_plugin_shell::init())
+      .plugin(tauri_plugin_process::init())
+      .plugin(tauri_plugin_updater::Builder::new().build())
+      .plugin(tauri_plugin_dialog::init())
+      .plugin(tauri_plugin_clipboard_manager::init())
+      .plugin(tauri_plugin_notification::init())
+      // MacosLauncher::LaunchAgent is ignored on OHOS (macOS-specific parameter)
+      .plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        None,
+      ))
+      .plugin(tauri_plugin_global_shortcut::Builder::new().build());
   }
 
   #[cfg(target_env = "ohos")]
@@ -449,15 +455,31 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
               let deny_state = app_.state::<cmd::NewWindowDenyState>();
               *deny_state.last_url.lock().unwrap() = Some(url.to_string());
               let should_deny = deny_state.deny.load(std::sync::atomic::Ordering::SeqCst);
+              let should_create = deny_state.create.load(std::sync::atomic::Ordering::SeqCst);
 
               // Emit event for frontend test verification
               let _ = app_.emit("new-window-requested", url.to_string());
 
               if should_deny {
-                log::info!("[OHOS] on_new_window: DENY for URL: {}", url);
+                log::debug!("[OHOS] on_new_window: DENY for URL: {}", url);
                 tauri::webview::NewWindowResponse::Deny
+              } else if should_create {
+                log::debug!("[OHOS] on_new_window: CREATE real OS window for URL: {}", url);
+                let builder = WebviewWindowBuilder::new(
+                  &app_,
+                  format!("new-{number}"),
+                  tauri::WebviewUrl::External(url.clone()),
+                )
+                .title(url.as_str());
+                match builder.build() {
+                  Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                  Err(e) => {
+                    log::error!("[OHOS] on_new_window: CREATE failed, falling back to Allow: {}", e);
+                    tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
+                  }
+                }
               } else {
-                log::info!("[OHOS] on_new_window: ALLOW dialog for URL: {}", url);
+                log::debug!("[OHOS] on_new_window: ALLOW dialog for URL: {}", url);
                 tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
               }
             }
@@ -467,7 +489,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       let webview = window_builder.build()?;
 
       // Set window background to white to avoid black top bar on OHOS
-      // (OHOS default window background is black when transparent=false)
       let _ = webview.set_background_color(Some(tauri::window::Color(255, 255, 255, 255)));
 
       // Setup window event tracking
@@ -609,6 +630,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::devtools_open_only,
       #[cfg(any(debug_assertions, feature = "devtools"))]
       cmd::devtools_close_only,
+      cmd::set_bounds_test,
       cmd::create_isolated_window,
       cmd::dummy_command,
       cmd::create_window_with_custom_ua,
@@ -631,6 +653,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::clear_tracked_events,
       #[cfg(target_env = "ohos")]
       cmd::set_deny_new_window,
+      #[cfg(target_env = "ohos")]
+      cmd::set_create_new_window,
+      #[cfg(target_env = "ohos")]
+      cmd::desktop_features_test,
       #[cfg(target_env = "ohos")]
       cmd::get_last_new_window_url,
       #[cfg(target_env = "ohos")]

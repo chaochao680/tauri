@@ -838,25 +838,6 @@ Expected behavior:
     });
   }
 
-  async function manualSetBackgroundColor(color, label) {
-    await wrapManual(`setBackgroundColor(${label})`, async () => {
-      const win = getCurrentWindow();
-      if (color === null) {
-        // Use webview-level API which supports null to truly reset to default
-        await webview.setBackgroundColor(null);
-        manualResult = `Background color reset to default (null via Webview API).\n\nExpected: Window background returns to its original default color.`;
-      } else {
-        await win.setBackgroundColor(color);
-        const [r, g, b, a] = color;
-        manualResult = `Background color set to [${r},${g},${b},${a}] (${label}).\n\n` +
-          `Expected: Window background should change to ${label}.\n` +
-          `Alpha=${a} (${a === 255 ? 'fully opaque' : a === 0 ? 'fully transparent' : 'semi-transparent'}).\n\n` +
-          `If visual matches → PASS.`;
-      }
-      onMessage(manualResult);
-    });
-  }
-
   // ─── Process & Updater Manual Tests ───
   async function manualRelaunch() {
     await wrapManual('relaunch', async () => {
@@ -1355,6 +1336,63 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
       onMessage('on_new_window Deny: no dialog should appear');
     });
   }
+
+  async function manualNewWindowCreate() {
+    await wrapManual('newWindowCreate', async () => {
+      await invoke('set_deny_new_window', { deny: false });
+      await invoke('set_create_new_window', { create: true });
+      window.open('https://example.com/manual-create-test', '_blank');
+      await new Promise((r) => setTimeout(r, 2000));
+      const lastUrl = await invoke('get_last_new_window_url');
+      manualResult = 'Create mode: a real OS window should appear (not a dialog).\n' +
+        `Handler received URL: ${lastUrl || '(null)'}\n` +
+        `Verify:\n` +
+        `  1. A separate OS window appears (not in-page dialog)\n` +
+        `  2. Window has title bar with decorations\n` +
+        `  3. Window loads the target URL\n` +
+        `  4. Window can be moved/resized independently\n` +
+        `  5. Closing the window does not close the main app`;
+      await invoke('set_create_new_window', { create: false });
+      onMessage('on_new_window Create: real OS window should appear');
+    });
+  }
+
+  // ─── Window Focus + Hotkey Zoom Manual Tests ───
+  async function manualWindowFocus() {
+    await wrapManual('windowFocus', async () => {
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const testWindow = await WebviewWindow.getByLabel('focus-test-window');
+      if (testWindow) {
+        await testWindow.setFocus();
+        manualResult = 'Called setFocus() on existing focus-test-window.\nVerify: window should come to front.';
+      } else {
+        const w = new WebviewWindow('focus-test-window', {
+          url: 'https://example.com/focus-test',
+          title: 'Focus Test Window',
+          width: 600,
+          height: 400,
+        });
+        await new Promise((r) => setTimeout(r, 2000));
+        await w.setFocus();
+        manualResult = 'Created focus-test-window and called setFocus().\nVerify:\n  1. Sub-window appeared\n  2. After setFocus(), sub-window came to front';
+      }
+      onMessage('window focus: sub-window should be focused');
+    });
+  }
+
+  async function manualHotkeyZoom() {
+    await wrapManual('hotkeyZoom', async () => {
+      manualResult = 'Hotkey Zoom Test (OHOS desktop only):\n\n' +
+        '1. Click this test button\n' +
+        '2. Focus the webview area\n' +
+        '3. Press Ctrl + = to zoom in\n' +
+        '4. Press Ctrl + - to zoom out\n\n' +
+        'Verify: page content scales up/down.\n' +
+        'If nothing happens, ArkWeb may not dispatch keydown with ctrlKey.';
+      onMessage('hotkey zoom: follow instructions in result');
+    });
+  }
+
   // ─── Notification Manual Tests ───
   async function manualNotificationSend() {
     await wrapManual('notificationSend', async () => {
@@ -1690,18 +1728,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
         <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
-        <button class="btn" onclick={manualToggleDecorations}>Toggle Decorations (current window)</button>
       </div>
-      <div class="flex gap-2 flex-wrap mt-2">
-        <button class="btn" onclick={() => manualSetBackgroundColor([255, 0, 0, 128], 'semi-transparent red')}>BG: Semi-Red</button>
-        <button class="btn" onclick={() => manualSetBackgroundColor([0, 255, 0, 128], 'semi-transparent green')}>BG: Semi-Green</button>
-        <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 255, 255], 'opaque blue')}>BG: Opaque Blue</button>
-        <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 0, 0], 'fully transparent')}>BG: Transparent</button>
-        <button class="btn" onclick={() => manualSetBackgroundColor(null, 'null (reset)')}>BG: Reset</button>
-      </div>
-      {#if decorationsState !== 'unknown'}
-        <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400">{decorationsState}</div>
-      {/if}
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Process & Updater Manual Tests</h5>
@@ -1834,6 +1861,14 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualNewWindowAllow}>Allow (dialog with ✕ close)</button>
         <button class="btn" onclick={manualNewWindowDeny}>Deny (no dialog)</button>
+        <button class="btn" onclick={manualNewWindowCreate}>Create (real OS window)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Window Focus + Hotkey Zoom Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualWindowFocus}>Window Focus (create + focus sub-window)</button>
+        <button class="btn" onclick={manualHotkeyZoom}>Hotkey Zoom (Ctrl+/-)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">

@@ -196,7 +196,17 @@ pub struct WindowIdStore(Arc<Mutex<HashMap<TaoWindowId, WindowId>>>);
 
 impl WindowIdStore {
   pub fn insert(&self, w: TaoWindowId, id: WindowId) {
+    // On OHOS, WindowId is a ZST - all windows share the same key.
+    // Use or_insert to keep the first (main) window mapping and prevent
+    // child window creation from overwriting it.
+    #[cfg(target_env = "ohos")]
+    {
+      self.0.lock().unwrap().entry(w).or_insert(id);
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
     self.0.lock().unwrap().insert(w, id);
+  }
   }
 
   pub fn get(&self, w: &TaoWindowId) -> Option<WindowId> {
@@ -328,19 +338,41 @@ impl<T: UserEvent> Context<T> {
       })
       .unwrap_or((None, false));
 
+    #[cfg(target_env = "ohos")]
+    let ohos_window_id = Arc::new(std::sync::Mutex::new(None::<i64>));
+    #[cfg(target_env = "ohos")]
+    let ohos_window_id_clone = ohos_window_id.clone();
+
     send_user_message(
       self,
       Message::CreateWindow(
         window_id,
         Box::new(move |event_loop| {
-          create_window(
+          log::debug!("[WRY] CreateWindow callback: start");
+          let window = create_window(
             window_id,
             webview_id.unwrap_or_default(),
             event_loop,
             &context,
             pending,
             after_window_creation,
-          )
+          )?;
+          #[cfg(target_env = "ohos")]
+          {
+            log::info!(
+              "[WRY] CreateWindow callback: inner={}",
+              window.inner.is_some()
+            );
+            if let Some(ref inner) = window.inner {
+              use tao::window::WindowExtOhos;
+              let id = inner.ohos_window_id();
+              log::debug!("[WRY] CreateWindow callback: ohos_window_id={:?}", id);
+              if let Some(id) = id {
+                *ohos_window_id_clone.lock().unwrap() = Some(id);
+              }
+            }
+          }
+          Ok(window)
         }),
       ),
     )?;
@@ -348,6 +380,8 @@ impl<T: UserEvent> Context<T> {
     let dispatcher = WryWindowDispatcher {
       window_id,
       context: self.clone(),
+      #[cfg(target_env = "ohos")]
+      ohos_window_id,
     };
 
     let detached_webview = webview_id.map(|id| {
@@ -951,10 +985,8 @@ impl WindowBuilder for WindowBuilderWrapper {
     {
       use tao::platform::ohos::WindowBuilderExtOpenHarmony;
       window.inner = window.inner.with_label(&config.label);
-      // Config windows are always the main (UIAbility) window
-      window.inner = window
-        .inner
-        .with_window_kind(tao::platform::ohos::OHOSWindowKind::UIAbility);
+      // Window kind is determined by tao based on UIABILITY_CREATED flag:
+      // first window → UIAbility, subsequent windows → Float
     }
 
     let mut constraints = WindowSizeConstraints::default();
@@ -2034,6 +2066,8 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
 pub struct WryWindowDispatcher<T: UserEvent> {
   window_id: WindowId,
   context: Context<T>,
+  #[cfg(target_env = "ohos")]
+  ohos_window_id: Arc<std::sync::Mutex<Option<i64>>>,
 }
 
 // SAFETY: this is safe since the `Context` usage is guarded on `send_user_message`.
@@ -2471,6 +2505,33 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
   }
 
   fn set_focus(&self) -> Result<()> {
+    #[cfg(target_env = "ohos")]
+    {
+      let ohos_id = {
+        let guard = self.ohos_window_id.lock().unwrap();
+        *guard
+      };
+      log::debug!("[WRY] set_focus: ohos_window_id={:?}", ohos_id);
+      if let Some(id) = ohos_id {
+        if id > 0 {
+          log::debug!(
+            "[WRY] set_focus: dispatching focus_window({}) to main thread",
+            id
+          );
+          // NAPI env is only available on the main thread — dispatch via event loop
+          return send_user_message(
+            &self.context,
+            Message::Task(Box::new(move || {
+              if let Err(e) = openharmony_ability::window::focus_window(id) {
+                log::warn!("[WRY] focus_window({}) failed: {:?}", id, e);
+              }
+            })),
+          );
+        }
+        return Ok(()); // Main window: focus is OS-managed
+      }
+      log::warn!("[WRY] set_focus: ohos_window_id is None, falling back to event loop");
+    }
     send_user_message(
       &self.context,
       Message::Window(self.window_id, WindowMessage::SetFocus),
@@ -2478,6 +2539,31 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
   }
 
   fn set_focusable(&self, focusable: bool) -> Result<()> {
+    #[cfg(target_env = "ohos")]
+    {
+      let ohos_id = {
+        let guard = self.ohos_window_id.lock().unwrap();
+        *guard
+      };
+      if let Some(id) = ohos_id {
+        if id > 0 {
+          return send_user_message(
+            &self.context,
+            Message::Task(Box::new(move || {
+              if let Err(e) = openharmony_ability::window::set_window_focusable(id, focusable) {
+                log::warn!(
+                  "[WRY] set_window_focusable({},{}) failed: {:?}",
+                  id,
+                  focusable,
+                  e
+                );
+              }
+            })),
+          );
+        }
+        return Ok(());
+      }
+    }
     send_user_message(
       &self.context,
       Message::Window(self.window_id, WindowMessage::SetFocusable(focusable)),
@@ -3129,9 +3215,20 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
       after_window_creation,
     )?;
 
+    #[cfg(target_env = "ohos")]
+    let ohos_window_id = {
+      let id = window.inner.as_ref().and_then(|w| {
+        use tao::window::WindowExtOhos;
+        w.ohos_window_id()
+      });
+      Arc::new(std::sync::Mutex::new(id))
+    };
+
     let dispatcher = WryWindowDispatcher {
       window_id,
       context: self.context.clone(),
+      #[cfg(target_env = "ohos")]
+      ohos_window_id,
     };
 
     self
@@ -5248,6 +5345,10 @@ You may have it installed on another user account, but it is not available for t
             #[cfg(windows)]
             webview: webview.webview(),
           }
+        }
+        #[cfg(target_env = "ohos")]
+        tauri_runtime::webview::NewWindowResponse::Create { .. } => {
+          wry::NewWindowResponse::Create {}
         }
         tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
       }

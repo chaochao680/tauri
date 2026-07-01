@@ -24,11 +24,11 @@
 |-------|------|----------------|------|--------|---------|---------|
 | 1 | Cookie 管理补全 | `p1-webview-cookie` | ✓ 已归档 | wry+ability+ArkTS | 5 | 设备端 cookie 读/写/删用例 |
 | 2 | DevTools 状态 + 聚焦父窗口 | `p2-webview-devtools-focus` | ✓ 已归档 | wry+ArkTS | 3 | is_devtools_open 返回真实值 + focus 生效 |
-| 3 | 渲染收尾（透明背景核实 + 边界） | `p3_webview-render-finish` | ○ 待开始 | wry+ArkTS | 3 | 透明窗口可见 + 主 webview set_bounds 生效 |
-| 4 | 文件拖拽 | `p4_webview-drag-drop` | ○ 待开始 | wry+ability+ArkTS | 4 | 拖文件入窗触发 drop 事件 |
+| 3 | 渲染收尾（透明背景核实 + 边界） | `p3_webview-render-finish` | ✓ 已归档 | wry+ArkTS | 3 | 透明窗口可见 + 主 webview set_bounds 生效 |
+| 4 | 文件拖拽 | `p4_webview-drag-drop` | ✗ 平台限制 | wry+ability+ArkTS | 4 | NWeb 消费拖拽事件，HTML5 DnD 原生可用 |
 | 5 | 打印 | `p5_webview-print` | ○ 待开始 | wry+ArkTS | 3 | print 生成 PDF / 触发系统打印 |
-| 6 | 新窗口 Create 变体 | `p6_webview-new-window-create` | ○ 待开始 | wry+ability+ArkTS | 6 | window.open 真正创建子 webview 窗口 |
-| 7 | 桌面系功能适配 | `p7_webview-desktop-features` | ○ 待开始 | wry+ability+ArkTS | 6 | 逐项适配或标注不适用（含桌面形态） |
+| 6 | 新窗口 Create 变体 | `p6-webview-new-window-create` | ✓ 设计完成 | wry+ability+ArkTS+tauri | 6 | window.open 真正创建子 webview 窗口 |
+| 7 | 桌面系功能适配 | `p7_webview-desktop-features` | ✓ 设计完成 | wry+ability+ArkTS | 6 | 逐项适配或标注不适用（含桌面形态） |
 
 ## Phase 详细说明
 

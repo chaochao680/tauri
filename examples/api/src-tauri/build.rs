@@ -32,13 +32,14 @@ fn main() {
         "devtools_test",
         "devtools_open_only",
         "devtools_close_only",
+        "set_bounds_test",
         "create_isolated_window",
         "create_window_with_custom_ua",
         "create_window_no_throttle",
         "create_transparent_window",
         "create_borderless_window",
         "create_transparent_borderless_window",
-        "dummy_command", 
+        "dummy_command",
         "close_test_window",
         "create_counter",
         "increment_counter",
@@ -55,13 +56,15 @@ fn main() {
         "append_test_result",
         "get_ohos_version_info",
         "set_deny_new_window",
+        "set_create_new_window",
+        "desktop_features_test",
         "get_last_new_window_url",
         "test_web_page_snapshot",
         "test_create_pdf",
         "set_download_test_mode",
         #[cfg(debug_assertions)]
         "sentry_test_panic",
-        "sentry_test_breadcrumb"
+        "sentry_test_breadcrumb",
       ])),
   )
   .expect("failed to run tauri-build");

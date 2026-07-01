@@ -267,7 +267,7 @@ async fn reopen_window(app: tauri::AppHandle) {
       #[cfg(target_os = "ios")]
       requested_by_scene_identifier_set: config.requested_by_scene_identifier.is_some(),
       #[cfg(target_env = "ohos")]
-      ohos_window_kind: Some(OHOSWindowKind::UIAbility),
+      ohos_window_kind: None,
       manager,
       label: config.label.clone(),
       window_effects: config.window_effects.clone(),

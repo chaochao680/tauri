@@ -156,18 +156,29 @@
 |------|-----|-----|------|
 | Webview — Cookie | 1 | 0 | **1** |
 
-### 7.3 DevTools（调试访问开关 + Chrome DevTools 连接）
+### 7.3 DevTools（调试访问开关）
 
-> **背景**: wry OHOS 的 `open_devtools`/`close_devtools` 映射为 `WebviewController.setWebDebuggingAccess(bool)` 全局调试开关（domain socket），`is_devtools_open` 返回 ArkTS 侧自跟踪状态（OHOS 无 getter）。三方法受 `#[cfg(any(debug_assertions, feature="devtools"))]` 门控，**仅在 devtools feature 构建可测**（标准 release 不编译）。本用例验证 toggle 行为 + Chrome DevTools 实际连接（经 `devtools.bat` 脚本转发 domain socket）。
+> **背景**: wry OHOS 的 `open_devtools`/`close_devtools` 映射为 `WebviewController.setWebDebuggingAccess` 全局开关，`is_devtools_open` 返回 ArkTS 侧自跟踪状态（OHOS 无 getter）。三方法受 `#[cfg(any(debug_assertions, feature="devtools"))]` 门控，**仅在 devtools feature 构建可测**（标准 release 不编译）。本用例在 devtools 构建下验证 open→true、close→false 的 toggle 行为。
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | ① devtools feature 构建部署：`--features prod,devtools`（或临时把 `prod` 加 `devtools`）② 设备屏幕已唤醒 | 1. 打开 app → Tests 页 2. 点 "DevTools (open/is_open/close)" 按钮（运行 devtools_test：open→is_open→close→is_open round-trip）| `devtools_test: PASS ✅` + `after_open=true, after_close=false`。注意：点完后 devtools 为关闭状态（close_devtools 已执行）| `initial` 有状态、非判定项：首次（init devtools=true）通常 true，若之前跑过 close 则 false |
-| core | webview | devtools/chrome-connect | DevTools Chrome 连接 — Chrome DevTools 实际连接验证 | **T0** | ① devtools feature 构建部署 ② app 已启动（init 自动调 setWebDebuggingAccess(true)，domain socket 已创建，**无需点 DevTools 按钮**）③ PC 与设备 USB 连接 | 1. PC 执行 `examples/api/devtools.bat`（自动发现 domain socket `webview_devtools_remote_<PID>` + `hdc fport tcp:9222 localabstract:...`）2. 手动打开 Chrome → `chrome://inspect/#devices` 3. 设备列表中出现 OHOS webview 页面（如 `tauri://localhost/hello.html`）4. 点 "inspect" → DevTools 打开，能看到 DOM/Console 5. 在 app 内点 "DevTools" 按钮（devtools_test 执行 close_devtools）→ DevTools 断开 | ① `devtools.bat` 成功发现 socket 并转发 ② Chrome 发现页面 ③ inspect 后 DevTools 打开 ④ 点 DevTools 按钮后 close_devtools → socket 消失 → DevTools 断开 | init 时 tauri `devtools=true` 自动调 `setWebDebuggingAccess(true)` 创建 domain socket，**无需手动 open**；点 "DevTools" 按钮运行 devtools_test（含 close_devtools）会关闭调试。安全：cfg 门控，release 不编译 |
+| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | ① 用 devtools feature 构建并部署：临时把 `examples/api/src-tauri/Cargo.toml` 的 `prod` 改为 `["tauri/custom-protocol", "devtools"]`（或 build-ohos.sh 加 `--features prod,devtools`），跑 `run-tests.sh` 部署；验证后回退该改动 ② 设备屏幕已唤醒（`hdc shell "power-shell setmode 602"`）| 1. 打开 app，进入 Tests 页 2. 滚动到 "webview.devtools Manual Test (OHOS only, needs devtools build)" 区域 3. 点击 "DevTools (open/is_open/close)" 按钮 | 屏幕显示如下即成功：`devtools_test: PASS ✅` 换行 `initial=<true|false>, after_open=true, after_close=false`。关键判定：`after_open=true`（open_devtools 后调试访问开）且 `after_close=false`（close_devtools 后关）。若显示 `FAIL ❌` 或 `devtools feature not enabled` 则失败 | `initial` **有状态、非判定项**：`webDebuggingEnabled` 是进程级全局变量，跨调用持久——首次调用（app 刚启动无 open/close 历史）反映 init 标志（tauri 默认 devtools=true → 通常 true）；若之前已跑过 close_devtools（如自动用例 test 53 先跑）则 initial=false。判定只看 after_open/after_close；标准 release 构建（未加 devtools feature）点击提示 "devtools feature not enabled"，属预期（dormant）|
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
-| Webview — DevTools | 1 | 1 | **2** |
+| Webview — DevTools | 0 | 1 | **1** |
+
+### 7.4 全屏无黑边（set_bounds resize 传播回归防护）
+
+> **背景**: 修复了主 webview `set_bounds` 全屏黑边问题。根因是 tao 不传播 `ContentRectChange` 为 `Resized` 事件 + `WindowIdStore` 的 ZST key 被子窗口覆盖。修复后 set_bounds 在每次窗口 resize 时被正确调用，Web 组件按新尺寸重渲染。本用例防护此回归。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | fullscreen/no-black-bars | Fullscreen No Black Bars — 全屏无黑边 | **T0** | 应用已启动 | 1. 将应用窗口最大化或全屏 2. 观察屏幕四个方向是否有黑边 3. 恢复窗口化 4. 再次观察 | ① 全屏时 Web 内容填满整个窗口，四方向无黑边 ② 窗口化时 Web 内容填满窗口，无黑边 ③ 若出现黑边说明 tao ContentRectChange 传播 / WindowIdStore or_insert / wry set_bounds 链断裂 | 防护三修复链：tao 传播 ContentRectChange→Resized + tauri-runtime-wry or_insert + wry set_bounds 移除 cache-only |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — Fullscreen | 1 | 0 | **1** |
 
 ---
 
@@ -187,16 +198,16 @@
 
 ## 九、RunEvent（生命周期事件）手动用例
 
-> **背景**: Phase 1 修复了 `ExitRequested`/`Exit` 在 `LoopDestroyed` 路径上的触发；Phase 2 修复了子窗口 `Destroyed` 事件缺失和 `WindowsStore` 清理问题。
+> **背景**: 修复了 `ExitRequested`/`Exit` 在 `LoopDestroyed` 路径上的触发；修复了子窗口 `Destroyed` 事件缺失和 `WindowsStore` 清理问题。
 >
 > **日志监控命令**: `hdc shell hilog | grep tauritest`
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | runevent | ExitRequested/LoopDestroyed | 系统关闭应用 — ExitRequested + prevent_exit | **T0** | 应用已启动，打开 DevEco Studio 观察日志，关键词runevent | 1. 关闭应用 2. 观察日志输出 | ① 日志依次出现 `LoopDestroyed received` → `ExitRequested, code=None` → `prevent_exit() called` → `Exit` ② 应用仍然退出（`LoopDestroyed` 时系统已开始销毁，`prevent_exit()` 无法阻止） | 验证 Phase 1：LoopDestroyed handler 先触发 ExitRequested 再触发 Exit；OHOS 平台限制：prevent_exit 仅通知清理，无法阻止退出 |
+| core | runevent | ExitRequested/LoopDestroyed | 系统关闭应用 — ExitRequested + prevent_exit | **T0** | 应用已启动，打开 DevEco Studio 观察日志，关键词runevent | 1. 关闭应用 2. 观察日志输出 | ① 日志依次出现 `LoopDestroyed received` → `ExitRequested, code=None` → `prevent_exit() called` → `Exit` ② 应用仍然退出（`LoopDestroyed` 时系统已开始销毁，`prevent_exit()` 无法阻止） | 验证：LoopDestroyed handler 先触发 ExitRequested 再触发 Exit；OHOS 平台限制：prevent_exit 仅通知清理，无法阻止退出 |
 | core | runevent | ExitRequested/防重复 | ExitRequested 防重复触发 | **T1** | 应用已启动，打开 DevEco Studio 观察日志，关键词runevent；已创建多个子窗口 | 1. 逐个关闭子窗口（每个观察日志） 2. 关闭最后一个窗口（主窗口） 3. 统计 `ExitRequested` 出现次数 | ① 每个子窗口关闭时：`CloseRequested` → `Destroyed` ② 最后一个窗口关闭时：`ExitRequested` **仅一次** ③ 随后 LoopDestroyed 时**不再重复** ExitRequested，直接发送 `Exit` | 验证 `ExitState(AtomicBool)` 防重复机制 |
 | core | runevent | Resumed/跨平台遗留 | Resumed 事件 — 不触发（预期行为） | **T1** | 自动测试报告已生成 | 1. 查看 Test #29 `RunEvent::Resumed fires on startup` 结果 | ① 状态为 ❌ ② 预期失败，跨平台遗留问题 | 不在本次修复范围内 |
-| core | runevent | Opened/深度链接 | Opened 事件 — 深度链接触发 | **T1** | 应用已启动，打开 DevEco Studio 观察日志 | 1. 执行 `hdc shell aa start -a EntryAbility -b com.tauri.api -U myapp://test/path` 2. 观察日志输出和 UI 响应 | ① 日志出现 `[RunEvent] Opened, urls=["myapp://test/path"]` ② UI 显示深度链接信息（如有处理逻辑） | 验证 Phase 2：OHOS 平台 Opened 事件已启用（代码 511-515 行），通过深度链接触发 |
+| core | runevent | Opened/深度链接 | Opened 事件 — 深度链接触发 | **T1** | 应用已启动，打开 DevEco Studio 观察日志 | 1. 执行 `hdc shell aa start -a EntryAbility -b com.tauri.api -U myapp://test/path` 2. 观察日志输出和 UI 响应 | ① 日志出现 `[RunEvent] Opened, urls=["myapp://test/path"]` ② UI 显示深度链接信息（如有处理逻辑） | 验证：OHOS 平台 Opened 事件已启用（代码 511-515 行），通过深度链接触发 |
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -231,10 +242,11 @@
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
 | core | on_new_window | Allow/弹窗关闭 | Allow dialog 关闭按钮验证 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "on_new_window: Allow dialog has close button (manual)" 2. 观察弹窗外观 3. 点击标题栏 ✕ 按钮 | ① 弹出非模态对话框，标题栏显示 URL ② 标题栏右上角有 ✕ 关闭按钮 ③ 点击 ✕ 对话框关闭 ④ 点击对话框内嵌 Web 组件加载对应 URL | `promptAction.openCustomDialog` + `setTimeout` 延迟打开避免阻塞事件循环 |
 | core | on_new_window | Deny/无弹窗 | Deny 模式阻止弹窗验证 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "on_new_window: Deny prevents dialog (manual)" 2. 观察屏幕 | ① 不弹出任何对话框 ② 页面保持不变，无导航跳转 ③ hilog 可见 `DENY` 日志 | `setWebController(null)` 阻止新窗口 |
+| core | on_new_window | Create/真窗口 | Create real OS window 验证 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Create (real OS window)" 2. 观察 3. 验证窗口行为 | ① 弹出独立 OS 子窗口（非页内对话框）② 窗口加载目标 URL ③ 关闭子窗口不影响主应用 ④ 再次点击不弹对话框（setWebController(null)） | `NewWindowResponse::Create` → `WebviewWindowBuilder::build()` → `createOSWindow` → Float 子窗口 |
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
-| on_new_window（新窗口拦截） | 1 | 1 | **2** |
+| on_new_window（新窗口拦截） | 2 | 1 | **3** |
 
 ---
 
@@ -329,13 +341,13 @@
 
 ## 十六、Unstable Feature（窗口与 Webview 解耦）手动用例
 
-> **背景**: Phase 1 补齐 wry OHOS `set_bounds`/`set_visible`/`bounds` 实现 + ProxyJsHelper pending path 修复；Phase 2 添加 Reparent OHOS 安全返回防死锁；Phase 3 移除 `add_child` 的 OHOS 排除。
+> **背景**: 补齐 wry OHOS `set_bounds`/`set_visible`/`bounds` 实现 + ProxyJsHelper pending path 修复；添加 Reparent OHOS 安全返回防死锁；移除 `add_child` 的 OHOS 排除。
 >
 > **测试入口**: TestRunner.svelte → "Unstable Feature (窗口与 Webview 解耦) Manual Tests" 区域
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | unstable | phase2/reparent | webview.reparent returns error — 防死锁验证 | **T0** | 应用已启动，进入 TestRunner 页面 | 1. 找到 `reparent returns error (no deadlock)` 2. 点击运行 3. 观察测试是否在 5 秒内完成 | ① 测试状态 PASS ② 查看日志 `webview.reparent(window)` 返回 Error ③ 不卡住（无 timeout） | 验证 Phase 2：`#[cfg(target_env = "ohos")]` Reparent handler 调用 `tx.send(Err(...))` 解除 `rx.recv()` 阻塞 |
+| core | unstable | phase2/reparent | webview.reparent returns error — 防死锁验证 | **T0** | 应用已启动，进入 TestRunner 页面 | 1. 找到 `reparent returns error (no deadlock)` 2. 点击运行 3. 观察测试是否在 5 秒内完成 | ① 测试状态 PASS ② 查看日志 `webview.reparent(window)` 返回 Error ③ 不卡住（无 timeout） | 验证：`#[cfg(target_env = "ohos")]` Reparent handler 调用 `tx.send(Err(...))` 解除 `rx.recv()` 阻塞 |
 | core | unstable | phase2/reparent | webview operations after failed reparent — 无级联死锁 | **T1** | 应用已启动 | 1. 找到 `reparent cascade check` 2. 点击运行 | ① 测试状态 PASS ② 查看日志 `webview.size()` 正常返回非零值 | 验证 reparent 失败后 `current_window_id` Mutex 锁被释放 |
 | core | unstable | phase3/multi-webview | webview.create_webview — multi-webview 创建验证 | **T0** | 应用已启动；**Cargo.toml 需启用 `unstable` feature** | 1. 找到 `create_webview (multi-webview)` 2. 点击运行 3. 观察是否出现 300x200 子 webview 4. 等待 1 秒后子 webview 自动关闭 | ① 测试状态 PASS ② 子 webview 在 (50,50) 位置出现，显示 "Child Webview" ③ 1 秒后子 webview 关闭 | **需要 `unstable` feature**；验证 `add_child` + `dispose_child` 完整链路 |
 
@@ -354,7 +366,24 @@
 
 ---
 
-## 十八、用例统计
+## 十八、窗口聚焦与热键缩放 手动用例
+
+> **背景**: 窗口聚焦（set_focus）和热键缩放（Ctrl+/-/=）需要人眼确认的手动测试。
+>
+> **测试入口**: `examples/api` 应用 → Tests 页面 → **Window Focus + Hotkey Zoom Manual Tests** 区域
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | 窗口聚焦 | 多窗口层级 | Window Focus 多窗口层级验证 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Window Focus" 创建子窗口 2. 手动将其他子窗口拖到该窗口上方 3. 再次点击 "Window Focus" | ① 首次点击创建 Float 子窗口 ② 再次点击调用 `setFocus()` → `raiseToAppTop()` ③ 窗口回到所有 Float 窗口最上方 | `Message::Task` 派发到主线程 → `focus_window(id)` → NAPI → `WindowManager.focusWindow` → `win.raiseToAppTop()` |
+| core | 热键缩放 | Ctrl+/- | Ctrl+/- 缩放验证 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "Hotkey Zoom" 查看说明 2. 聚焦 webview 区域 3. 按 Ctrl + = 放大 4. 按 Ctrl + - 缩小 | ① 页面内容随快捷键放大/缩小 ② 缩放级别在 0.2~10 之间 | `zoom-hotkey.js` 通过 `cfg(desktop)` 注入。Ctrl+0 被 ArkWeb 引擎拦截，不生效 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| 窗口聚焦与热键缩放 | 1 | 1 | **2** |
+
+---
+
+## 十九、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -367,11 +396,12 @@
 | Autostart（开机自启动） | 2 | 2 | **4** |
 | Webview — createPdf | 1 | 1 | **2** |
 | Webview — Cookie | 1 | 0 | **1** |
-| Webview — DevTools | 1 | 1 | **2** |
+| Webview — DevTools | 0 | 1 | **1** |
+| Webview — Fullscreen | 1 | 0 | **1** |
 | WebView User-Agent | 1 | 2 | **3** |
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
-| on_new_window（新窗口拦截） | 1 | 1 | **2** |
+| on_new_window（新窗口拦截） | 2 | 1 | **3** |
 | Single-Instance（单实例） | 3 | 1 | **4** |
 | WebView webPageSnapshot（网页截图） | 1 | 0 | **1** |
 | Predefined Multi-Window（预定义操作多窗口支持） | 6 | 8 | **14** |
@@ -379,5 +409,6 @@
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
 | Global Shortcut（全局快捷键） | 2 | 0 | **2** |
-| **合计** | **55** | **54** | **109** |
+| 窗口聚焦与热键缩放 | 1 | 1 | **2** |
+| **合计** | **56** | **55** | **111** |
 
