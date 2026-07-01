@@ -320,6 +320,7 @@ fn run_dev(
       let _handle = write_options(tauri_config, cli_options)?;
 
       inject_resources(config, tauri_config)?;
+      super::inject_icons(config, tauri_config, dirs.tauri)?;
 
       if !plugin_metadata.is_empty() {
         let project_dir = config.project_dir();

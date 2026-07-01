@@ -991,3 +991,145 @@ pub fn set_download_test_mode<R: Runtime>(
   *current = mode;
   Ok(())
 }
+
+/// Exercise the webview cookie APIs (set / get-for-url / get-all / delete)
+/// to verify OHOS cookie management end-to-end. Returns a JSON report.
+///
+/// Covers Phase 1 (p1-webview-cookie) device verification scenarios:
+/// - set_cookie round-trip via `WebCookieManager.configCookieSync`
+/// - cookies_for_url reads the cookie back
+/// - cookies() best-effort (current URL on OHOS)
+/// - delete_cookie no-op (platform lacks single-cookie deletion)
+#[command]
+pub fn cookie_test<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> tauri::Result<serde_json::Value> {
+  use tauri::webview::Cookie;
+
+  let cookie = Cookie::build(("tauri_test_cookie", "value123"))
+    .domain("example.com")
+    .path("/")
+    .build();
+
+  let mut report = serde_json::json!({
+    "set_cookie": null,
+    "cookies_for_url": null,
+    "test_cookie_found": false,
+    "cookies_all": null,
+    "delete_cookie": null,
+  });
+
+  // 1. set_cookie
+  match window.set_cookie(cookie.clone()) {
+    Ok(_) => report["set_cookie"] = serde_json::json!("ok"),
+    Err(e) => report["set_cookie"] = serde_json::json!(format!("error: {}", e)),
+  }
+
+  // 2. cookies_for_url — verify the cookie we just set is readable
+  match url::Url::parse("https://example.com") {
+    Ok(url) => match window.cookies_for_url(url) {
+      Ok(cookies) => {
+        let found = cookies.iter().any(|c| c.name() == "tauri_test_cookie");
+        report["test_cookie_found"] = serde_json::json!(found);
+        report["cookies_for_url"] = serde_json::json!(cookies
+          .iter()
+          .map(|c| format!("{}={}", c.name(), c.value()))
+          .collect::<Vec<_>>());
+      }
+      Err(e) => report["cookies_for_url"] = serde_json::json!(format!("error: {}", e)),
+    },
+    Err(e) => report["cookies_for_url"] = serde_json::json!(format!("url parse error: {}", e)),
+  }
+
+  // 3. cookies() — on OHOS returns cookies for the current URL (best-effort)
+  match window.cookies() {
+    Ok(cookies) => {
+      report["cookies_all"] = serde_json::json!(cookies
+        .iter()
+        .map(|c| format!("{}={}", c.name(), c.value()))
+        .collect::<Vec<_>>())
+    }
+    Err(e) => report["cookies_all"] = serde_json::json!(format!("error: {}", e)),
+  }
+
+  // 4. delete_cookie — no-op on OHOS (platform lacks single-cookie deletion)
+  match window.delete_cookie(cookie) {
+    Ok(_) => report["delete_cookie"] = serde_json::json!("ok (no-op on OHOS, see log warning)"),
+    Err(e) => report["delete_cookie"] = serde_json::json!(format!("error: {}", e)),
+  }
+
+  log::info!("[cookie_test] report: {}", report);
+  Ok(report)
+}
+
+/// Manual test: set a cookie for httpbin.org on the main webview cookie store
+/// and open a child window to https://httpbin.org/cookies so the user can
+/// visually verify the cookie is sent to the server and persists on reload.
+#[command]
+pub fn cookie_manual_test<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+  use tauri::webview::Cookie;
+
+  let main = app
+    .get_webview_window("main")
+    .ok_or_else(|| "main window not found".to_string())?;
+
+  let cookie = Cookie::build(("tauri_test_cookie", "ManualTest123"))
+    .domain("httpbin.org")
+    .path("/")
+    .build();
+  main.set_cookie(cookie).map_err(|e| e.to_string())?;
+
+  let url = "https://httpbin.org/cookies"
+    .parse()
+    .map_err(|e| format!("invalid url: {}", e))?;
+  tauri::WebviewWindowBuilder::new(&app, "cookie-manual-test", tauri::WebviewUrl::External(url))
+    .title("Cookie Manual Test")
+    .inner_size(480.0, 640.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  Ok(())
+}
+
+/// Test OHOS WebView DevTools (open/close/is_devtools_open). Only compiled when
+/// the `devtools` feature (or debug_assertions) is enabled; dormant otherwise.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_test<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> tauri::Result<serde_json::Value> {
+  let initial = window.is_devtools_open();
+  window.open_devtools();
+  let after_open = window.is_devtools_open();
+  window.close_devtools();
+  let after_close = window.is_devtools_open();
+  Ok(serde_json::json!({
+    "enabled": true,
+    "initial": initial,
+    "after_open": after_open,
+    "after_close": after_close,
+  }))
+}
+
+
+/// Only call open_devtools() without close. Keeps the debugging session open
+/// so Chrome DevTools can connect via devtools.bat + chrome://inspect.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_open_only<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+  window.open_devtools();
+  Ok(())
+}
+
+/// Only call close_devtools() without open. Closes the debugging session,
+/// destroying the domain socket and disconnecting Chrome DevTools.
+#[cfg(any(debug_assertions, feature = "devtools"))]
+#[command]
+pub fn devtools_close_only<R: tauri::Runtime>(
+  window: tauri::WebviewWindow<R>,
+) -> Result<(), String> {
+  window.close_devtools();
+  Ok(())
+}

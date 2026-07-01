@@ -974,6 +974,64 @@ Expected behavior:
     });
   }
 
+  // ─── Cookie Live Manual Test (OHOS only) ───
+  async function manualCookieLiveTest() {
+    await wrapManual('cookieLive', async () => {
+      await invoke('cookie_manual_test');
+      manualResult = `Set cookie tauri_test_cookie=ManualTest123 for httpbin.org and opened a child window to https://httpbin.org/cookies.
+
+Verify the JSON response contains "tauri_test_cookie": "ManualTest123" (cookie is actually sent to the server).
+Reload the child window to verify the cookie persists.`;
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── DevTools Manual Test (OHOS only, requires devtools feature build) ───
+  async function manualDevtoolsTest() {
+    await wrapManual('devtools', async () => {
+      try {
+        const report = await invoke('devtools_test');
+        if (report.enabled) {
+          const pass = report.after_open === true && report.after_close === false;
+          manualResult = `devtools_test: ${pass ? 'PASS ✅' : 'FAIL ❌'}
+initial=${report.initial}, after_open=${report.after_open}, after_close=${report.after_close}
+(open_devtools → true, close_devtools → false; initial is stateful, see manual_tests 7.3)`;
+        } else {
+          manualResult = `devtools_test: devtools feature not enabled in this build.`;
+        }
+      } catch (e) {
+        manualResult = `devtools_test: devtools feature not enabled in this build (command not available in standard release).`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── DevTools Open (only opens, does not close) ───
+  async function manualDevtoolsOpen() {
+    await wrapManual('devtools_open', async () => {
+      try {
+        await invoke('devtools_open_only');
+        manualResult = `devtools_open: setWebDebuggingAccess(true) called. Domain socket created.\nNow run devtools.bat + open chrome://inspect to connect.`;
+      } catch (e) {
+        manualResult = `devtools_open: devtools feature not enabled in this build.`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── DevTools Close (only closes, disconnects Chrome) ───
+  async function manualDevtoolsClose() {
+    await wrapManual('devtools_close', async () => {
+      try {
+        await invoke('devtools_close_only');
+        manualResult = `devtools_close: setWebDebuggingAccess(false) called. Domain socket destroyed.\nChrome DevTools should be disconnected.`;
+      } catch (e) {
+        manualResult = `devtools_close: devtools feature not enabled in this build.`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
   // ─── QuickOperation Manual Tests (OHOS only) ───
   async function manualQuickOperationEnable() {
     await wrapManual('quickOperationEnable', async () => {
@@ -1642,6 +1700,20 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualCreatePdf}>Create PDF A4 (default)</button>
         <button class="btn" onclick={manualCreatePdfSquare}>Create PDF Square (8.27×8.27)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">webview.cookie Manual Tests (OHOS only)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualCookieLiveTest}>Cookie Live (httpbin echo)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">webview.devtools Manual Test (OHOS only, needs devtools build)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualDevtoolsTest}>DevTools (toggle test)</button>
+        <button class="btn" onclick={manualDevtoolsOpen}>DevTools Open</button>
+        <button class="btn" onclick={manualDevtoolsClose}>DevTools Close</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">

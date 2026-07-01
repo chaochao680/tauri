@@ -142,6 +142,33 @@
 |------|-----|-----|------|
 | Webview — createPdf | 1 | 1 | **2** |
 
+### 7.2 Cookie（Cookie 管理真实生效）
+
+> **背景**: 自动用例（cookie_test）只验证 WebCookieManager API 契约（configCookieSync 写入 → fetchCookieSync 读回）。本手动用例补全"set_cookie 写入的 cookie 真实随请求发送到服务端"的真实浏览行为。
+>
+> **日志监控命令**: `hdc shell hilog | grep tauritest`
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | cookie/真实生效 | Cookie Live (httpbin echo) — set_cookie 后服务端收到 | **T0** | 应用已启动；设备可访问 `https://httpbin.org` | 1. 滚动到 "webview.cookie Manual Tests" 区域 2. 点击 "Cookie Live (httpbin echo)" 按钮 3. 观察弹出的子窗口中 `https://httpbin.org/cookies` 的 JSON 响应 | ① 子窗口成功打开并加载 `https://httpbin.org/cookies` ② JSON 响应包含 `"tauri_test_cookie": "ManualTest123"`（证明 `set_cookie` 写入的 cookie 真实发送到服务端） | 验证 `set_cookie`（`WebCookieManager.configCookieSync`）端到端真实生效；cookie 域 `httpbin.org`、Path `/`、值 `ManualTest123` 由 `cookie_manual_test` 命令预设。注：子窗口为外部页（无 Tauri 工具栏），仅验证首次加载的 cookie 回显，不做刷新/持久化验证 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — Cookie | 1 | 0 | **1** |
+
+### 7.3 DevTools（调试访问开关 + Chrome DevTools 连接）
+
+> **背景**: wry OHOS 的 `open_devtools`/`close_devtools` 映射为 `WebviewController.setWebDebuggingAccess(bool)` 全局调试开关（domain socket），`is_devtools_open` 返回 ArkTS 侧自跟踪状态（OHOS 无 getter）。三方法受 `#[cfg(any(debug_assertions, feature="devtools"))]` 门控，**仅在 devtools feature 构建可测**（标准 release 不编译）。本用例验证 toggle 行为 + Chrome DevTools 实际连接（经 `devtools.bat` 脚本转发 domain socket）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | webview | devtools/toggle | DevTools (open/is_open/close) — 调试访问开关 toggle | **T1** | ① devtools feature 构建部署：`--features prod,devtools`（或临时把 `prod` 加 `devtools`）② 设备屏幕已唤醒 | 1. 打开 app → Tests 页 2. 点 "DevTools (open/is_open/close)" 按钮（运行 devtools_test：open→is_open→close→is_open round-trip）| `devtools_test: PASS ✅` + `after_open=true, after_close=false`。注意：点完后 devtools 为关闭状态（close_devtools 已执行）| `initial` 有状态、非判定项：首次（init devtools=true）通常 true，若之前跑过 close 则 false |
+| core | webview | devtools/chrome-connect | DevTools Chrome 连接 — Chrome DevTools 实际连接验证 | **T0** | ① devtools feature 构建部署 ② app 已启动（init 自动调 setWebDebuggingAccess(true)，domain socket 已创建，**无需点 DevTools 按钮**）③ PC 与设备 USB 连接 | 1. PC 执行 `examples/api/devtools.bat`（自动发现 domain socket `webview_devtools_remote_<PID>` + `hdc fport tcp:9222 localabstract:...`）2. 手动打开 Chrome → `chrome://inspect/#devices` 3. 设备列表中出现 OHOS webview 页面（如 `tauri://localhost/hello.html`）4. 点 "inspect" → DevTools 打开，能看到 DOM/Console 5. 在 app 内点 "DevTools" 按钮（devtools_test 执行 close_devtools）→ DevTools 断开 | ① `devtools.bat` 成功发现 socket 并转发 ② Chrome 发现页面 ③ inspect 后 DevTools 打开 ④ 点 DevTools 按钮后 close_devtools → socket 消失 → DevTools 断开 | init 时 tauri `devtools=true` 自动调 `setWebDebuggingAccess(true)` 创建 domain socket，**无需手动 open**；点 "DevTools" 按钮运行 devtools_test（含 close_devtools）会关闭调试。安全：cfg 门控，release 不编译 |
+
+| 模块 | T0 | T1 | 合计 |
+|------|-----|-----|------|
+| Webview — DevTools | 1 | 1 | **2** |
+
 ---
 
 ## 八、WebView User-Agent 自定义 手动用例
@@ -330,6 +357,8 @@
 | plugin-os（平台检测） | 2 | 4 | **6** |
 | Autostart（开机自启动） | 2 | 2 | **4** |
 | Webview — createPdf | 1 | 1 | **2** |
+| Webview — Cookie | 1 | 0 | **1** |
+| Webview — DevTools | 1 | 1 | **2** |
 | WebView User-Agent | 1 | 2 | **3** |
 | RunEvent（生命周期事件） | 1 | 3 | **4** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
@@ -340,5 +369,5 @@
 | Notification（通知） | 1 | 2 | **3** |
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
-| **合计** | **51** | **53** | **104** |
+| **合计** | **53** | **54** | **107** |
 

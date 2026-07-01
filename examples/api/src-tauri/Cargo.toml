@@ -66,6 +66,7 @@ features = ["test"]
 
 [features]
 prod = ["tauri/custom-protocol"]
+devtools = ["tauri/devtools"]
 
 [profile.release]
 # Enable debug info (most important for OHOS panic/crash debugging)
