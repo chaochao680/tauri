@@ -46,6 +46,7 @@ napi-derive-ohos = { version = "1.1" }
 hilog = "*"
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
 tauri-plugin-single-instance = { path = "../../../../plugins-workspace/plugins/single-instance" }
+tauri-plugin-global-shortcut = { path = "../../../../plugins-workspace/plugins/global-shortcut" }
 
 [dependencies.tauri]
 path = "../../../crates/tauri"

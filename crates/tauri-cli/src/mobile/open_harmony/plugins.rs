@@ -133,6 +133,11 @@ const BUILTIN_PLUGINS: &[(&str, &str, &str)] = &[
     "@tauri/plugin-notification",
     "NotificationPlugin",
   ),
+  (
+    "global-shortcut",
+    "@tauri/plugin-global-shortcut",
+    "GlobalShortcutPlugin",
+  ),
 ];
 
 pub fn detect_all_plugins(project_dir: &Path) -> Result<Vec<DetectedPlugin>> {
@@ -540,14 +545,16 @@ pub fn update_build_profile(project_dir: &Path, plugins: &[PluginMeta]) -> Resul
     .with_context(|| "build-profile.json5 has no 'modules' array")?;
 
   for plugin in plugins {
+    // OHOS module names must match ^[a-zA-Z][0-9a-zA-Z_.]*$ (no hyphens)
+    let module_name = plugin.name.replace('-', "");
     if !modules
       .iter()
-      .any(|m| m.get("name").and_then(|v| v.as_str()) == Some(&plugin.name))
+      .any(|m| m.get("name").and_then(|v| v.as_str()) == Some(&module_name))
     {
       log::info!("Adding module for plugin '{}'", plugin.name);
 
       let module = serde_json::json!({
-        "name": plugin.name,
+        "name": module_name,
         "srcPath": format!("./{}", plugin.name),
         "targets": [{
           "name": "default",
@@ -706,10 +713,12 @@ pub fn validate_plugin_configs(project_dir: &Path, plugins: &[PluginMeta]) -> Re
   let content = fs::read_to_string(&build_profile_path)
     .with_context(|| "failed to read build-profile.json5 for validation")?;
   for plugin in plugins {
-    if !content.contains(&format!("\"name\": \"{}\"", plugin.name)) {
+    let module_name = plugin.name.replace('-', "");
+    if !content.contains(&format!("\"name\": \"{}\"", module_name)) {
       bail!(
-        "Plugin '{}' not found in build-profile.json5 modules",
-        plugin.name
+        "Plugin '{}' (module '{}') not found in build-profile.json5 modules",
+        plugin.name,
+        module_name
       )
     }
   }

@@ -142,7 +142,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     .plugin(tauri_plugin_autostart::init(
       tauri_plugin_autostart::MacosLauncher::LaunchAgent,
       None,
-    ));
+    ))
+    .plugin(tauri_plugin_global_shortcut::Builder::new().build());
   }
 
   #[cfg(target_env = "ohos")]

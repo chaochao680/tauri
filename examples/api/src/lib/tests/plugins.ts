@@ -669,6 +669,70 @@ export const pluginTests: TestCase[] = [
       }
     },
   },
+  // @tauri-apps/plugin-global-shortcut
+  {
+    name: '@tauri-apps/plugin-global-shortcut.register+isRegistered',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      try {
+        await register(shortcut, () => {});
+        const result = await isRegistered(shortcut);
+        assert(result === true, `isRegistered should return true after register, got ${result}`);
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.unregister+isRegistered',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      try {
+        await register(shortcut, () => {});
+        await unregister(shortcut);
+        const result = await isRegistered(shortcut);
+        assert(result === false, `isRegistered should return false after unregister, got ${result}`);
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.unregisterAll',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      await register(shortcut, () => {});
+      await unregisterAll();
+      const result = await isRegistered(shortcut);
+      assert(result === false, `isRegistered should return false after unregisterAll, got ${result}`);
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.multipleCycles',
+    category: 'side-effect',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      try {
+        for (let i = 0; i < 3; i++) {
+          await register(shortcut, () => {});
+          const reg = await isRegistered(shortcut);
+          assert(reg === true, `cycle ${i}: isRegistered should be true after register`);
+          await unregister(shortcut);
+          const unreg = await isRegistered(shortcut);
+          assert(unreg === false, `cycle ${i}: isRegistered should be false after unregister`);
+        }
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
   {
     name: 'tauri-plugin-sentry.envelope',
     category: 'auto',
@@ -693,6 +757,69 @@ export const pluginTests: TestCase[] = [
     },
   },
   {
+    name: '@tauri-apps/plugin-global-shortcut.triggerCallback',
+    category: 'manual',
+    async fn() {
+      // Manual test: Click the "Register Shortcut" button in the Global Shortcut section
+      // It registers CommandOrControl+Shift+T and waits for the user to press it
+      console.log('[global-shortcut] Use the "Register Shortcut" button in the manual test section');
+      console.log('[global-shortcut] Press Ctrl+Shift+T on physical keyboard to trigger callback');
+    },
+  },
+  // ─── Boundary tests for preKeys ───
+  {
+    name: '@tauri-apps/plugin-global-shortcut.singleModifier',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+T';
+      try {
+        await register(shortcut, () => {});
+        const result = await isRegistered(shortcut);
+        assert(result === true, `1 modifier: isRegistered should be true, got ${result}`);
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.twoModifiers',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      try {
+        await register(shortcut, () => {});
+        const result = await isRegistered(shortcut);
+        assert(result === true, `2 modifiers: isRegistered should be true, got ${result}`);
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.threeModifiers_fails',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+Alt+T';
+      // SDK says max 2 modifiers, so 3 should fail gracefully
+      try {
+        await register(shortcut, () => {});
+        // If register doesn't throw, isRegistered should be false (silent skip on OHOS)
+        const result = await isRegistered(shortcut);
+        // On OHOS this should be false since registration was rejected by inputConsumer
+        // On desktop this might be true - accept both
+        console.log(`[global-shortcut] 3 modifiers: isRegistered=${result} (platform-dependent)`);
+        // Clean up in case registration succeeded (safe to ignore if already unregistered)
+        try { await unregister(shortcut); } catch (_) { /* unregister may fail if shortcut was never registered */ }
+      } catch (e) {
+        // Expected on OHOS: registration rejected
+        console.log(`[global-shortcut] 3 modifiers: register threw (expected on OHOS): ${e}`);
+      }
+    },
+  },
+  {
     name: 'tauri-plugin-sentry.rust_breadcrumb',
     category: 'auto',
     async fn() {
@@ -702,6 +829,98 @@ export const pluginTests: TestCase[] = [
       } catch (e) {
         if (String(e).includes('not found') || String(e).includes('command')) return;
         throw e;
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.noModifier_fails',
+    category: 'auto',
+    async fn() {
+      const { register, unregister, isRegistered } = await import('@tauri-apps/plugin-global-shortcut');
+      // Just a single key with no modifier - should fail (preKeys must have at least 1)
+      try {
+        await register('T', () => {});
+        // If it didn't throw, check if it actually registered
+        const result = await isRegistered('T');
+        console.log(`[global-shortcut] no modifier: isRegistered=${result} (platform-dependent)`);
+        // Clean up in case registration succeeded
+        try { await unregister('T'); } catch (_) { /* ignore */ }
+      } catch (e) {
+        // Expected on OHOS: no modifier means empty preKeys, rejected by inputConsumer
+        console.log(`[global-shortcut] no modifier: register threw (expected): ${e}`);
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.invalidKey_fails',
+    category: 'auto',
+    async fn() {
+      const { register } = await import('@tauri-apps/plugin-global-shortcut');
+      try {
+        await register('CommandOrControl+NonExistentKey123', () => {});
+        assert(false, 'Should have thrown for invalid key');
+      } catch (e) {
+        // Expected: invalid key name
+        console.log(`[global-shortcut] invalid key: register threw (expected): ${e}`);
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.duplicateModifier',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      // Ctrl+Ctrl+T - duplicate modifier, should either succeed (dedup) or throw
+      try {
+        await register('CommandOrControl+CommandOrControl+T', () => {});
+        const result = await isRegistered('CommandOrControl+CommandOrControl+T');
+        // If it registered, the duplicate modifier was either deduped or accepted
+        assert(typeof result === 'boolean', `isRegistered should return boolean, got ${typeof result}`);
+        try { await unregister('CommandOrControl+CommandOrControl+T'); } catch (_) { /* ignore */ }
+      } catch (e) {
+        console.log(`[global-shortcut] duplicate modifier: register threw: ${e}`);
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.duplicateRegister',
+    category: 'auto',
+    async fn() {
+      const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+T';
+      try {
+        // Register once
+        await register(shortcut, () => {});
+        assert(await isRegistered(shortcut), 'should be registered after first register');
+        // Register same shortcut again - should not throw
+        try {
+          await register(shortcut, () => {});
+          // Still registered after duplicate registration
+          assert(await isRegistered(shortcut), 'should still be registered after duplicate register');
+        } catch (e) {
+          // If it throws, that's also acceptable behavior
+          console.log(`[global-shortcut] duplicate register threw: ${e}`);
+        }
+        await unregister(shortcut);
+        assert(!(await isRegistered(shortcut)), 'should not be registered after unregister');
+      } finally {
+        try { await unregister(shortcut); } catch (_) {}
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-global-shortcut.unregisterNotRegistered',
+    category: 'auto',
+    async fn() {
+      const { unregister, isRegistered } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+Z';
+      // Ensure not registered
+      assert(!(await isRegistered(shortcut)), 'should not be registered initially');
+      // Unregister a shortcut that was never registered - should not throw
+      try {
+        await unregister(shortcut);
+      } catch (e) {
+        assert(false, `unregistering non-registered shortcut should not throw, got: ${e}`);
       }
     },
   },

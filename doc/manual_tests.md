@@ -345,7 +345,16 @@
 
 ---
 
-## 十七、用例统计
+## 十七、Global Shortcut（全局快捷键）手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| plugin | global-shortcut | 注册与触发 | Register Shortcut — 注册快捷键并物理键盘触发 | **T0** | 应用已启动；设备连接物理键盘；进入 Tests 页面底部 Global Shortcut Manual Tests 区域 | 1. 点击 "Register Ctrl+Shift+T" 按钮 2. 确认状态显示 "Registered: CommandOrControl+Shift+T" 3. 用物理键盘按下 Ctrl+Shift+T | ① 状态变为 "Triggered! id=xxx, state=Pressed" ② 控制台输出 `[global-shortcut] Shortcut triggered: id=xxx, state=Pressed` | OHOS 使用 inputConsumer API（API 14+）；最多支持 2 个修饰键 |
+| plugin | global-shortcut | 注销验证 | Unregister All — 注销后快捷键不再触发 | **T0** | 已注册 Ctrl+Shift+T 且已验证触发成功 | 1. 点击 "Unregister All" 按钮 2. 确认状态显示 "All shortcuts unregistered" 3. 用物理键盘再次按下 Ctrl+Shift+T | ① 状态不再变为 "Triggered" ② 快捷键已被注销，系统不再拦截该组合键 | 验证 inputConsumer.off() 精确注销，不影响其他应用的快捷键 |
+
+---
+
+## 十八、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -369,5 +378,6 @@
 | Notification（通知） | 1 | 2 | **3** |
 | Sentry（错误追踪） | 1 | 1 | **2** |
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
-| **合计** | **53** | **54** | **107** |
+| Global Shortcut（全局快捷键） | 2 | 0 | **2** |
+| **合计** | **55** | **54** | **109** |
 
