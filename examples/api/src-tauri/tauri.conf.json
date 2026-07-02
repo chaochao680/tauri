@@ -125,7 +125,10 @@
       }
     },
     "openHarmony": {
-      "deviceTypes": ["phone", "tablet", "2in1"]
+      "deviceTypes": {
+        "mobile": ["phone", "tablet"],
+        "desktop": ["2in1"]
+      }
     }
   }
 }

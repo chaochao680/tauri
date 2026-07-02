@@ -22,13 +22,14 @@ use cargo_mobile2::{
 };
 use clap::{Parser, Subcommand};
 use std::{
-  env::set_var,
+  env::{set_var, var},
   fs::{create_dir_all, write},
   path::PathBuf,
   thread::sleep,
   time::Duration,
 };
 use sublime_fuzzy::best_match;
+use tauri_utils::config::OpenHarmonyDeviceTypes;
 use tauri_utils::resources::ResourcePaths;
 
 use super::{
@@ -337,6 +338,44 @@ fn open_and_wait(config: &OpenHarmonyConfig, env: &Env) -> ! {
   }
 }
 
+/// The active entry module name (`entry_mobile` / `entry_desktop`), driven by
+/// `OHOS_DEVICE_TYPE` (set by the CLI build/dev commands). Falls back to
+/// `entry_mobile` when unset. Used by the build-time injectors (icons, plugin
+/// oh-package deps) and build-profile module selection to target the entry
+/// being built.
+pub fn active_entry_module() -> String {
+  let form = var("OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
+  format!("entry_{form}")
+}
+
+/// The conf `deviceTypes` list for the given form. With the per-form config
+/// schema (`{ mobile: [...], desktop: [...]] }`), this is a direct lookup — no
+/// intersection with a hardcoded device-class set.
+pub fn device_types_for_form(
+  device_types: &OpenHarmonyDeviceTypes,
+  form: &str,
+) -> Vec<String> {
+  match form {
+    "mobile" => device_types.mobile.clone(),
+    "desktop" => device_types.desktop.clone(),
+    _ => Vec::new(),
+  }
+}
+
+/// Active device forms: `mobile` if its list is non-empty, `desktop` if its
+/// list is non-empty. Used by `build --app` to decide which entry modules to
+/// compile and package.
+pub fn forms_for_device_types(device_types: &OpenHarmonyDeviceTypes) -> Vec<&'static str> {
+  let mut forms = Vec::new();
+  if !device_types.mobile.is_empty() {
+    forms.push("mobile");
+  }
+  if !device_types.desktop.is_empty() {
+    forms.push("desktop");
+  }
+  forms
+}
+
 fn inject_resources(config: &OpenHarmonyConfig, tauri_config: &TauriConfig) -> Result<()> {
   let asset_dir = config.project_dir().join(DEFAULT_ASSET_DIR);
   create_dir_all(&asset_dir).fs_context("failed to create asset directory", asset_dir.clone())?;
@@ -378,7 +417,12 @@ fn inject_icons(
 
   let project_dir = config.project_dir();
   let app_media_dir = project_dir.join("AppScope/resources/base/media");
-  let entry_media_dir = project_dir.join("entry/src/main/resources/base/media");
+  // `entry_media_dir` targets the *active* entry module (entry_{OHOS_DEVICE_TYPE})
+  // via `active_entry_module()`, which reads the env var the CLI set for the
+  // requested form. For `--app`, the per-form loop in `command` re-sets the env
+  // and calls this once per form so both entries get icons.
+  let entry_media_dir = project_dir
+    .join(format!("{}/src/main/resources/base/media", active_entry_module()));
 
   let mut foreground_path: Option<PathBuf> = None;
   let mut background_path: Option<PathBuf> = None;

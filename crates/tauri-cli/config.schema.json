@@ -3966,18 +3966,36 @@
           "minimum": 0.0
         },
         "deviceTypes": {
-          "description": "The device types supported by the application. Defaults to `[\"phone\", \"tablet\", \"2in1\"]`.",
-          "default": [
-            "phone",
-            "tablet",
-            "2in1"
-          ],
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "description": "Per-form device types. `mobile` feeds `cfg(mobile)` (defaults to `[\"phone\", \"tablet\"]`), `desktop` feeds `cfg(desktop)` (defaults to `[\"2in1\"]`).",
+          "default": {
+            "mobile": ["phone", "tablet"],
+            "desktop": ["2in1"]
+          },
+          "$ref": "#/definitions/OpenHarmonyDeviceTypes"
         }
       },
+      "additionalProperties": false
+    },
+    "OpenHarmonyDeviceTypes": {
+      "description": "Per-form OHOS device types. When `bundle.openHarmony.deviceTypes` is omitted, both default (`mobile=[\"phone\",\"tablet\"]`, `desktop=[\"2in1\"]`). When present, both `mobile` and `desktop` are required and must be non-empty.",
+      "type": "object",
+      "properties": {
+        "mobile": {
+          "description": "Devices for the mobile form (e.g. `[\"phone\", \"tablet\"]`).",
+          "default": ["phone", "tablet"],
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "desktop": {
+          "description": "Devices for the desktop form (e.g. `[\"2in1\"]`).",
+          "default": ["2in1"],
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "required": ["mobile", "desktop"],
       "additionalProperties": false
     },
     "PluginConfig": {
