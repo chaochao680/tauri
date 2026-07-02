@@ -3977,22 +3977,25 @@
       "additionalProperties": false
     },
     "OpenHarmonyDeviceTypes": {
-      "description": "Per-form OHOS device types. Each list drives one Entry HAP's `module.json5` `deviceTypes` and the `cfg(mobile)`/`cfg(desktop)` compile of its `.so`.",
+      "description": "Per-form OHOS device types. When `bundle.openHarmony.deviceTypes` is omitted, both default (`mobile=[\"phone\",\"tablet\"]`, `desktop=[\"2in1\"]`). When present, both `mobile` and `desktop` are required and must be non-empty.",
       "type": "object",
       "properties": {
         "mobile": {
-          "description": "Devices for the mobile form. Defaults to `[\"phone\", \"tablet\"]`.",
+          "description": "Devices for the mobile form (e.g. `[\"phone\", \"tablet\"]`).",
           "default": ["phone", "tablet"],
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "minItems": 1
         },
         "desktop": {
-          "description": "Devices for the desktop form. Defaults to `[\"2in1\"]`.",
+          "description": "Devices for the desktop form (e.g. `[\"2in1\"]`).",
           "default": ["2in1"],
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "minItems": 1
         }
       },
+      "required": ["mobile", "desktop"],
       "additionalProperties": false
     },
     "PluginConfig": {

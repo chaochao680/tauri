@@ -3282,15 +3282,18 @@ impl Default for OpenHarmonyConfig {
 
 /// Per-form OHOS device types. Each list drives one Entry HAP's `module.json5`
 /// `deviceTypes` and the `cfg(mobile)`/`cfg(desktop)` compile of its `.so`.
+///
+/// When `bundle.openHarmony.deviceTypes` is **omitted**, both lists default
+/// (`mobile = ["phone","tablet"]`, `desktop = ["2in1"]`). When **present**,
+/// both `mobile` and `desktop` are required and must be non-empty — you cannot
+/// configure only one form.
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OpenHarmonyDeviceTypes {
-  /// Devices for the mobile form. Defaults to `["phone", "tablet"]`.
-  #[serde(default = "default_mobile_device_types")]
+  /// Devices for the mobile form (e.g. `["phone", "tablet"]`).
   pub mobile: Vec<String>,
-  /// Devices for the desktop form. Defaults to `["2in1"]`.
-  #[serde(default = "default_desktop_device_types")]
+  /// Devices for the desktop form (e.g. `["2in1"]`).
   pub desktop: Vec<String>,
 }
 
