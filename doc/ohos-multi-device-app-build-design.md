@@ -166,23 +166,25 @@ function tauriPlugin(): HvigorPlugin {
 - **`compile_lib` 的 `--dist` 按 `OHOS_DEVICE_TYPE` 推 `entry_{form}/libs`**：[target.rs:199](../../cargo-mobile2/src/open_harmony/target.rs) 原硬编码 `entry/libs`，改为 `project_dir.join(format!("entry_{OHOS_DEVICE_TYPE}")).join("libs")`。模板统一 `entry_mobile`/`entry_desktop` 命名，故目录由形态确定，**无需额外 env**；ohrs 已支持 `--dist`，不改 ohrs。
 - `--app` 因 skip 了 tauriPlugin，不调 `dev-eco-studio-script`、不经 WS，**无需** `write_options`/`OptionsHandle`（WS 机器仅 `--open`/IDE 路径需要）。不改 `read_options`——IDE 直构（非 `--open`）panic 是现状已知限制，走 `--open`；skip 守卫使 CLI/CI 不受影响。
 
-### 4. deviceTypes 切分与 conf 关系
+### 4. deviceTypes 配置（per-form 子字段）
 
-形态→设备类映射表（已定：desktop 类用 `2in1`，与现有 conf 默认一致）：
+`tauri.conf.json` 的 `bundle.openHarmony.deviceTypes` 拆为两个子字段，各自直接对应一个 entry HAP：
 
+```json
+"openHarmony": {
+  "deviceTypes": {
+    "mobile": ["phone", "tablet"],
+    "desktop": ["2in1"]
+  }
+}
 ```
-mobile 类  ← phone, tablet, car, wearable, tv
-desktop 类 ← 2in1
-```
 
-> mobile 类含 `car/wearable/tv`：这些均为非 desktop 形态设备，归入 mobile（cfg(mobile)）。与 `demo3signature` 实测的 entry `deviceTypes = [phone,tablet,car,wearable,tv]` 一致。
+- `mobile`（默认 `["phone","tablet"]`）→ `entry_mobile` 的 module.json5 `deviceTypes` + `cfg(mobile)` 编译。
+- `desktop`（默认 `["2in1"]`）→ `entry_desktop` 的 module.json5 `deviceTypes` + `cfg(desktop)` 编译。
 
-构建时按当前形态取 `conf.deviceTypes ∩ 该形态设备类` 作为该 entry 模块 module.json5 的 `deviceTypes`：
+构建期 `device_types_for_form(conf, form)` 直接取对应子字段（无交集/映射表——形态分类由配置显式给出）。`forms_for_device_types(conf)` 返回非空子字段对应的形态。单 HAP `--device-type X` 若该子字段为空 → bail（config 错误，不写空 `deviceTypes`）。`--app` 跳过空子字段的形态。
 
-- mobile HAP → `conf.deviceTypes ∩ {phone, tablet, car, wearable, tv}`
-- desktop HAP → `conf.deviceTypes ∩ {2in1}`
-
-conf `deviceTypes` 即两个 HAP deviceTypes 的并集 = AGC 发布集。一致性由构造保证：`--app` 的形态集合从 conf 推导，不可能错配。
+AGC 发布集 = `mobile ∪ desktop`。一致性由构造保证（形态从 conf 推导）。
 
 ### 5. cargo-mobile2 改动
 
@@ -243,7 +245,7 @@ pub fn build(config: &Config, env: &Env, noise_level: NoiseLevel, profile: Profi
 8. `sign_if_configured`：事后用 `hap-sign-tool sign-app` 签 `.app`（`sign-app` 子命令对 `.hap`/`.app` 通用，故单 HAP 与 `--app` 共用同一签名函数；见第 7 节）。
 9. `log_finished` 输出 `.app` 路径。
 
-> 单 HAP `build --device-type X` 路径（统一模板下）：激活 `entry_{form}`（build-profile `modules` 只列 `entry_{form}` + tauri + dialog，其余 entry 不列），assembleHap 产 `entry_{form}-default-*.hap`（**原 `entry-default-*.hap` 改名**，现有 hdc 脚本/记忆引用处需同步）。其 module.json5 `deviceTypes` = `conf.deviceTypes ∩ X 形态设备类`（修复现状 mobile 构建却声明 2in1 的 bug）。
+> 单 HAP `build --device-type X` 路径（统一模板下）：激活 `entry_{form}`（build-profile `modules` 只列 `entry_{form}` + tauri + dialog，其余 entry 不列），assembleHap 产 `entry_{form}-default-*.hap`（**原 `entry-default-*.hap` 改名**，现有 hdc 脚本/记忆引用处需同步）。其 module.json5 `deviceTypes` = `conf.deviceTypes.<X>`（该形态子字段）；子字段为空则 bail（config 错误）。
 
 ### 6.1 编译流程命令示意
 
@@ -319,7 +321,7 @@ java -jar hap-sign-tool.jar sign-app ... \
 | `cargo-mobile2`（本地 path 依赖 `../cargo-mobile2`，feat/ohos） | 新增 `app::build`（assembleApp）；`compile_lib` 的 `--dist` 按 `OHOS_DEVICE_TYPE` 推 `entry_{form}/libs` | 仅 OHOS 路径，不影响其他平台 |
 | `tauri-cli` 模板 `open-harmony/` | 单 entry → 双 entry；hvigorfile.ts 按形态烘焙 + skip 守卫 | OHOS 隔离 |
 | `tauri-cli` `open_harmony/build.rs` | 新增 `--app`；按形态显式编 .so + 置 skip env；deviceTypes 切分；单 HAP 路径 deviceTypes 修正 | OHOS 隔离 |
-| `tauri-utils` `config.rs` | 无需改 `OpenHarmonyConfig` 结构（`device_types` 语义不变，只是构建时切分） | 无影响 |
+| `tauri-utils` `config.rs` | `OpenHarmonyConfig.device_types` 改为 per-form struct `OpenHarmonyDeviceTypes { mobile, desktop }`（各默认 `["phone","tablet"]` / `["2in1"]`）；`config.schema.json` 同步 | 无影响 |
 | `tauri` crate `build.rs` 等 cfg 别名 | **不改**——单次 cargo build 仍单形态，`desktop = !mobile` 互补不变 | 铁律 #3 不变 |
 
 `cfg` 互补不变是本方案的关键：每个 entry 模块是一次独立的单形态 cargo build，永远只有一个形态为真，不触碰 both-true 的雷区。

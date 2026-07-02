@@ -29,6 +29,7 @@ use std::{
   time::Duration,
 };
 use sublime_fuzzy::best_match;
+use tauri_utils::config::OpenHarmonyDeviceTypes;
 use tauri_utils::resources::ResourcePaths;
 
 use super::{
@@ -347,33 +348,29 @@ pub fn active_entry_module() -> String {
   format!("entry_{form}")
 }
 
-/// conf `deviceTypes` ∩ the given form's device classes. `mobile` →
-/// {phone,tablet,car,wearable,tv}, `desktop` → {2in1}. Shared by init-time
-/// template rendering and build-time `module.json5` rewrite.
-pub fn device_types_for_form(device_types: &[String], form: &str) -> Vec<String> {
-  const MOBILE: &[&str] = &["phone", "tablet", "car", "wearable", "tv"];
-  const DESKTOP: &[&str] = &["2in1"];
-  let classes: &[&str] = match form {
-    "mobile" => MOBILE,
-    "desktop" => DESKTOP,
-    _ => &[],
-  };
-  device_types
-    .iter()
-    .filter(|d| classes.contains(&d.as_str()))
-    .cloned()
-    .collect()
+/// The conf `deviceTypes` list for the given form. With the per-form config
+/// schema (`{ mobile: [...], desktop: [...]] }`), this is a direct lookup — no
+/// intersection with a hardcoded device-class set.
+pub fn device_types_for_form(
+  device_types: &OpenHarmonyDeviceTypes,
+  form: &str,
+) -> Vec<String> {
+  match form {
+    "mobile" => device_types.mobile.clone(),
+    "desktop" => device_types.desktop.clone(),
+    _ => Vec::new(),
+  }
 }
 
-/// Partition conf `deviceTypes` into the active device forms: `mobile` if any
-/// mobile-class device is present, `desktop` if `2in1` is present. Used by
-/// `build --app` to decide which entry modules to compile and package.
-pub fn forms_for_device_types(device_types: &[String]) -> Vec<&'static str> {
+/// Active device forms: `mobile` if its list is non-empty, `desktop` if its
+/// list is non-empty. Used by `build --app` to decide which entry modules to
+/// compile and package.
+pub fn forms_for_device_types(device_types: &OpenHarmonyDeviceTypes) -> Vec<&'static str> {
   let mut forms = Vec::new();
-  if !device_types_for_form(device_types, "mobile").is_empty() {
+  if !device_types.mobile.is_empty() {
     forms.push("mobile");
   }
-  if !device_types_for_form(device_types, "desktop").is_empty() {
+  if !device_types.desktop.is_empty() {
     forms.push("desktop");
   }
   forms

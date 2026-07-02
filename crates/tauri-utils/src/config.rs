@@ -3264,23 +3264,51 @@ pub struct OpenHarmonyConfig {
   #[serde(alias = "version-code")]
   pub version_code: Option<u32>,
 
-  /// The device types supported by the application.
-  /// Defaults to `["phone", "tablet", "2in1"]`.
-  #[serde(alias = "device-types", default = "default_device_types")]
-  pub device_types: Vec<String>,
+  /// The device types supported by the application, split per device form.
+  /// `mobile` feeds `cfg(mobile)` (defaults to `["phone", "tablet"]`),
+  /// `desktop` feeds `cfg(desktop)` (defaults to `["2in1"]`).
+  #[serde(alias = "device-types", default)]
+  pub device_types: OpenHarmonyDeviceTypes,
 }
 
 impl Default for OpenHarmonyConfig {
   fn default() -> Self {
     Self {
       version_code: None,
-      device_types: default_device_types(),
+      device_types: OpenHarmonyDeviceTypes::default(),
     }
   }
 }
 
-fn default_device_types() -> Vec<String> {
-  vec!["phone".into(), "tablet".into(), "2in1".into()]
+/// Per-form OHOS device types. Each list drives one Entry HAP's `module.json5`
+/// `deviceTypes` and the `cfg(mobile)`/`cfg(desktop)` compile of its `.so`.
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenHarmonyDeviceTypes {
+  /// Devices for the mobile form. Defaults to `["phone", "tablet"]`.
+  #[serde(default = "default_mobile_device_types")]
+  pub mobile: Vec<String>,
+  /// Devices for the desktop form. Defaults to `["2in1"]`.
+  #[serde(default = "default_desktop_device_types")]
+  pub desktop: Vec<String>,
+}
+
+impl Default for OpenHarmonyDeviceTypes {
+  fn default() -> Self {
+    Self {
+      mobile: default_mobile_device_types(),
+      desktop: default_desktop_device_types(),
+    }
+  }
+}
+
+fn default_mobile_device_types() -> Vec<String> {
+  vec!["phone".into(), "tablet".into()]
+}
+
+fn default_desktop_device_types() -> Vec<String> {
+  vec!["2in1".into()]
 }
 
 /// Defines the URL or assets to embed in the application.
