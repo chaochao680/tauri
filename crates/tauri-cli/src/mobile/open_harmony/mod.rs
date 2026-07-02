@@ -420,6 +420,10 @@ fn inject_icons(
 
   let project_dir = config.project_dir();
   let app_media_dir = project_dir.join("AppScope/resources/base/media");
+  // `entry_media_dir` targets the *active* entry module (entry_{OHOS_DEVICE_TYPE})
+  // via `active_entry_module()`, which reads the env var the CLI set for the
+  // requested form. For `--app`, the per-form loop in `command` re-sets the env
+  // and calls this once per form so both entries get icons.
   let entry_media_dir = project_dir
     .join(format!("{}/src/main/resources/base/media", active_entry_module()));
 

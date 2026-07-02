@@ -250,9 +250,11 @@ pub fn command(options: Options, noise_level: NoiseLevel) -> Result<()> {
   Ok(())
 }
 
-/// Package the multi-entry `.app` via `hvigorw assembleApp`. The per-form `.so`
-/// for each active entry has already been compiled by `command`. Activates all
-/// entry modules in build-profile, skips the tauriPlugin, then signs + logs.
+/// Package the multi-entry `.app` via `hvigorw assembleApp`. Assumes `command`
+/// has already done the per-form setup for every active form: compiled the
+/// `.so` into `entry_{form}/libs`, injected icons + plugin deps, and rewritten
+/// each entry's `module.json5` deviceTypes. This fn only activates all entry
+/// modules in build-profile, skips the tauriPlugin, then signs + logs.
 #[allow(clippy::too_many_arguments)]
 fn run_app(
   config: &OpenHarmonyConfig,
@@ -328,13 +330,32 @@ fn run_build(
     .context("failed to select active entry module")?;
   // Align the active entry's module.json5 deviceTypes to the current conf
   // subset so conf `deviceTypes` changes apply on rebuild without re-init.
+  // An empty subset is a config error (the requested form has no devices in
+  // conf `deviceTypes`) — producing a HAP with `deviceTypes: []` would be
+  // invalid, so bail instead of silently writing an empty array.
+  let form_device_types = super::device_types_for_form(
+    &tauri_config.bundle.open_harmony.device_types,
+    &options.device_type,
+  );
+  if form_device_types.is_empty() {
+    let expected = match options.device_type.as_str() {
+      "mobile" => "phone/tablet/car/wearable/tv",
+      "desktop" => "2in1",
+      _ => "the form's device classes",
+    };
+    crate::error::bail!(
+      "build --device-type {}: `bundle.openHarmony.deviceTypes` has no {}-class devices (got {:?}); \
+       add one of {} to the config or build a form your config covers",
+      options.device_type,
+      options.device_type,
+      tauri_config.bundle.open_harmony.device_types,
+      expected,
+    );
+  }
   plugins::write_entry_device_types(
     &config.project_dir(),
     &options.device_type,
-    &super::device_types_for_form(
-      &tauri_config.bundle.open_harmony.device_types,
-      &options.device_type,
-    ),
+    &form_device_types,
   )
   .context("failed to align entry deviceTypes")?;
 
