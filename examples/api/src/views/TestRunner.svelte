@@ -1172,6 +1172,33 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     });
   }
 
+  // ─── Global Shortcut Manual Tests ───
+  let globalShortcutStatus = $state('');
+
+  async function manualGlobalShortcutRegister() {
+    await wrapManual('globalShortcut.register', async () => {
+      const { register, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      const shortcut = 'CommandOrControl+Shift+T';
+      // Unregister first in case it was left over
+      try { await unregister(shortcut); } catch (_) { /* ignore */ }
+      await register(shortcut, (event) => {
+        globalShortcutStatus = `Triggered! id=${event.id}, state=${event.state}`;
+        console.log(`[global-shortcut] Shortcut triggered: id=${event.id}, state=${event.state}`);
+      });
+      globalShortcutStatus = `Registered: ${shortcut}. Press it on physical keyboard.`;
+      console.log(`[global-shortcut] Registered ${shortcut}. Waiting for key press...`);
+    });
+  }
+
+  async function manualGlobalShortcutUnregister() {
+    await wrapManual('globalShortcut.unregister', async () => {
+      const { unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
+      await unregisterAll();
+      globalShortcutStatus = 'All shortcuts unregistered.';
+      console.log('[global-shortcut] All shortcuts unregistered');
+    });
+  }
+
   // ─── WebView User-Agent Manual Tests ───
 
   // Listen for UA test results emitted from Rust
@@ -1783,6 +1810,16 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualAutostartEnable}>enable() (opens settings)</button>
         <button class="btn" onclick={manualAutostartDisable}>disable() (opens settings)</button>
       </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Global Shortcut Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualGlobalShortcutRegister}>Register Ctrl+Shift+T</button>
+        <button class="btn" onclick={manualGlobalShortcutUnregister}>Unregister All</button>
+      </div>
+      {#if globalShortcutStatus}
+        <p class="text-xs mt-1 text-blue-600">{globalShortcutStatus}</p>
+      {/if}
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">WebView User-Agent Manual Tests</h5>
