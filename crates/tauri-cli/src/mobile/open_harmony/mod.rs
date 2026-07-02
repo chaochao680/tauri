@@ -22,7 +22,7 @@ use cargo_mobile2::{
 };
 use clap::{Parser, Subcommand};
 use std::{
-  env::set_var,
+  env::{set_var, var},
   fs::{create_dir_all, write},
   path::PathBuf,
   thread::sleep,
@@ -337,6 +337,48 @@ fn open_and_wait(config: &OpenHarmonyConfig, env: &Env) -> ! {
   }
 }
 
+/// The active entry module name (`entry_mobile` / `entry_desktop`), driven by
+/// `OHOS_DEVICE_TYPE` (set by the CLI build/dev commands). Falls back to
+/// `entry_mobile` when unset. Used by the build-time injectors (icons, plugin
+/// oh-package deps) and build-profile module selection to target the entry
+/// being built.
+pub fn active_entry_module() -> String {
+  let form = var("OHOS_DEVICE_TYPE").unwrap_or_else(|_| "mobile".to_string());
+  format!("entry_{form}")
+}
+
+/// conf `deviceTypes` ∩ the given form's device classes. `mobile` →
+/// {phone,tablet,car,wearable,tv}, `desktop` → {2in1}. Shared by init-time
+/// template rendering and build-time `module.json5` rewrite.
+pub fn device_types_for_form(device_types: &[String], form: &str) -> Vec<String> {
+  const MOBILE: &[&str] = &["phone", "tablet", "car", "wearable", "tv"];
+  const DESKTOP: &[&str] = &["2in1"];
+  let classes: &[&str] = match form {
+    "mobile" => MOBILE,
+    "desktop" => DESKTOP,
+    _ => &[],
+  };
+  device_types
+    .iter()
+    .filter(|d| classes.contains(&d.as_str()))
+    .cloned()
+    .collect()
+}
+
+/// Partition conf `deviceTypes` into the active device forms: `mobile` if any
+/// mobile-class device is present, `desktop` if `2in1` is present. Used by
+/// `build --app` to decide which entry modules to compile and package.
+pub fn forms_for_device_types(device_types: &[String]) -> Vec<&'static str> {
+  let mut forms = Vec::new();
+  if !device_types_for_form(device_types, "mobile").is_empty() {
+    forms.push("mobile");
+  }
+  if !device_types_for_form(device_types, "desktop").is_empty() {
+    forms.push("desktop");
+  }
+  forms
+}
+
 fn inject_resources(config: &OpenHarmonyConfig, tauri_config: &TauriConfig) -> Result<()> {
   let asset_dir = config.project_dir().join(DEFAULT_ASSET_DIR);
   create_dir_all(&asset_dir).fs_context("failed to create asset directory", asset_dir.clone())?;
@@ -378,7 +420,8 @@ fn inject_icons(
 
   let project_dir = config.project_dir();
   let app_media_dir = project_dir.join("AppScope/resources/base/media");
-  let entry_media_dir = project_dir.join("entry/src/main/resources/base/media");
+  let entry_media_dir = project_dir
+    .join(format!("{}/src/main/resources/base/media", active_entry_module()));
 
   let mut foreground_path: Option<PathBuf> = None;
   let mut background_path: Option<PathBuf> = None;

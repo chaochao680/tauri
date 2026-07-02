@@ -238,6 +238,19 @@ fn exec(
       ohos_map.insert("device-types".to_string(), serde_json::Value::String(device_types_str));
       bundle_map.insert("open-harmony".to_string(), serde_json::Value::Object(ohos_map));
 
+      // Partition conf `deviceTypes` per form for the dual-entry template:
+      // entry-mobile gets the mobile-class devices, entry-desktop gets `2in1`.
+      // Each entry's `module.json5` emits its subset via `{{{form-device-types}}}`.
+      let (mobile_device_types_str, desktop_device_types_str) = {
+        let conf = &tauri_config.bundle.open_harmony.device_types;
+        let m = super::open_harmony::device_types_for_form(conf, "mobile");
+        let d = super::open_harmony::device_types_for_form(conf, "desktop");
+        (
+          serde_json::to_string(&m).unwrap_or_else(|_| r#"["phone","tablet"]"#.into()),
+          serde_json::to_string(&d).unwrap_or_else(|_| r#"["2in1"]"#.into()),
+        )
+      };
+
       map.insert("bundle", bundle_map);
 
       let detected_plugins =
@@ -274,6 +287,8 @@ fn exec(
         (handlebars, map),
         skip_targets_install,
         plugin_metadata.clone(),
+        &mobile_device_types_str,
+        &desktop_device_types_str,
       )?;
 
       if !plugin_metadata.is_empty() {

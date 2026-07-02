@@ -1,10 +1,10 @@
 {
   "module": {
-    "name": "entry",
+    "name": "entry_{{form}}",
     "type": "entry",
     "description": "$string:module_desc",
     "mainElement": "EntryAbility",
-    "deviceTypes": {{{bundle.open-harmony.device-types}}},
+    "deviceTypes": {{{form-device-types}}},
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
@@ -43,12 +43,6 @@
             "resource": "$profile:backup_config"
           }
         ]
-      },
-      {
-        "name": "TestTrayAbility",
-        "srcEntry": "./ets/testtrayability/TestTrayAbility.ets",
-        "type": "statusBarView",
-        "exported": true
       }
     ],
     "requestPermissions": [

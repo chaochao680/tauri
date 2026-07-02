@@ -56,6 +56,7 @@ pub fn command(options: Options, noise_level: cargo_mobile2::opts::NoiseLevel) -
     open: options.open,
     ci: false,
     device_type: options.device_type.clone(),
+    app: false,
     args: options.args.clone(),
     ignore_version_mismatches: options.ignore_version_mismatches,
   };
