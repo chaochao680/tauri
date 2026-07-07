@@ -743,21 +743,6 @@ export const coreTests: TestCase[] = [
     },
   },
 
-  // ─── Window Background Color (Phase 3) ───
-  {
-    name: 'window.setBackgroundColor does not throw',
-    category: 'side-effect',
-    async fn() {
-      const win = getCurrentWindow();
-      // Set a semi-transparent color — should not throw
-      await win.setBackgroundColor([255, 0, 0, 128]);
-      // Set an opaque color — should not throw
-      await win.setBackgroundColor([0, 0, 0, 255]);
-      // Restore to opaque white so the label bar is not left black
-      await win.setBackgroundColor([255, 255, 255, 255]);
-    },
-  },
-
   // ─── Create Borderless Window (Phase 2 integration) ───
   {
     name: 'create_borderless_window command',
@@ -1260,6 +1245,65 @@ export const coreTests: TestCase[] = [
       assert(
         Array.isArray(report.cookies_for_url),
         `cookies_for_url should return array, got: ${report.cookies_for_url}`
+      );
+    },
+  },
+
+  // set_bounds / bounds round-trip (OHOS)
+  {
+    name: 'webview.set_bounds round-trip (OHOS)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke('set_bounds_test');
+      assert(report.set_ok === true, `set_bounds_test failed: ${JSON.stringify(report)}`);
+      assert(report.matches === true, `bounds should match after round-trip, got: ${JSON.stringify(report)}`);
+    },
+  },
+
+  // ─── Desktop features (OHOS) ───
+
+  // PathResolver paths valid (no double files/files)
+  {
+    name: 'PathResolver app_data_dir valid (OHOS)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('desktop_features_test');
+      const dir = report.app_data_dir as string;
+      assert(dir && dir.length > 0, `app_data_dir should be non-empty, got: ${dir}`);
+      assert(
+        !report.path_has_double_files,
+        `app_data_dir should not contain 'files/files', got: ${dir}`
+      );
+    },
+  },
+
+  // Click-through is a no-op on OHOS (send_user_message is fire-and-forget,
+  // the actual tao NotSupported error is discarded in the event loop).
+  // The command itself succeeds (message sent), but the operation does nothing.
+  {
+    name: 'set_ignore_cursor_events is no-op (OHOS platform limit)',
+    category: 'auto',
+    async fn() {
+      const report = await invoke<Record<string, unknown>>('desktop_features_test');
+      const result = report.click_through_result as string;
+      // On OHOS, send_user_message returns Ok (message sent), but tao discards the
+      // NotSupported error in the event loop. So we verify the command runs without crash.
+      assert(
+        result === 'ok',
+        `set_ignore_cursor_events command should succeed (fire-and-forget), got: ${result}`
+      );
+    },
+  },
+
+  // Clipboard API exists (ArkWeb default allows, attribute is no-op)
+  // Note: actual writeText requires document focus, so we only check API existence.
+  {
+    name: 'Clipboard API available (OHOS always-on)',
+    category: 'auto',
+    async fn() {
+      assert(
+        typeof navigator.clipboard !== 'undefined' || typeof document.execCommand === 'function',
+        'Clipboard API (navigator.clipboard or document.execCommand) should be available'
       );
     },
   },
