@@ -361,7 +361,7 @@
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| plugin | global-shortcut | 注册与触发 | Register Shortcut — 注册快捷键并物理键盘触发 | **T0** | 应用已启动；设备连接物理键盘；进入 Tests 页面底部 Global Shortcut Manual Tests 区域 | 1. 点击 "Register Ctrl+Shift+T" 按钮 2. 确认状态显示 "Registered: CommandOrControl+Shift+T" 3. 用物理键盘按下 Ctrl+Shift+T | ① 状态变为 "Triggered! id=xxx, state=Pressed" ② 控制台输出 `[global-shortcut] Shortcut triggered: id=xxx, state=Pressed` | OHOS 使用 inputConsumer API（API 14+）；最多支持 2 个修饰键 |
+| plugin | global-shortcut | 注册与触发 | Register Shortcut — 注册快捷键并物理键盘触发 | **T0** | 应用已启动；设备连接物理键盘；进入 Tests 页面底部 Global Shortcut Manual Tests 区域 | 1. 点击 "Register Ctrl+Shift+T" 按钮 2. 确认状态显示 "Registered: CommandOrControl+Shift+T" 3. 用物理键盘按下 Ctrl+Shift+T | ① 状态变为 "Triggered! id=xxx, state=Released" ② 控制台输出 `[global-shortcut] Shortcut triggered: id=xxx, state=Released` | OHOS 使用 inputConsumer API（API 14+），仅在 key-down 时触发 Pressed 回调；代码合成 Released 事件以匹配 global-hotkey 合约，UI 最终显示 Released；最多支持 2 个修饰键 |
 | plugin | global-shortcut | 注销验证 | Unregister All — 注销后快捷键不再触发 | **T0** | 已注册 Ctrl+Shift+T 且已验证触发成功 | 1. 点击 "Unregister All" 按钮 2. 确认状态显示 "All shortcuts unregistered" 3. 用物理键盘再次按下 Ctrl+Shift+T | ① 状态不再变为 "Triggered" ② 快捷键已被注销，系统不再拦截该组合键 | 验证 inputConsumer.off() 精确注销，不影响其他应用的快捷键 |
 
 ---
@@ -377,13 +377,27 @@
 | core | 窗口聚焦 | 多窗口层级 | Window Focus 多窗口层级验证 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Window Focus" 创建子窗口 2. 手动将其他子窗口拖到该窗口上方 3. 再次点击 "Window Focus" | ① 首次点击创建 Float 子窗口 ② 再次点击调用 `setFocus()` → `raiseToAppTop()` ③ 窗口回到所有 Float 窗口最上方 | `Message::Task` 派发到主线程 → `focus_window(id)` → NAPI → `WindowManager.focusWindow` → `win.raiseToAppTop()` |
 | core | 热键缩放 | Ctrl+/- | Ctrl+/- 缩放验证 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "Hotkey Zoom" 查看说明 2. 聚焦 webview 区域 3. 按 Ctrl + = 放大 4. 按 Ctrl + - 缩小 | ① 页面内容随快捷键放大/缩小 ② 缩放级别在 0.2~10 之间 | `zoom-hotkey.js` 通过 `cfg(desktop)` 注入。Ctrl+0 被 ArkWeb 引擎拦截，不生效 |
 
-| 模块 | T0 | T1 | 合计 |
-|------|-----|-----|------|
-| 窗口聚焦与热键缩放 | 1 | 1 | **2** |
+---
+
+## 十九、Vibrancy（窗口模糊）手动用例
+
+> 自动用例 2 个（side-effect）：
+> 1. `window.setEffects(Blur/Acrylic/Mica/TabbedDark/TabbedLight) + clearEffects` 不抛错（运行时 setEffects，AttributeUpdater 刷新 backdropBlur/backgroundColor）
+> 2. `create_transparent_window(effect=Blur)` build 时 effects 不抛错（WindowBuilder::effects，registerController inject）
+>
+> 以下为手动用例，通过 Tests 视图的手动按钮触发。vibrancy 窗口用 create_transparent_window（Float 子窗口，避开 UIAbility singleton 冲突）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | vibrancy | Blur | Blur effect visible | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: Blur effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈磨砂模糊（backdropBlur(25)），能透出背后内容且带模糊 | 窗口加载 vibrancy.html 透明页，Effect::Blur radius=25 |
+| core | vibrancy | Acrylic | Acrylic effect visible | T1 | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: Acrylic effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈模糊 + 半透明深色 tint（blur + color） | Effect::Acrylic radius=25, color=[0,0,0,128] |
+| core | vibrancy | TabbedDark | TabbedDark effect visible | T1 | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: TabbedDark effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈模糊 + 深色 tint | Effect::TabbedDark radius=20（OHOS 下等价于 MicaDark 的深色 tint 实现） |
+| core | vibrancy | clearEffects | clearEffects removes blur | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: clearEffects removes blur" 手动测试按钮 2. 观察：先模糊 1s，然后 clearEffects 后模糊消失 | ① 初始窗口背景呈磨砂模糊 ② clearEffects 后窗口背景变清晰，且无半透明颜色遮罩（完全透出背后内容，不发暗/无色调） | 验证 clearEffects 同时移除 backdropBlur 和 backgroundColor tint |
+| core | vibrancy | build-time effects | build-time Blur effect visible | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: build-time Blur (WindowBuilder::effects)" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口出现时即呈磨砂模糊（build 时 effects，非运行时 setEffects） | create_transparent_window(effect=Blur, radius=25)，WindowBuilder::effects 在窗口创建时 apply |
 
 ---
 
-## 十九、用例统计
+## 二十、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -410,5 +424,6 @@
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
 | Global Shortcut（全局快捷键） | 2 | 0 | **2** |
 | 窗口聚焦与热键缩放 | 1 | 1 | **2** |
-| **合计** | **56** | **55** | **111** |
+| Vibrancy（窗口模糊） | 3 | 2 | **5** |
+| **合计** | **59** | **57** | **116** |
 

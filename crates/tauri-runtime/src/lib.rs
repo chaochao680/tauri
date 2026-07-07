@@ -926,6 +926,10 @@ pub trait WindowDispatch<T: UserEvent>: Debug + Clone + Send + Sync + Sized + 's
   /// Set the window background.
   fn set_background_color(&self, color: Option<Color>) -> Result<()>;
 
+  /// Returns the OHOS OS-level window ID (0 = main window, positive = sub-window).
+  #[cfg(target_env = "ohos")]
+  fn ohos_window_id(&self) -> Result<Option<i64>>;
+
   /// Prevents the window contents from being captured by other apps.
   fn set_content_protected(&self, protected: bool) -> Result<()>;
 

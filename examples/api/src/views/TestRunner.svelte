@@ -10,8 +10,9 @@
   import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { getCurrentWindow, currentMonitor, cursorPosition } from '@tauri-apps/api/window';
+  import { getCurrentWindow, currentMonitor, cursorPosition, Effect } from '@tauri-apps/api/window';
   import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { appCacheDir, join } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
 
@@ -834,6 +835,93 @@ Expected behavior:
         `After toggle, isDecorated() returned ${after}.\n\n` +
         `If visual matches ${after} → PASS.\n` +
         `If title bar state didn't change → FAIL.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetBackgroundColor(color, label) {
+    await wrapManual(`setBackgroundColor(${label})`, async () => {
+      const win = getCurrentWindow();
+      if (color === null) {
+        // Use webview-level API which supports null to truly reset to default
+        await webview.setBackgroundColor(null);
+        manualResult = `Background color reset to default (null via Webview API).\n\nExpected: Window background returns to its original default color.`;
+      } else {
+        await win.setBackgroundColor(color);
+        const [r, g, b, a] = color;
+        manualResult = `Background color set to [${r},${g},${b},${a}] (${label}).\n\n` +
+          `Expected: Window background should change to ${label}.\n` +
+          `Alpha=${a} (${a === 255 ? 'fully opaque' : a === 0 ? 'fully transparent' : 'semi-transparent'}).\n\n` +
+          `If visual matches → PASS.`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  // ─── Vibrancy (Window Effects) Manual Tests (OHOS only) ───
+  // NOTE: WebviewWindow.new defaults to OHOS UIAbility (singleton) which conflicts with the
+  // main window. Use create_transparent_window (Float sub-window) instead so the window
+  // creates successfully and setEffects can apply backdropBlur.
+  async function manualVibrancyEffect(effectName, effect, opts, expect) {
+    await wrapManual(`vibrancy:${effectName}`, async () => {
+      const windowId = `manual-vibrancy-${effectName}`;
+      // Reuse label so repeated clicks refresh the same window (avoid leftover windows)
+      try { await WebviewWindow.getByLabel(windowId)?.then(w => w?.close()); } catch {}
+      await invoke('create_transparent_window', { windowId });
+      const win = await WebviewWindow.getByLabel(windowId);
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [effect], ...opts });
+      manualResult = `Vibrancy ${effectName} window created (id: "${windowId}").\n\n` +
+        `Expected: ${expect}\n\n` +
+        `If matches → PASS.\nIf no blur/effect visible → FAIL.\n\n` +
+        `Close with Ctrl+W or Cmd+W.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualVibrancyBlur() {
+    await manualVibrancyEffect('Blur', Effect.Blur, { radius: 25 },
+      'Window background FROSTED/BLURRY (backdropBlur 25) — content behind is visible but blurred.');
+  }
+  async function manualVibrancyAcrylic() {
+    await manualVibrancyEffect('Acrylic', Effect.Acrylic, { radius: 25, color: [0, 0, 0, 128] },
+      'Window background BLURRY + semi-transparent DARK tint (blur + color overlay).');
+  }
+  async function manualVibrancyTabbedDark() {
+    await manualVibrancyEffect('TabbedDark', Effect.TabbedDark, { radius: 20 },
+      'Window background BLURRY + DARK tint (OHOS approximates MicaDark via blur + dark tint).');
+  }
+
+  async function manualVibrancyClearEffects() {
+    await wrapManual('vibrancy:clearEffects', async () => {
+      const windowId = 'manual-vibrancy-clear';
+      try { await WebviewWindow.getByLabel(windowId)?.then(w => w?.close()); } catch {}
+      await invoke('create_transparent_window', { windowId });
+      const win = await WebviewWindow.getByLabel(windowId);
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.Blur], radius: 25 });
+      await new Promise((r) => setTimeout(r, 1000));
+      await win.clearEffects();
+      manualResult = `Vibrancy clearEffects window created (id: "${windowId}").\n\n` +
+        `Expected: Window background was BLURRY for 1 second, then became CLEAR/TRANSPARENT after clearEffects.\n\n` +
+        `If blur disappeared after ~1s → PASS.\nIf blur remained → FAIL (clearEffects not working).\n\n` +
+        `Close with Ctrl+W or Cmd+W.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualVibrancyBuildTimeBlur() {
+    await wrapManual('vibrancy:build-time Blur', async () => {
+      const windowId = 'manual-vibrancy-build-blur';
+      try { await WebviewWindow.getByLabel(windowId)?.then(w => w?.close()); } catch {}
+      // create_transparent_window with effect param applies effects at BUILD time
+      // (WindowBuilder::effects → registerController inject), distinct from runtime setEffects.
+      await invoke('create_transparent_window', { windowId, effect: 'Blur', radius: 25 });
+      manualResult = `Build-time Blur window created (id: "${windowId}").\n\n` +
+        `Expected: Window appears with FROSTED/BLURRY background IMMEDIATELY on creation\n` +
+        `(build-time effect via WindowBuilder::effects, not runtime setEffects).\n\n` +
+        `If frosted on appear → PASS.\nIf clear on appear (needs runtime setEffects) → FAIL.\n\n` +
+        `Close with Ctrl+W or Cmd+W.`;
       onMessage(manualResult);
     });
   }
@@ -1728,6 +1816,16 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
         <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Vibrancy (Window Effects) — OHOS</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualVibrancyBlur}>vibrancy: Blur effect visible</button>
+        <button class="btn" onclick={manualVibrancyAcrylic}>vibrancy: Acrylic effect visible</button>
+        <button class="btn" onclick={manualVibrancyTabbedDark}>vibrancy: TabbedDark effect visible</button>
+        <button class="btn" onclick={manualVibrancyClearEffects}>vibrancy: clearEffects removes blur</button>
+        <button class="btn" onclick={manualVibrancyBuildTimeBlur}>vibrancy: build-time Blur (WindowBuilder::effects)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">

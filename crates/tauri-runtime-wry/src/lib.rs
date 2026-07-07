@@ -1554,6 +1554,8 @@ pub enum WindowMessage {
   DragWindow,
   ResizeDragWindow(tauri_runtime::ResizeDirection),
   RequestRedraw,
+  #[cfg(target_env = "ohos")]
+  OhosWindowId(Sender<Option<i64>>),
 }
 
 #[derive(Debug, Clone)]
@@ -2704,6 +2706,11 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
       &self.context,
       Message::Window(self.window_id, WindowMessage::SetBackgroundColor(color)),
     )
+  }
+
+  #[cfg(target_env = "ohos")]
+  fn ohos_window_id(&self) -> Result<Option<i64>> {
+    window_getter!(self, WindowMessage::OhosWindowId)
   }
 }
 
@@ -3900,6 +3907,11 @@ fn handle_user_message<T: UserEvent>(
           }
           WindowMessage::SetBackgroundColor(color) => {
             window.set_background_color(color.map(Into::into))
+          }
+          #[cfg(target_env = "ohos")]
+          WindowMessage::OhosWindowId(tx) => {
+            use tao::platform::ohos::WindowExtOpenHarmony;
+            let _ = tx.send(window.window_id());
           }
         }
       }

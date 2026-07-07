@@ -2,7 +2,7 @@ import type { TestCase } from '../test-runner';
 import { invoke, Channel, Resource } from '@tauri-apps/api/core';
 import { emit, listen, once } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
-import { getCurrentWindow, currentMonitor, cursorPosition } from '@tauri-apps/api/window';
+import { getCurrentWindow, currentMonitor, cursorPosition, Effect } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
 import { appCacheDir } from '@tauri-apps/api/path';
@@ -1305,6 +1305,87 @@ export const coreTests: TestCase[] = [
         typeof navigator.clipboard !== 'undefined' || typeof document.execCommand === 'function',
         'Clipboard API (navigator.clipboard or document.execCommand) should be available'
       );
+    },
+  },
+
+  // ── Vibrancy (window effects) ──
+  // NOTE: WebviewWindow.new defaults to OHOS UIAbility (singleton) which conflicts
+  // with the main window. Use create_transparent_window (Float sub-window) instead.
+  {
+    name: 'window.setEffects (Blur/Acrylic/Mica) — no throw',
+    category: 'side-effect',
+    async fn() {
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-auto' });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-auto');
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.Blur], radius: 25 });
+      await win.setEffects({ effects: [Effect.Acrylic], radius: 25, color: [0, 0, 0, 128] });
+      await win.setEffects({ effects: [Effect.Mica], radius: 20 });
+      await win.setEffects({ effects: [Effect.TabbedDark], radius: 20 });
+      await win.setEffects({ effects: [Effect.TabbedLight], radius: 20 });
+      await win.clearEffects();
+      assert(true, 'setEffects + clearEffects did not throw for all effect types');
+      await win.close();
+    },
+  },
+  {
+    name: 'vibrancy: Blur effect visible (manual)',
+    category: 'manual',
+    async fn() {
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-blur' });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-blur');
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.Blur], radius: 25 });
+      // Manual: window should show frosted/blurry background
+    },
+  },
+  {
+    name: 'vibrancy: Acrylic effect visible (manual)',
+    category: 'manual',
+    async fn() {
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-acrylic' });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-acrylic');
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.Acrylic], radius: 25, color: [0, 0, 0, 128] });
+      // Manual: window should show blur + semi-transparent tint
+    },
+  },
+  {
+    name: 'vibrancy: TabbedDark effect visible (manual)',
+    category: 'manual',
+    async fn() {
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-tabbed-dark' });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-tabbed-dark');
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.TabbedDark], radius: 20 });
+      // Manual: window should show blur + dark tint
+    },
+  },
+  {
+    name: 'vibrancy: clearEffects removes blur (manual)',
+    category: 'manual',
+    async fn() {
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-clear' });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-clear');
+      if (!win) throw new Error('vibrancy window not created');
+      await win.setEffects({ effects: [Effect.Blur], radius: 25 });
+      await new Promise((r) => setTimeout(r, 1000));
+      await win.clearEffects();
+      // Manual: blur should be gone after clearEffects
+    },
+  },
+  // ── Vibrancy build-time effects (WindowBuilder::effects, distinct from runtime setEffects) ──
+  {
+    name: 'vibrancy build-time effects (WindowBuilder::effects) — no throw',
+    category: 'side-effect',
+    async fn() {
+      // create_transparent_window with effect param applies effects at build time
+      // (registerController inject), distinct from runtime setEffects (AttributeUpdater).
+      await invoke('create_transparent_window', { windowId: 'test-vibrancy-build', effect: 'Blur', radius: 25 });
+      const win = await WebviewWindow.getByLabel('test-vibrancy-build');
+      if (!win) throw new Error('build-time effects window not created');
+      await win.close();
+      assert(true, 'build-time effects window created + closed without throw');
     },
   },
 ];
