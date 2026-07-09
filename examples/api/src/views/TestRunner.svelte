@@ -34,6 +34,33 @@
   let snapshotHeight = $state(0);
   let hasSnapshot = $state(false);
 
+  // Key repeat test state
+  let keyTestActive = $state(false);
+  let keyTestLog = $state([]);
+  let pressedKeys = new Set();
+
+  function onKeyTestKeydown(e) {
+    if (!keyTestActive) return;
+    e.preventDefault();
+    const isRepeat = pressedKeys.has(e.code);
+    if (!isRepeat) pressedKeys.add(e.code);
+    const entry = `D key="${e.key}" code=${e.code} repeat=${e.repeat} SetR=${isRepeat} pressed=[${[...pressedKeys].join(',')}]`;
+    keyTestLog = [...keyTestLog.slice(-49), { text: entry, highlight: e.repeat || isRepeat }];
+  }
+
+  function onKeyTestKeyup(e) {
+    if (!keyTestActive) return;
+    e.preventDefault();
+    pressedKeys.delete(e.code);
+    const entry = `U key="${e.key}" code=${e.code} repeat=${e.repeat} SetR=false`;
+    keyTestLog = [...keyTestLog.slice(-49), { text: entry, highlight: false }];
+  }
+
+  function clearKeyTestLog() {
+    keyTestLog = [];
+    pressedKeys.clear();
+  }
+
   const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
   const webview = getCurrentWebview();
 
@@ -1941,5 +1968,43 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         </div>
       </div>
     {/if}
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <div class="flex items-center gap-2 mb-1">
+        <h5 class="text-xs font-bold">⌨ Key Repeat Detection (OHOS desktop / 2in1)</h5>
+        <button class="btn" onclick={() => { keyTestActive = !keyTestActive; if (!keyTestActive) clearKeyTestLog(); }}>
+          {keyTestActive ? '⏹ Stop' : '▶ Start'}
+        </button>
+        {#if keyTestLog.length > 0}
+          <button class="text-xs text-blue-500 underline" onclick={clearKeyTestLog}>Clear</button>
+        {/if}
+      </div>
+      {#if keyTestActive}
+        <input
+          type="text"
+          class="w-full p-2 mb-1 rd-1 border border-solid border-blue-400 bg-blue-500/5 text-sm outline-none"
+          placeholder="Click here and hold a key to test repeat detection..."
+          onkeydown={onKeyTestKeydown}
+          onkeyup={onKeyTestKeyup}
+          autofocus
+        />
+        <div class="text-xs text-gray-500 mb-1">
+          <code>event.repeat</code> = browser native repeat flag &nbsp;|&nbsp; <code>Set repeat</code> = HashSet-based detection (tao)
+        </div>
+      {/if}
+      {#if keyTestLog.length > 0}
+        <div class="max-h-48 overflow-y-auto flex flex-col gap-0.5">
+          {#each keyTestLog as entry}
+            <div class="text-xs font-mono p-1 rd-1"
+              style="background:{entry.highlight ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.05)'};{entry.highlight ? 'font-weight:bold;color:#16a34a' : ''}">
+              {entry.text}
+            </div>
+          {/each}
+        </div>
+      {:else if keyTestActive}
+        <div class="text-xs text-gray-500 italic">Waiting for key events...</div>
+      {:else}
+        <div class="text-xs text-gray-500">Press <b>Start</b> to capture keyboard events. Hold a key to test repeat detection.</div>
+      {/if}
+    </div>
   </div>
 </div>
