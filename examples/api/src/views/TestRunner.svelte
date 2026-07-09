@@ -1690,6 +1690,35 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     });
   }
 
+  // Deep-Link manual tests
+  let deepLinkUnlisten = null;
+  let deepLinkListening = $state(false);
+
+  async function manualDeepLinkOnOpenUrl() {
+    if (deepLinkListening) {
+      deepLinkUnlisten?.();
+      deepLinkListening = false;
+      onMessage('[deep-link] Stopped listening for onOpenUrl events');
+      return;
+    }
+    const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+    deepLinkUnlisten = await onOpenUrl((urls) => {
+      onMessage(`[deep-link] onOpenUrl received: ${JSON.stringify(urls)}`);
+    });
+    deepLinkListening = true;
+    onMessage('[deep-link] Listening for onOpenUrl. Trigger: hdc shell "aa start -U taurideeplink://test"');
+  }
+
+  async function manualDeepLinkGetCurrent() {
+    const { getCurrent } = await import('@tauri-apps/plugin-deep-link');
+    const result = await getCurrent();
+    onMessage(`[deep-link] getCurrent → ${JSON.stringify(result)}`);
+  }
+
+  function manualDeepLinkExternalLaunch() {
+    onMessage('[deep-link] Click taurideeplink://path link from browser/other app. App should come to foreground.');
+  }
+
   async function toggleMouseTracking() {
     if (mouseTracking) {
       mouseUnlisteners.forEach((fn) => fn());
@@ -1808,6 +1837,16 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <button class="btn" onclick={manualAppCacheDir}>appCacheDir</button>
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
       <button class="btn" onclick={manualOsInfo}>OS Info (platform/type/version)</button>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Deep-Link</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualDeepLinkOnOpenUrl}>
+          {deepLinkListening ? 'Stop onOpenUrl' : 'onOpenUrl (trigger with hdc)'}
+        </button>
+        <button class="btn" onclick={manualDeepLinkGetCurrent}>getCurrent</button>
+        <button class="btn" onclick={manualDeepLinkExternalLaunch}>External launch (browser)</button>
+      </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Mouse Events (OHOS desktop / 2in1)</h5>

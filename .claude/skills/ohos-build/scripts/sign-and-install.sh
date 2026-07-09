@@ -9,12 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/env.sh"
 
 OHOS_PROJECT="$PROJECT_ROOT/examples/api/src-tauri/gen/ohos"
-if [ "$OHOS_DEVICE_TYPE" = "desktop" ]; then
-    ENTRY_DIR="entry_desktop"
-else
-    ENTRY_DIR="entry_mobile"
-fi
-SIGNED_HAP="$OHOS_PROJECT/$ENTRY_DIR/build/default/outputs/default/$ENTRY_DIR-default-signed.hap"
+ENTRY_MODULE="entry_${OHOS_DEVICE_TYPE:-desktop}"
+SIGNED_HAP="$OHOS_PROJECT/${ENTRY_MODULE}/build/default/outputs/default/${ENTRY_MODULE}-default-signed.hap"
 
 # ─── 检查已签名 HAP ───
 if [ ! -f "$SIGNED_HAP" ]; then

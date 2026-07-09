@@ -101,7 +101,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       .plugin(tauri_plugin_autostart::init(
         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
         None,
-      ));
+      ))
+      .plugin(tauri_plugin_deep_link::init());
     if let Some(ref client) = sentry_client {
       builder = builder.plugin(tauri_plugin_sentry::init(client));
     }
@@ -120,6 +121,11 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         let _ = window.set_focus();
       }
     }));
+  }
+
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.plugin(tauri_plugin_deep_link::init());
   }
 
   #[cfg(target_env = "ohos")]

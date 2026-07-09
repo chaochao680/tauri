@@ -397,6 +397,14 @@
 
 ---
 
+## 十九、Deep-Link 手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | deep-link | onOpenUrl | onOpenUrl 事件触发 — 运行中收到外部链接 | **T0** | app 已运行 | 1. 在 TestRunner UI manual 区点击 "onOpenUrl (trigger with hdc)" 按钮注册监听 2. 执行 `hdc shell "aa start -U taurideeplink://manualtest"` | UI 消息区显示 `[deep-link] onOpenUrl received: ["taurideeplink://manualtest"]` | RunEvent::Opened urls 非空时触发 |
+| core | deep-link | getCurrent | getCurrent 冷启动 — 首启动链接拉起 | **T0** | app 未运行 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://coldstart"` 3. 等 app 冷启动后在 TestRunner UI manual 区点击 "getCurrent" 按钮 | UI 消息区显示 `[deep-link] getCurrent → ["taurideeplink://coldstart"]` | 冷启动 onCreate want.uri 经 lazy take 注入 |
+| core | deep-link | 外部唤起 | 外部链接唤起 app — 跨 app 跳转 | **T0** | app 已安装 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://foreground-test"` | app 唤起到前台（onCreate 冷启动或 onNewWant 运行中） | aa start -U 与浏览器点击 `<a href>` 走相同系统 Want 路由（module.json5 skills 匹配）；浏览器地址栏直接输入 scheme 会被当搜索词 |
+
 ## 二十、用例统计
 
 | 模块 | T0 | T1 | 合计 |
@@ -425,5 +433,6 @@
 | Global Shortcut（全局快捷键） | 2 | 0 | **2** |
 | 窗口聚焦与热键缩放 | 1 | 1 | **2** |
 | Vibrancy（窗口模糊） | 3 | 2 | **5** |
-| **合计** | **59** | **57** | **116** |
+| Deep-Link（深度链接） | 3 | 0 | **3** |
+| **合计** | **62** | **57** | **119** |
 

@@ -672,14 +672,35 @@ const STATUS_SCRIPT: &str = r##"
       statusDiv.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.8);color:#0f0;padding:8px 14px;border-radius:8px;font-size:13px;font-family:monospace;z-index:9999;';
       statusDiv.textContent = 'isDecorated: checking...';
       document.body.appendChild(statusDiv);
+      // Tauri v2 exposes the public invoke at `window.__TAURI__.core.invoke` (not the
+      // v1 top-level `window.__TAURI__.invoke`). The low-level bridge
+      // `window.__TAURI_INTERNALS__.invoke` is always present and is what the bundled
+      // @tauri-apps/api uses (proven to work on OHOS). Resolve whichever is available,
+      // and degrade gracefully instead of leaving the badge stuck on "checking...".
+      function resolveInvoke() {
+        var i = window.__TAURI_INTERNALS__;
+        if (i && typeof i.invoke === 'function') return i.invoke.bind(i);
+        var t = window.__TAURI__;
+        if (t && t.core && typeof t.core.invoke === 'function') return t.core.invoke.bind(t.core);
+        return null;
+      }
+      function setStatus(text, color) {
+        var el = document.getElementById('state-status');
+        if (el) { el.textContent = text; el.style.color = color; }
+      }
       setInterval(function() {
-        window.__TAURI__.invoke('plugin:window|is_decorated').then(function(v) {
-          var el = document.getElementById('state-status');
-          if (el) {
-            el.textContent = 'isDecorated: ' + v;
-            el.style.color = v ? '#0f0' : '#f80';
-          }
-        }).catch(function() {});
+        var inv = resolveInvoke();
+        if (!inv) { setStatus('isDecorated: (n/a)', '#888'); return; }
+        try {
+          // No label arg: get_window() resolves to the current (this child) window.
+          inv('plugin:window|is_decorated').then(function(v) {
+            setStatus('isDecorated: ' + v, v ? '#0f0' : '#f80');
+          }).catch(function() {
+            setStatus('isDecorated: (err)', '#f00');
+          });
+        } catch (e) {
+          setStatus('isDecorated: (err)', '#f00');
+        }
       }, 500);
 "##;
 
@@ -694,7 +715,13 @@ pub fn create_transparent_window<R: tauri::Runtime>(
   log::info!("Creating transparent window: {} (effect={:?}, radius={:?})", window_id, effect, radius);
 
   let close_link = CLOSE_LINK_HTML;
-  let status_script = STATUS_SCRIPT;
+  // Autotest-created windows (label prefix "test-") are created and closed
+  // programmatically; on OHOS programmatic close doesn't destroy the Float window
+  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // poll is_decorated on an unregistered webview → "failed to acquire webview
+  // reference". Skip the live isDecorated badge for autotest windows to avoid that
+  // noisy error; manual test windows keep the badge (they stay open and work).
+  let status_script = if window_id.starts_with("test-") { "" } else { STATUS_SCRIPT };
   let init_script = format!(
     r#"
     document.addEventListener('DOMContentLoaded', function() {{
@@ -762,7 +789,13 @@ pub fn create_borderless_window<R: tauri::Runtime>(
   log::info!("Creating borderless window: {}", window_id);
 
   let close_link = CLOSE_LINK_HTML;
-  let status_script = STATUS_SCRIPT;
+  // Autotest-created windows (label prefix "test-") are created and closed
+  // programmatically; on OHOS programmatic close doesn't destroy the Float window
+  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // poll is_decorated on an unregistered webview → "failed to acquire webview
+  // reference". Skip the live isDecorated badge for autotest windows to avoid that
+  // noisy error; manual test windows keep the badge (they stay open and work).
+  let status_script = if window_id.starts_with("test-") { "" } else { STATUS_SCRIPT };
   let init_script = format!(
     r#"
     document.addEventListener('DOMContentLoaded', function() {{
@@ -806,7 +839,13 @@ pub fn create_transparent_borderless_window<R: tauri::Runtime>(
   log::info!("Creating transparent borderless window: {}", window_id);
 
   let close_link = CLOSE_LINK_HTML;
-  let status_script = STATUS_SCRIPT;
+  // Autotest-created windows (label prefix "test-") are created and closed
+  // programmatically; on OHOS programmatic close doesn't destroy the Float window
+  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // poll is_decorated on an unregistered webview → "failed to acquire webview
+  // reference". Skip the live isDecorated badge for autotest windows to avoid that
+  // noisy error; manual test windows keep the badge (they stay open and work).
+  let status_script = if window_id.starts_with("test-") { "" } else { STATUS_SCRIPT };
   let init_script = format!(
     r#"
     document.addEventListener('DOMContentLoaded', function() {{

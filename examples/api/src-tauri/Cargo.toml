@@ -48,6 +48,7 @@ hilog = "*"
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
 tauri-plugin-single-instance = { path = "../../../../plugins-workspace/plugins/single-instance" }
 tauri-plugin-global-shortcut = { path = "../../../../plugins-workspace/plugins/global-shortcut" }
+tauri-plugin-deep-link = { path = "../../../../plugins-workspace/plugins/deep-link" }
 
 [dependencies.tauri]
 path = "../../../crates/tauri"
