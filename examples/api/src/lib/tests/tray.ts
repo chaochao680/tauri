@@ -279,7 +279,7 @@ export const trayTests: TestCase[] = [
         title: 'Test Panel',
         height: 250,
         abilityName: 'TestTrayAbility',
-        moduleName: 'entry',
+        moduleName: 'entry_desktop',
       });
     },
   },

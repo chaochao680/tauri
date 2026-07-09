@@ -21,6 +21,7 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 tiny_http = "0.11"
 log = "0.4.21"
+anyhow = "1"
 tauri-plugin-sample = { path = "./tauri-plugin-sample/" }
 tauri-plugin-http = { path = "../../../../plugins-workspace/plugins/http" }
 tauri-plugin-os = { path = "../../../../plugins-workspace/plugins/os" }

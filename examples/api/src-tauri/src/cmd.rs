@@ -687,8 +687,11 @@ const STATUS_SCRIPT: &str = r##"
 pub fn create_transparent_window<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
   window_id: String,
+  effect: Option<String>,
+  radius: Option<f64>,
+  color: Option<[u8; 4]>,
 ) -> tauri::Result<()> {
-  log::info!("Creating transparent window: {}", window_id);
+  log::info!("Creating transparent window: {} (effect={:?}, radius={:?})", window_id, effect, radius);
 
   let close_link = CLOSE_LINK_HTML;
   let status_script = STATUS_SCRIPT;
@@ -713,13 +716,36 @@ pub fn create_transparent_window<R: tauri::Runtime>(
   "#
   );
 
-  let _window =
-    tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
-      .title("Transparent Window")
-      .transparent(true)
-      .inner_size(600.0, 400.0)
-      .initialization_script(&init_script)
-      .build()?;
+  let mut builder = tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
+    .title("Transparent Window")
+    .transparent(true)
+    .inner_size(600.0, 400.0)
+    .initialization_script(&init_script);
+
+  // Optional build-time effects (WindowBuilder::effects path — applied at window creation via
+  // registerController inject, distinct from runtime setEffects which uses AttributeUpdater).
+  if let Some(effect_name) = &effect {
+    let effect = match effect_name.as_str() {
+      "Blur" => tauri::window::Effect::Blur,
+      "Acrylic" => tauri::window::Effect::Acrylic,
+      "Mica" => tauri::window::Effect::Mica,
+      "MicaDark" => tauri::window::Effect::MicaDark,
+      "MicaLight" => tauri::window::Effect::MicaLight,
+      "Tabbed" => tauri::window::Effect::Tabbed,
+      "TabbedDark" => tauri::window::Effect::TabbedDark,
+      "TabbedLight" => tauri::window::Effect::TabbedLight,
+      other => return Err(tauri::Error::Anyhow(anyhow::anyhow!("unknown effect: {}", other))),
+    };
+    let effects = tauri::utils::config::WindowEffectsConfig {
+      effects: vec![effect],
+      radius,
+      state: None,
+      color: color.map(|c| tauri::utils::config::Color(c[0], c[1], c[2], c[3])),
+    };
+    builder = builder.effects(effects);
+  }
+
+  let _window = builder.build()?;
 
   Ok(())
 }
