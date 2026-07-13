@@ -38,6 +38,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "mobile": [
+        { "scheme": ["taurideeplink"] }
+      ]
+    },
     "cli": {
       "description": "Tauri API example",
       "args": [

@@ -543,8 +543,9 @@ impl<R: Runtime> AppHandle<R> {
   /// but accepts a boxed trait object instead of a generic type.
   #[cfg_attr(feature = "tracing", tracing::instrument(name = "app::plugin::register", skip(plugin), fields(name = plugin.name())))]
   pub fn plugin_boxed(&self, mut plugin: Box<dyn Plugin<R>>) -> crate::Result<()> {
+    // initialize outside lock to avoid blocking on_event_loop_event (appfreeze fix)
+    crate::plugin::initialize(&mut plugin, self, &self.config().plugins)?;
     let mut store = self.manager().plugins.lock().unwrap();
-    store.initialize(&mut plugin, self, &self.config().plugins)?;
     store.register(plugin);
 
     Ok(())
@@ -2686,11 +2687,14 @@ fn on_event_loop_event<R: Runtime>(
     _ => unimplemented!(),
   };
 
-  manager
-    .plugins
-    .lock()
-    .expect("poisoned plugin store")
-    .on_event(app_handle, &event);
+  // try_lock to avoid blocking main thread when plugins lock is held by register (appfreeze fix)
+  if let Ok(mut store) = manager.plugins.try_lock() {
+    store.on_event(app_handle, &event);
+  } else {
+    // lock contended (e.g. during plugin register); skip on_event to avoid blocking the main
+    // thread. Log so a dropped event (e.g. a deep-link RunEvent::Opened) is traceable.
+    log::warn!("[tauri] plugin store lock busy, skipping on_event (appfreeze try_lock)");
+  }
 
   event
 }

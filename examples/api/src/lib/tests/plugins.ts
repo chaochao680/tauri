@@ -924,4 +924,75 @@ export const pluginTests: TestCase[] = [
       }
     },
   },
+  // @tauri-apps/plugin-deep-link
+  {
+    name: '@tauri-apps/plugin-deep-link.getCurrent',
+    category: 'auto',
+    async fn() {
+      const { getCurrent } = await import('@tauri-apps/plugin-deep-link');
+      const result = await getCurrent();
+      console.log('[deep-link auto] getCurrent result:', JSON.stringify(result));
+      assert(result === null || Array.isArray(result), `getCurrent should return null or array, got ${result}`);
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link.isRegistered',
+    category: 'auto',
+    async fn() {
+      const { isRegistered } = await import('@tauri-apps/plugin-deep-link');
+      const result = await isRegistered('myapp');
+      assert(result === false, `isRegistered should return false on OHOS (no-op), got ${result}`);
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link.register+unregister',
+    category: 'auto',
+    async fn() {
+      const { register, unregister } = await import('@tauri-apps/plugin-deep-link');
+      // no-op on OHOS, should not throw
+      await register('myapp');
+      await unregister('myapp');
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link.onOpenUrl register',
+    category: 'auto',
+    async fn() {
+      const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+      const unlisten = await onOpenUrl(() => {});
+      assert(typeof unlisten === 'function', `onOpenUrl should return UnlistenFn, got ${typeof unlisten}`);
+      unlisten();
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link.onOpenUrl trigger (manual)',
+    category: 'manual',
+    async fn() {
+      const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+      const unlisten = await onOpenUrl((urls) => {
+        console.log('[deep-link manual] onOpenUrl received:', urls);
+      });
+      console.log('[deep-link manual] Run: hdc shell aa start -a ohos.want.action.viewData -d taurideeplink://path');
+      console.log('[deep-link manual] Expect onOpenUrl callback with ["taurideeplink://path"]');
+      unlisten();
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link.getCurrent cold-start (manual)',
+    category: 'manual',
+    async fn() {
+      const { getCurrent } = await import('@tauri-apps/plugin-deep-link');
+      const result = await getCurrent();
+      console.log('[deep-link manual] getCurrent result:', JSON.stringify(result));
+      console.log('[deep-link manual] Cold-start app via taurideeplink://path, expect getCurrent returns ["taurideeplink://path"]');
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-deep-link external launch (manual)',
+    category: 'manual',
+    async fn() {
+      console.log('[deep-link manual] Click taurideeplink://path link from browser/other app');
+      console.log('[deep-link manual] Expect app brought to foreground + onOpenUrl fired');
+    },
+  },
 ];
