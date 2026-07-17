@@ -1669,6 +1669,74 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     });
   }
 
+  // ─── Window Operations & Persisted-Scope Manual Tests ───
+  async function manualMinimizeThenIsMinimized() {
+    await wrapManual('minimize then is_minimized', async () => {
+      const win = getCurrentWindow();
+      await win.minimize();
+      await new Promise((r) => setTimeout(r, 500));
+      const minimized = await win.isMinimized();
+      manualResult = `minimize() -> isMinimized() = ${minimized}\n\n窗口已最小化到任务栏。\n如 isMinimized() = true -> PASS。\n\n请手动从任务栏点击恢复窗口。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualWindowStateSaveRestore() {
+    await wrapManual('window-state save/restore', async () => {
+      const win = getCurrentWindow();
+      // Save current state
+      await invoke('plugin:window-state|save_window_state', { label: win.label });
+      // Read back current window info
+      const pos = await win.outerPosition();
+      const size = await win.innerSize();
+      const maximized = await win.isMaximized();
+      // Restore from saved state
+      await invoke('plugin:window-state|restore_state', { label: win.label });
+      await new Promise((r) => setTimeout(r, 300));
+      const posAfter = await win.outerPosition();
+      const sizeAfter = await win.innerSize();
+      manualResult = `window-state save/restore 完成:\n\n保存时: pos=(${pos.x},${pos.y}) size=${size.width}×${size.height} maximized=${maximized}\n恢复后: pos=(${posAfter.x},${posAfter.y}) size=${sizeAfter.width}×${sizeAfter.height}\n\n如保存/恢复值一致 → PASS。\n命令执行无异常即说明插件 API 正常。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualWindowStateRestoreOnly() {
+    await wrapManual('window-state restore only', async () => {
+      const win = getCurrentWindow();
+      const posBefore = await win.outerPosition();
+      await invoke('plugin:window-state|restore_state', { label: win.label });
+      await new Promise((r) => setTimeout(r, 500));
+      const posAfter = await win.outerPosition();
+      manualResult = `window-state restore only:\n\n恢复前: pos=(${posBefore.x},${posBefore.y})\n恢复后: pos=(${posAfter.x},${posAfter.y})\n\n如位置变化 → restore 生效(set_position 工作)。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualWindowStateClear() {
+    await wrapManual('window-state clear', async () => {
+      const result = await invoke('clear_window_state');
+      manualResult = `window-state 清理:\n\n文件删除: ${result.deleted ? '✅ 已删除' : '⚠️ 文件不存在'}\n路径: ${result.state_file}\n\n${result.note}`;
+      onMessage(manualResult);
+    });
+  }
+
+
+  async function manualPersistedScopeTest() {
+    await wrapManual('persisted-scope test', async () => {
+      const result = await invoke('test_persisted_scope');
+      manualResult = `persisted-scope 测试:\n\nallow_directory: ${result.allow_ok ? '✅ 成功' : '❌ 失败'}\n.persisted-scope 文件: ${result.state_file_exists ? '✅ 已生成 (' + result.state_file_size + ' bytes)' : '❌ 未生成'}\n路径: ${result.state_file}\n\n验证流程:\n1. 点 Clear → 重启 → 点 Test → 文件应不存在（Clear 生效）\n2. 点 Test → 文件生成（Save 生效）\n3. 重启 → 文件仍在（Restore 生效）`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualPersistedScopeClear() {
+    await wrapManual('persisted-scope clear', async () => {
+      const result = await invoke('clear_persisted_scope');
+      manualResult = `persisted-scope 清理:\n\n文件删除: ${result.deleted ? '✅ 已删除' : '⚠️ 文件不存在（无需删除）'}\n路径: ${result.state_file}\n内存中剩余 patterns: ${result.remaining_patterns_count} 个\n\n${result.note}`;
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Mouse Event Manual Tests (OHOS desktop / 2in1) ───
   let mouseTracking = $state(false);
   let mouseEvents = $state([]);
@@ -2067,6 +2135,17 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualReparentError}>reparent returns error (no deadlock)</button>
         <button class="btn" onclick={manualReparentCascade}>reparent cascade check</button>
         <button class="btn" onclick={manualCreateChildWebview}>create_webview (multi-webview)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Window Operations & Persisted-Scope Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualMinimizeThenIsMinimized}>Minimize then is_minimized</button>
+        <button class="btn" onclick={manualWindowStateSaveRestore}>Window-State Save</button>
+        <button class="btn" onclick={manualWindowStateRestoreOnly}>Window-State Restore</button>
+        <button class="btn" onclick={manualWindowStateClear}>Window-State Clear</button>
+        <button class="btn" onclick={manualPersistedScopeTest}>Persisted-Scope Test</button>
+        <button class="btn" onclick={manualPersistedScopeClear}>Persisted-Scope Clear</button>
       </div>
     </div>
     {#if manualResult}

@@ -163,11 +163,15 @@
     "deep-link:allow-register",
     "deep-link:allow-unregister",
     "deep-link:allow-is-registered",
+    "window-state:default",
     "sentry:default",
     "allow-sentry-test-breadcrumb",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-unregister-all",
-    "global-shortcut:allow-is-registered"
+    "global-shortcut:allow-is-registered",
+    "allow-test-persisted-scope",
+    "allow-clear-persisted-scope",
+    "allow-clear-window-state"
   ]
 }
