@@ -1304,3 +1304,90 @@ pub fn set_bounds_test<R: tauri::Runtime>(
     "matches": original_str == after_set_str,
   }))
 }
+
+#[command]
+pub fn test_persisted_scope<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+) -> Result<serde_json::Value, String> {
+  use tauri_plugin_fs::FsExt;
+  let scope = app.try_fs_scope().ok_or("fs scope not available")?;
+  let cache_dir = app
+    .path()
+    .app_cache_dir()
+    .map_err(|e| e.to_string())?;
+  let test_path = cache_dir.join("test-persisted-scope");
+  // allow_directory triggers PathAllowed event → persisted-scope saves to .persisted-scope.
+  // The persisted-scope listener runs synchronously via scope.emit() inside allow_directory,
+  // so the .persisted-scope file is already written to disk before allow_directory returns.
+  scope
+    .allow_directory(&test_path, true)
+    .map_err(|e| e.to_string())?;
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| e.to_string())?;
+  let state_file = app_data_dir.join(".persisted-scope");
+  let file_exists = state_file.exists();
+  let file_size = if file_exists {
+    std::fs::metadata(&state_file)
+      .map(|m| m.len())
+      .unwrap_or(0)
+  } else {
+    0
+  };
+  Ok(serde_json::json!({
+    "allow_ok": true,
+    "test_path": test_path.to_string_lossy(),
+    "state_file": state_file.to_string_lossy(),
+    "state_file_exists": file_exists,
+    "state_file_size": file_size,
+  }))
+}
+
+#[command]
+pub fn clear_persisted_scope<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+) -> Result<serde_json::Value, String> {
+  use tauri_plugin_fs::FsExt;
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| e.to_string())?;
+  let state_file = app_data_dir.join(".persisted-scope");
+  let file_existed = state_file.exists();
+  if file_existed {
+    std::fs::remove_file(&state_file).map_err(|e| e.to_string())?;
+  }
+  let scope = app.try_fs_scope().ok_or("fs scope not available")?;
+  let remaining: Vec<String> = scope
+    .allowed_patterns()
+    .iter()
+    .map(|p| p.to_string())
+    .collect();
+  Ok(serde_json::json!({
+    "deleted": file_existed,
+    "state_file": state_file.to_string_lossy(),
+    "remaining_patterns_count": remaining.len(),
+    "note": "文件已删除。重启 app 后 scope 不会恢复（无文件可读）。当前内存中的 allowed_patterns 不受影响，重启后清空。"
+  }))
+}
+
+#[command]
+pub fn clear_window_state<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+) -> Result<serde_json::Value, String> {
+  let app_config_dir = app
+    .path()
+    .app_config_dir()
+    .map_err(|e| e.to_string())?;
+  let state_file = app_config_dir.join(".window-state.json");
+  let file_existed = state_file.exists();
+  if file_existed {
+    std::fs::remove_file(&state_file).map_err(|e| e.to_string())?;
+  }
+  Ok(serde_json::json!({
+    "deleted": file_existed,
+    "state_file": state_file.to_string_lossy(),
+    "note": "文件已删除。重启 app 后窗口不会恢复到保存的位置（无文件可读），将出现在默认位置（居中）。"
+  }))
+}

@@ -89,3 +89,13 @@
   - PR 新增或修改的注释（`//`、`/* */`、`///`）不得包含中文
   - **检查方法**：`git diff <base-branch>` 中搜索中文字符 `[一-鿿]`，定位到注释行
   - 已有未修改的中文注释不要求（仅检查 PR 变更范围内新增/修改的注释）
+- [ ] H8: **仅 tauri 仓**：`doc/manual_tests.md` 统计表合计必须等于各模块行之和 → 🔵
+  - ⚠️ 此条仅适用于 `tauri/tauri` 仓库
+  - **检查方法**：PR 变更 manual_tests.md 后，核对 `合计` 行的 T0/T1/合计 = 所有模块行对应列之和（含本次新增模块行）。新增 N 个 T0 用例 → 合计 T0 必须同步 +N
+  - 常见错误：新增用例行但合计只 +部分（差一）。例：旧合计 62 T0，新增 3+2=5 T0，新合计应为 67 而非 66
+  - 同时核对末尾 `## 二十/二十一…` 章节编号是否随新增章节递增
+- [ ] H9: openspec `tasks.md` 必须反映最终采用方案 → 🔵
+  - 适用所有仓的 `openspec/changes/<change>/tasks.md`
+  - **检查方法**：若 PR 的 plan.md/proposal.md 标注某方案已回退/Rejected，tasks.md 中对应待办项必须同步标注「已回退」或删除，不得保留描述废弃方案的未勾选待办项
+  - 同时核对 tasks.md 描述的实现与实际代码/design.md 一致（如 tasks.md 说 no-op 但代码/design 用 recover_window，则为陈旧错误）
+  - PR 中代码注释也不得引用已删除的代码（如引用已回退的 `Event::Resumed` handler）

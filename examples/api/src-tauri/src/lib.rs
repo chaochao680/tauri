@@ -102,7 +102,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
         None,
       ))
-      .plugin(tauri_plugin_deep_link::init());
+      .plugin(tauri_plugin_deep_link::init())
+      .plugin(tauri_plugin_persisted_scope::init())
+      .plugin(tauri_plugin_window_state::Builder::default().build());
     if let Some(ref client) = sentry_client {
       builder = builder.plugin(tauri_plugin_sentry::init(client));
     }
@@ -123,6 +125,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     }));
   }
 
+  // deep-link: line 105 registers it for non-OHOS; OHOS registers it in its own
+  // block below. The two are in complementary cfg blocks (not(OHOS) vs OHOS) — NOT
+  // duplicates; only one runs per platform.
   #[cfg(target_env = "ohos")]
   {
     builder = builder.plugin(tauri_plugin_deep_link::init());
@@ -155,7 +160,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
         None,
       ))
-      .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+      .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+      .plugin(tauri_plugin_persisted_scope::init())
+      .plugin(tauri_plugin_window_state::Builder::default().build());
   }
 
   #[cfg(target_env = "ohos")]
@@ -637,6 +644,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(any(debug_assertions, feature = "devtools"))]
       cmd::devtools_close_only,
       cmd::set_bounds_test,
+      cmd::test_persisted_scope,
+      cmd::clear_persisted_scope,
+      cmd::clear_window_state,
       cmd::create_isolated_window,
       cmd::dummy_command,
       cmd::create_window_with_custom_ua,

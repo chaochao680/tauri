@@ -405,7 +405,17 @@
 | core | deep-link | getCurrent | getCurrent 冷启动 — 首启动链接拉起 | **T0** | app 未运行 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://coldstart"` 3. 等 app 冷启动后在 TestRunner UI manual 区点击 "getCurrent" 按钮 | UI 消息区显示 `[deep-link] getCurrent → ["taurideeplink://coldstart"]` | 冷启动 onCreate want.uri 经 lazy take 注入 |
 | core | deep-link | 外部唤起 | 外部链接唤起 app — 跨 app 跳转 | **T0** | app 已安装 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://foreground-test"` | app 唤起到前台（onCreate 冷启动或 onNewWant 运行中） | aa start -U 与浏览器点击 `<a href>` 走相同系统 Want 路由（module.json5 skills 匹配）；浏览器地址栏直接输入 scheme 会被当搜索词 |
 
-## 二十、用例统计
+## 二十、Window Operations（窗口操作）手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | window-ops | minimize | 窗口最小化与恢复 | **T0** | app 已运行，进入 Tests 视图 | 1. 在 TestRunner UI 底部 "Window Operations" 区找到 "Minimize then is_minimized" 按钮，点击 2. 窗口最小化到任务栏 3. 从任务栏点击 app 图标恢复窗口 4. 查看按钮下方显示的测试结果 | ① 窗口成功最小化到任务栏 ② 按钮下方显示 `isMinimized() = true` → PASS ③ 从任务栏恢复窗口后底部内容完整无缺失 | `win.minimize()` 调 `window.Window.minimize()`（API11）；`is_minimized()` 调 `getWindowStatus() === MINIMIZE`。恢复通过任务栏点击（系统行为），非 API 调用。 |
+| core | window-ops | window-state | 窗口位置记忆与恢复 | **T0** | app 已运行 | 1. 将窗口拖动到一个明显的位置（如左上角） 2. 在 TestRunner UI 底部 "Window Operations" 区找到 "Window-State Save" 按钮，点击（保存当前位置） 3. 重启 app：终端执行 `hdc shell aa force-stop com.tauri.api` 后重新启动 4. 观察重启后窗口的位置变化 5. 也可在重启后点击 "Window-State Restore" 按钮手动恢复 | ① 重启后窗口先出现在屏幕中心（OS 默认位置） ② 随后窗口自动闪现到步骤 1 保存的位置 ③ 注意：自动测试中的 "set_position moves window" 用例会调 `setPosition(100,100)` 移动主窗口，可能覆盖恢复结果——请等自动测试跑完后（约 30 秒）再观察窗口最终位置 | OHOS 适配要点：① restore_state 从文件读取保存的位置（绕过被 Moved 事件覆盖的内存缓存）② 在 `RunEvent::Ready` 时对主窗口触发 restore（OHOS 的 `on_window_ready` 不对主窗口触发）③ `moveWindowTo` 对主窗口（id=0）用 `windowStage.getMainWindowSync()` 获取窗口句柄（主窗口不在 WindowManager 的 Map 中）④ NAPI 调用用 Object 传参（napi-ohos 不支持 3 元素元组）⑤ `inner_size()` 返回 window_rect（外尺寸）使 save→resize 循环幂等 ⑥ OHOS 跳过 `RunEvent::Exit` 自动保存（用户通过 Save 按钮显式控制）|
+| core | window-ops | resize | 窗口缩放后底部内容完整 | **T0** | app 已运行，页面有可滚动内容 | 1. 用鼠标拖动窗口右边缘或下边缘向内缩小窗口 2. 松开鼠标后观察页面底部内容是否完整显示 3. 再拖动边缘向外放大窗口 4. 松开鼠标后再次观察 5. 重复缩放操作 3-5 次 | ① 缩小窗口后底部内容完整可见，无裁剪 ② 放大窗口后底部内容完整可见 ③ 多次缩放均正常 | 根因：commit `6fd8c0a` 把 Web 组件尺寸从 `.width("100%")`（自然布局）改为 `.width(data.style.width)`（set_bounds/BuilderNode.update），而 BuilderNode.update 不通知 ArkWeb 重新布局 → 缩放后底部被裁。修复：Web `.width/.height` 改回 `"100%"`，让 ArkUI 自然布局驱动 ArkWeb relayout。 |
+| core | persisted-scope | save | fs scope 保存到文件 | **T0** | app 已运行（建议先点 "Persisted-Scope Clear" 清掉旧 `.persisted-scope` 避免残留干扰） | 1. 在 TestRunner UI 底部 "Window Operations & Persisted-Scope Manual Tests" 区点击 "Persisted-Scope Test" 按钮 2. 查看按钮下方显示的结果 3.（可选）`hdc shell ls -l <结果中的 state_file 路径>` 核对文件落盘 | ① `allow_directory: ✅ 成功` ② `.persisted-scope 文件: ✅ 已生成 (N bytes)` ③ `路径:` 显示 state_file 完整路径 | 因 OHOS 不支持 DragDrop（tao OHOS 未实现 DragDrop 事件），通过自定义 `test_persisted_scope` command 直接调 `scope.allow_directory(test_path, true)` 触发 PathAllowed 事件 → persisted-scope 插件监听该事件并把 `allowed_patterns()` 写入 `.persisted-scope`（bincode 二进制）。注意：该 command 返回 `allow_ok / test_path / state_file / state_file_exists / state_file_size`，**不返回 allowed_patterns 数量**，故本步只验证文件生成。 |
+| core | persisted-scope | restore | 重启后 fs scope 自动恢复 | **T0** | 已执行 save 用例（`.persisted-scope` 文件已生成） | 1. 重启 app：`hdc shell aa force-stop com.tauri.api` 后重新启动 2. 重启后**先不要点 Test**（点 Test 会再次 `allow_directory` 同一路径，使 count 恒为 2，掩盖 restore 是否生效，见备注） 3. 直接点击 "Persisted-Scope Clear" 按钮 4. 查看按钮下方**结果框**（mono 字体 div）的 `remaining_patterns_count`（注意：消息区会被随后的 "Console log saved" 覆盖，看结果框或 hilog） | ① `文件删除: ✅ 已删除`（证明 `.persisted-scope` 跨重启留存）+ `remaining_patterns_count > 0`（典型 = 2：`test_path` + `test_path/**`，因 `allow_directory(recursive=true)` 一次加 2 个 pattern，`crates/tauri/src/scope/fs.rs:284-287`）→ ✅ restore 生效 ② `remaining_patterns_count = 0` → ❌ restore 失败（文件未读 / app_data_dir 在 setup 时不可用 / 反序列化失败） | persisted-scope 插件 setup 时读取 `.persisted-scope`（bincode 反序列化）并对每个 allowed_paths 调 `allow_path`→`scope.allow_directory` 恢复 fs scope。`allow_directory(path, true)` 一次加 2 个 pattern（`path` + `path/**`），fs scope allowed_patterns 是 **HashSet**（`crates/tauri/src/scope/fs.rs`）对同路径幂等去重——故重启后点 Test 仍是 2（不新增），这正是"必须不点 Test 直接 Clear"的原因：不点 Test 时 count>0 证明 restore、count=0 证明失败；点了 Test 则 count 恒=2 无法区分。`clear_persisted_scope` 是唯一返回 count 的入口（读 `scope.allowed_patterns().len()`），但会删 `.persisted-scope`，重复验证需先点 Test 重新保存。 |
+
+## 二十一、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -434,5 +444,7 @@
 | 窗口聚焦与热键缩放 | 1 | 1 | **2** |
 | Vibrancy（窗口模糊） | 3 | 2 | **5** |
 | Deep-Link（深度链接） | 3 | 0 | **3** |
-| **合计** | **62** | **57** | **119** |
+| Window Operations（窗口操作） | 3 | 0 | **3** |
+| Persisted Scope（fs scope 持久化） | 2 | 0 | **2** |
+| **合计** | **68** | **57** | **125** |
 
