@@ -139,7 +139,7 @@
     "http:allow-fetch-read-body",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://httpbin.org/*" }, { "url": "https://www.example.com/*" }, { "url": "https://jsonplaceholder.typicode.com/*" }, { "url": "http://localhost:3003/*" }]
+      "allow": [{ "url": "https://httpbin.org/*" }, { "url": "https://www.example.com/*" }, { "url": "https://jsonplaceholder.typicode.com/*" }, { "url": "http://localhost:3003/*" }, { "url": "http://localhost:3005/*" }, { "url": "http://127.0.0.1:3005/*" }]
     },
     "os:default",
     "os:allow-platform",
@@ -147,6 +147,7 @@
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-image",
+    "clipboard-manager:allow-read-image",
     "process:default",
     "process:allow-restart",
     "updater:default",
@@ -172,6 +173,21 @@
     "global-shortcut:allow-is-registered",
     "allow-test-persisted-scope",
     "allow-clear-persisted-scope",
-    "allow-clear-window-state"
+    "allow-clear-window-state",
+    "store:default",
+    "sql:default",
+    "sql:allow-execute",
+    "websocket:default",
+    "stronghold:default",
+    "stronghold:allow-remove-store-record",
+    "stronghold:allow-destroy",
+    "cli:default",
+    "upload:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "$APPCACHE/*" }]
+    },
+    "positioner:default"
   ]
 }

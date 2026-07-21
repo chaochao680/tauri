@@ -1846,6 +1846,136 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     } catch (e) {}
   }
 
+  // ─── Plugins Manual Tests (opener/store/stronghold/upload/localhost) ───
+  // Autotest covers in-memory CRUD; these cover side-effects autotest can't
+  // assert: opener system intents, cross-restart persistence, upload progress,
+  // and localhost CORS headers.
+  async function manualOpenerOpenPath() {
+    await wrapManual('opener.openPath', async () => {
+      const { openPath } = await import('@tauri-apps/plugin-opener');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const dir = await appCacheDir();
+      const filePath = await join(dir, `opener-${Date.now()}.txt`);
+      await writeFile(filePath, new TextEncoder().encode('opener manual test'));
+      await openPath(filePath);
+      manualResult = `openPath(${filePath}) called.\nCheck: system opens the file (text viewer/editor or file manager).\nFile left at: ${filePath}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOpenerReveal() {
+    await wrapManual('opener.revealItemInDir', async () => {
+      const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const dir = await appCacheDir();
+      const filePath = await join(dir, `opener-reveal-${Date.now()}.txt`);
+      await writeFile(filePath, new TextEncoder().encode('opener reveal test'));
+      await revealItemInDir(filePath);
+      manualResult = `revealItemInDir(${filePath}) called.\nCheck: file manager opens and highlights the file.\nFile left at: ${filePath}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOpenerOpenUrl() {
+    await wrapManual('opener.openUrl', async () => {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl('https://tauri.app');
+      manualResult = `openUrl('https://tauri.app') called.\nCheck: system browser opens the URL.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualStorePersist() {
+    await wrapManual('store.persist', async () => {
+      const { load } = await import('@tauri-apps/plugin-store');
+      const store = await load('manual-store.json');
+      const sentinel = `persisted-${Date.now()}`;
+      await store.set('manual-sentinel', { value: sentinel });
+      await store.save();
+      await store.close();
+      manualResult = `store.save() done. key='manual-sentinel' value='${sentinel}' → manual-store.json.\nNext: force-stop app and restart, then click "Store Verify (after restart)".`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualStoreVerify() {
+    await wrapManual('store.verify', async () => {
+      const { load } = await import('@tauri-apps/plugin-store');
+      const store = await load('manual-store.json');
+      const got = await store.get('manual-sentinel');
+      await store.close();
+      const ok = !!got && typeof got.value === 'string' && got.value.startsWith('persisted-');
+      manualResult = `store.get('manual-sentinel') → ${JSON.stringify(got)}\n${ok ? 'PASS: value persisted across restart.' : 'FAIL: value missing — persistence not working.'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualStrongholdPersist() {
+    await wrapManual('stronghold.persist', async () => {
+      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
+      const sh = await Stronghold.load('manual-stronghold.stronghold', 'manual-pw');
+      const client = await sh.createClient('c1');
+      const store = client.getStore();
+      const sentinel = `sh-${Date.now()}`;
+      await store.insert('manual-sentinel', Array.from(new TextEncoder().encode(sentinel)));
+      await sh.save();
+      await sh.unload();
+      manualResult = `stronghold.save() done. key='manual-sentinel' value='${sentinel}' → manual-stronghold.stronghold.\nNext: force-stop app and restart, then click "Stronghold Verify (after restart)".`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualStrongholdVerify() {
+    await wrapManual('stronghold.verify', async () => {
+      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
+      const sh = await Stronghold.load('manual-stronghold.stronghold', 'manual-pw');
+      // loadClient (not createClient) — reads the persisted client state back
+      // from the snapshot. createClient would create a fresh empty client and
+      // overwrite the loaded data, falsely failing the verify.
+      const client = await sh.loadClient('c1');
+      const got = await client.getStore().get('manual-sentinel');
+      await sh.unload();
+      const text = got ? new TextDecoder().decode(new Uint8Array(got)) : null;
+      const ok = !!text && text.startsWith('sh-');
+      manualResult = `stronghold get('manual-sentinel') → ${text}\n${ok ? 'PASS: snapshot persisted across restart.' : 'FAIL: value missing — snapshot did not persist/decrypt.'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualUploadProgress() {
+    await wrapManual('upload.progress', async () => {
+      const { upload } = await import('@tauri-apps/plugin-upload');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const dir = await appCacheDir();
+      const filePath = await join(dir, `upload-${Date.now()}.txt`);
+      await writeFile(filePath, new TextEncoder().encode('x'.repeat(64 * 1024)));
+      const events = [];
+      const resp = await upload('http://localhost:3003/up', filePath, (p) => {
+        events.push(`progress=${p.progress} total=${p.progressTotal}`);
+      });
+      const respStr = typeof resp === 'string' ? resp : String(resp);
+      // Truncate the (potentially large) echo body so the progress/PASS verdict
+      // stays visible — the localhost echo server returns the full payload.
+      const respPreview = respStr.length > 50
+        ? respStr.slice(0, 50) + `... (${respStr.length} bytes)`
+        : respStr;
+      const uploadOk = respStr.length > 0;
+      manualResult = `upload response: ${respPreview}\nprogress events: ${events.length}\n${events.slice(-5).join('\n')}\n${uploadOk ? 'PASS: upload succeeded (response received).' : 'FAIL: empty response.'}${events.length > 0 ? '' : ' (note: progress may not fire for fast small uploads over localhost)'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualLocalhostFetch() {
+    await wrapManual('localhost.fetch', async () => {
+      const resp = await fetch('http://127.0.0.1:3005/index.html');
+      const body = await resp.text();
+      const cors = resp.headers.get('access-control-allow-origin');
+      const ok = resp.status === 200 && body.length > 0;
+      manualResult = `fetch 127.0.0.1:3005/index.html → status=${resp.status} bodyLen=${body.length} ACAO=${cors}\n${ok ? 'PASS: localhost serve OK.' : 'FAIL.'}${cors ? '' : ' (warning: no Access-Control-Allow-Origin header)'}`;
+      onMessage(manualResult);
+    });
+  }
+
 </script>
 
 <div class="flex flex-col gap-2">
@@ -2146,6 +2276,20 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualWindowStateClear}>Window-State Clear</button>
         <button class="btn" onclick={manualPersistedScopeTest}>Persisted-Scope Test</button>
         <button class="btn" onclick={manualPersistedScopeClear}>Persisted-Scope Clear</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Plugins Manual Tests (opener/store/stronghold/upload/localhost)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualOpenerOpenPath}>Opener openPath (open file)</button>
+        <button class="btn" onclick={manualOpenerReveal}>Opener revealItemInDir</button>
+        <button class="btn" onclick={manualOpenerOpenUrl}>Opener openUrl (open browser)</button>
+        <button class="btn" onclick={manualStorePersist}>Store Persist (set+save)</button>
+        <button class="btn" onclick={manualStoreVerify}>Store Verify (after restart)</button>
+        <button class="btn" onclick={manualStrongholdPersist}>Stronghold Persist (save snapshot)</button>
+        <button class="btn" onclick={manualStrongholdVerify}>Stronghold Verify (after restart)</button>
+        <button class="btn" onclick={manualUploadProgress}>Upload (echo+progress)</button>
+        <button class="btn" onclick={manualLocalhostFetch}>Localhost fetch (CORS)</button>
       </div>
     </div>
     {#if manualResult}

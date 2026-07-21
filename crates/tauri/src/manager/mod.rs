@@ -472,12 +472,33 @@ impl<R: Runtime> AppManager<R> {
     (self.webview.invoke_handler)(invoke)
   }
 
-  pub fn extend_api(&self, plugin: &str, invoke: Invoke<R>) -> bool {
-    self
-      .plugins
-      .lock()
-      .expect("poisoned plugin store")
-      .extend_api(plugin, invoke)
+  pub fn extend_api(self: &Arc<Self>, plugin: &str, invoke: Invoke<R>) -> bool {
+    #[cfg(target_env = "ohos")]
+    {
+      // Always offload to the blocking pool so the main thread (event loop) is
+      // never blocked on the plugins lock. The command is still settled (plugin
+      // resolve/reject, or "plugin not found" via PluginStore::extend_api).
+      // Return true to claim the command and suppress the on_message fallback reject.
+      let this = self.clone();
+      let plugin_owned = plugin.to_owned();
+      crate::async_runtime::spawn_blocking(move || {
+        log::debug!("[extend_api] sb.enter plugin={}", plugin_owned);
+        let mut guard = this.plugins.lock().expect("poisoned plugin store");
+        log::debug!("[extend_api] sb.locked plugin={}", plugin_owned);
+        let result = guard.extend_api(&plugin_owned, invoke);
+        log::debug!("[extend_api] sb.exit plugin={}", plugin_owned);
+        result
+      });
+      true
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      self
+        .plugins
+        .lock()
+        .expect("poisoned plugin store")
+        .extend_api(plugin, invoke)
+    }
   }
 
   pub fn initialize_plugins(&self, app: &AppHandle<R>) -> crate::Result<()> {
