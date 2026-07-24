@@ -27,7 +27,6 @@
     "@tauri-apps/plugin-store": "file:../../../plugins-workspace/plugins/store",
     "@tauri-apps/plugin-sql": "file:../../../plugins-workspace/plugins/sql",
     "@tauri-apps/plugin-websocket": "file:../../../plugins-workspace/plugins/websocket",
-    "@tauri-apps/plugin-stronghold": "file:../../../plugins-workspace/plugins/stronghold",
     "@tauri-apps/plugin-upload": "file:../../../plugins-workspace/plugins/upload",
     "@tauri-apps/plugin-cli": "file:../../../plugins-workspace/plugins/cli",
     "@tauri-apps/plugin-opener": "file:../../../plugins-workspace/plugins/opener",

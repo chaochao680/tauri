@@ -439,18 +439,7 @@
 
 ---
 
-## 二十三、Stronghold（密钥库）手动用例
-
-> autotest 覆盖 load+insert+get+remove+save+reload（进程内），但仅在**同一进程内** reload。跨进程重启后快照能否解密加载未验。测试入口：TestRunner "Plugins Manual Tests" 区。
-
-| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
-|---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | stronghold | 持久化-写入 | Stronghold Persist — 保存快照 | **T0** | app 已运行 | 1. 点击 "Stronghold Persist (save snapshot)" 按钮 2. 查看 manualResult | ① manualResult 输出 `stronghold.save() done. key='manual-sentinel' value='sh-<ts>' → manual-stronghold.stronghold.` ② 无 `NCSizeNotAllowed` / `Permission denied` / timeout 错误 | 路径 `manual-stronghold.stronghold` 经 `initialize` 的 OHOS path-resolve（`lib.rs:257`，`BaseDirectory::AppData`）落盘；argon2 32B key 满足 `box_key_len=32`；scrypt work factor 已降到 10（`try_set_encrypt_work_factor`），save 应 <1s |
-| core | stronghold | 持久化-恢复 | Stronghold Verify — 重启后快照可解密 | **T0** | 已执行 Persist 用例 | 1. force-stop app：`hdc shell aa force-stop com.tauri.api` 2. 重启 app，进入 TestRunner "Plugins Manual Tests" 区 3. 点击 "Stronghold Verify (after restart)" 按钮 4. 查看 manualResult | ① manualResult 输出 `stronghold get('manual-sentinel') → sh-<ts>` ② 输出 `PASS: snapshot persisted across restart.` ③ 若 `FAIL: value missing` → 快照未持久化或解密失败 | 验证快照文件跨进程留存 + reload 时 `load_snapshot` 用同 salt 同 argon2 派生同 key 成功解密。salt 文件 `/data/storage/el2/base/cache/stronghold-salt.key` 跨重启持久，保证同 key |
-
----
-
-## 二十四、Upload（文件上传）手动用例
+## 二十三、Upload（文件上传）手动用例
 
 > autotest 调 upload 并注册 progress 回调，但**只断言响应体非空，未断言 progress 回调触发**。本用例验证 progress 事件确实触发。测试入口：TestRunner "Plugins Manual Tests" 区。依赖 app 内 3003 端口 echo server（autotest upload 已验证可用）。
 
@@ -460,7 +449,7 @@
 
 ---
 
-## 二十五、Localhost（本地资源服务）手动用例
+## 二十四、Localhost（本地资源服务）手动用例
 
 > autotest fetch `127.0.0.1:3005/index.html` 断言 200 + body，但**未直接断言 CORS 头**。本用例显式检查 `Access-Control-Allow-Origin`。测试入口：TestRunner "Plugins Manual Tests" 区。
 
@@ -470,7 +459,7 @@
 
 ---
 
-## 二十六、用例统计
+## 二十五、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -503,8 +492,7 @@
 | Persisted Scope（fs scope 持久化） | 2 | 0 | **2** |
 | Opener（打开文件/URL） | 3 | 0 | **3** |
 | Store（持久化存储） | 2 | 1 | **3** |
-| Stronghold（密钥库） | 2 | 0 | **2** |
 | Upload（文件上传） | 1 | 0 | **1** |
 | Localhost（本地资源服务） | 1 | 0 | **1** |
-| **合计** | **77** | **58** | **135** |
+| **合计** | **75** | **58** | **133** |
 

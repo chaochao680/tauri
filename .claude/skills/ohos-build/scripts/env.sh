@@ -84,7 +84,3 @@ export OHOS_DEVICE_TYPE="${OHOS_DEVICE_TYPE:-desktop}"
 export OHOS_NDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH\\sdk\\default\\openharmony"
 # hvigorw expects DEVECO_SDK_HOME
 export DEVECO_SDK_HOME="$DEV_ECO_STUDIO_INSTALL_PATH"
-
-# Prebuilt libsodium for tauri-plugin-stronghold OHOS build.
-# PROJECT_ROOT points at the tauri repo; plugins-workspace is its sibling.
-export SODIUM_LIB_DIR="$PROJECT_ROOT/../plugins-workspace/plugins/stronghold/native/ohos/aarch64-linux-ohos/lib"

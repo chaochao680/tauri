@@ -58,10 +58,6 @@ tauri-plugin-deep-link = { path = "../../../../plugins-workspace/plugins/deep-li
 tauri-plugin-store = { path = "../../../../plugins-workspace/plugins/store" }
 tauri-plugin-sql = { path = "../../../../plugins-workspace/plugins/sql", features = ["sqlite"] }
 tauri-plugin-websocket = { path = "../../../../plugins-workspace/plugins/websocket" }
-tauri-plugin-stronghold = { path = "../../../../plugins-workspace/plugins/stronghold" }
-# Direct dep so the test app can lower stronghold's snapshot scrypt work factor
-# (see lib.rs OHOS setup). OHOS-only.
-iota_stronghold = "2"
 tauri-plugin-cli = { path = "../../../../plugins-workspace/plugins/cli" }
 tauri-plugin-upload = { path = "../../../../plugins-workspace/plugins/upload" }
 tauri-plugin-localhost = { path = "../../../../plugins-workspace/plugins/localhost" }

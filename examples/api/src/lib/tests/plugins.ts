@@ -1068,38 +1068,6 @@ export const pluginTests: TestCase[] = [
     },
   },
 
-  // @tauri-apps/plugin-stronghold
-  {
-    name: '@tauri-apps/plugin-stronghold.load+insert+get+remove+reload',
-    category: 'auto',
-    async fn() {
-      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
-      try {
-        const path = `${uniq('stronghold')}.stronghold`;
-        const sh = await Stronghold.load(path, 'test-password');
-        const client = await sh.createClient('c1');
-        const store = client.getStore();
-        await store.insert('k', [1, 2, 3]);
-        const got = await store.get('k');
-        assert(got !== null, 'get should return bytes after insert');
-        assert(Array.from(got as any).join(',') === '1,2,3', `get bytes mismatch: ${got}`);
-        const removed = await store.remove('k');
-        assert(removed !== null, 'remove should return old value');
-        assert((await store.get('k')) === null, 'get should be null after remove');
-        await sh.save();
-        await sh.unload();
-        // reload same path/password → removed key stays gone
-        const sh2 = await Stronghold.load(path, 'test-password');
-        const client2 = await sh2.createClient('c1');
-        assert((await client2.getStore().get('k')) === null, 'removed key should stay gone after reload');
-        await sh2.unload();
-      } catch (e) {
-        if (isMissing(e)) skip(`stronghold plugin not available: ${e}`);
-        throw e;
-      }
-    },
-  },
-
   // @tauri-apps/plugin-upload (uses 3003 http echo as upload target)
   {
     name: '@tauri-apps/plugin-upload.upload (echo+progress)',

@@ -166,19 +166,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       .plugin(tauri_plugin_store::Builder::new().build())
       .plugin(tauri_plugin_sql::Builder::new().build())
       .plugin(tauri_plugin_websocket::init())
-      // Stronghold's KeyProvider requires a key of exactly box_key_len() = 32 bytes
-      // (XChaCha20Poly1305). The previous closure returned the raw password bytes
-      // (e.g. 13 bytes for "test-password"), so NCKey::load returned None ->
-      // MemoryError::NCSizeNotAllowed ("illegal non-contiguous size"). Argon2's
-      // default hash_length is 32, which satisfies the requirement. Salt is stored
-      // in the same writable OHOS cache dir used for panic.log; it persists across
-      // the test's save+reload so the same key is derived both times.
-      .plugin(
-        tauri_plugin_stronghold::Builder::with_argon2(std::path::Path::new(
-          "/data/storage/el2/base/cache/stronghold-salt.key",
-        ))
-        .build(),
-      )
       .plugin(tauri_plugin_cli::init())
       .plugin(tauri_plugin_upload::init())
       .plugin(tauri_plugin_localhost::Builder::new(3005).build())
@@ -195,18 +182,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
   {
     ohos_log::init();
     log::info!("OHOS log initialized via hilog + tauri_plugin_log(skip_logger)");
-
-    // Stronghold snapshot encryption uses scrypt (work factor 19 by default,
-    // ~4s per encrypt/decrypt on this device). The examples/api stronghold test
-    // performs several snapshot encrypt/decrypt round-trips and would exceed the
-    // 5s per-test timeout. `try_set_encrypt_work_factor` is exposed by
-    // stronghold_engine expressly "so that encryption/decryption time can be
-    // controllably low during testing" — lower it for this test app. The work
-    // factor is stored in the snapshot header, so decrypt honors the lowered
-    // value too. NOT for production.
-    if let Err(e) = iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(10) {
-      log::warn!("[stronghold] failed to lower snapshot work factor: {:?}", e);
-    }
   };
 
   builder = builder

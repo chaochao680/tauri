@@ -1846,7 +1846,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     } catch (e) {}
   }
 
-  // ─── Plugins Manual Tests (opener/store/stronghold/upload/localhost) ───
+  // ─── Plugins Manual Tests (opener/store/upload/localhost) ───
   // Autotest covers in-memory CRUD; these cover side-effects autotest can't
   // assert: opener system intents, cross-restart persistence, upload progress,
   // and localhost CORS headers.
@@ -1906,38 +1906,6 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       await store.close();
       const ok = !!got && typeof got.value === 'string' && got.value.startsWith('persisted-');
       manualResult = `store.get('manual-sentinel') → ${JSON.stringify(got)}\n${ok ? 'PASS: value persisted across restart.' : 'FAIL: value missing — persistence not working.'}`;
-      onMessage(manualResult);
-    });
-  }
-
-  async function manualStrongholdPersist() {
-    await wrapManual('stronghold.persist', async () => {
-      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
-      const sh = await Stronghold.load('manual-stronghold.stronghold', 'manual-pw');
-      const client = await sh.createClient('c1');
-      const store = client.getStore();
-      const sentinel = `sh-${Date.now()}`;
-      await store.insert('manual-sentinel', Array.from(new TextEncoder().encode(sentinel)));
-      await sh.save();
-      await sh.unload();
-      manualResult = `stronghold.save() done. key='manual-sentinel' value='${sentinel}' → manual-stronghold.stronghold.\nNext: force-stop app and restart, then click "Stronghold Verify (after restart)".`;
-      onMessage(manualResult);
-    });
-  }
-
-  async function manualStrongholdVerify() {
-    await wrapManual('stronghold.verify', async () => {
-      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
-      const sh = await Stronghold.load('manual-stronghold.stronghold', 'manual-pw');
-      // loadClient (not createClient) — reads the persisted client state back
-      // from the snapshot. createClient would create a fresh empty client and
-      // overwrite the loaded data, falsely failing the verify.
-      const client = await sh.loadClient('c1');
-      const got = await client.getStore().get('manual-sentinel');
-      await sh.unload();
-      const text = got ? new TextDecoder().decode(new Uint8Array(got)) : null;
-      const ok = !!text && text.startsWith('sh-');
-      manualResult = `stronghold get('manual-sentinel') → ${text}\n${ok ? 'PASS: snapshot persisted across restart.' : 'FAIL: value missing — snapshot did not persist/decrypt.'}`;
       onMessage(manualResult);
     });
   }
@@ -2279,15 +2247,13 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
-      <h5 class="my-1 text-xs text-gray-500">Plugins Manual Tests (opener/store/stronghold/upload/localhost)</h5>
+      <h5 class="my-1 text-xs text-gray-500">Plugins Manual Tests (opener/store/upload/localhost)</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualOpenerOpenPath}>Opener openPath (open file)</button>
         <button class="btn" onclick={manualOpenerReveal}>Opener revealItemInDir</button>
         <button class="btn" onclick={manualOpenerOpenUrl}>Opener openUrl (open browser)</button>
         <button class="btn" onclick={manualStorePersist}>Store Persist (set+save)</button>
         <button class="btn" onclick={manualStoreVerify}>Store Verify (after restart)</button>
-        <button class="btn" onclick={manualStrongholdPersist}>Stronghold Persist (save snapshot)</button>
-        <button class="btn" onclick={manualStrongholdVerify}>Stronghold Verify (after restart)</button>
         <button class="btn" onclick={manualUploadProgress}>Upload (echo+progress)</button>
         <button class="btn" onclick={manualLocalhostFetch}>Localhost fetch (CORS)</button>
       </div>

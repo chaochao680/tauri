@@ -77,7 +77,6 @@ wry = { path = "../wry" }
 #tao = { git = "https://github.com/richerfu/tao", branch = "feat-ohos-webview" }
 tao = { path = "../tao" }
 muda = { path = "../muda" }
-stronghold-runtime = { path = "../plugins-workspace/plugins/stronghold/vendor/stronghold-runtime" }
 tray-icon = { path = "../tray-icon" }
 openharmony-ability = { path = "../openharmony-ability/crates/ability" }
 openharmony-ability-derive = { path = "../openharmony-ability/crates/derive" }
