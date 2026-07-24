@@ -465,12 +465,6 @@ fn parse_invoke_request<R: Runtime>(
     .unwrap_or(Ok(mime::APPLICATION_OCTET_STREAM))
     .map_err(|_| "unknown content type")?;
 
-  #[cfg(target_env = "ohos")]
-  log::debug!(
-    "[D3] parse_invoke cmd={} has_payload={} body_len={} content_type={}",
-    cmd, has_payload, body.len(), content_type
-  );
-
   #[cfg(feature = "isolation")]
   if let crate::Pattern::Isolation { crypto_keys, .. } = &*manager.pattern {
     // if the platform does not support request body, we ignore it
