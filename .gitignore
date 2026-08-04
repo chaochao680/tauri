@@ -68,3 +68,6 @@ oh_modules
 .cxx
 ohos/entry/build
 ohos/entry/libs
+.env.local
+test-report.md
+examples/huawei-account/dist/

@@ -31,6 +31,7 @@
 - [ ] C2: TSFN 使用 `callee_handled::<false>()`（非 `true`）
 - [ ] C3: TSFN 数据通过泛型参数携带，非全局 Mutex
 - [ ] C4: `FnArgs<>` 包装 tuple 参数
+- [ ] C5: NAPI 重入上下文（经 Rust `func.call` 调用的 ArkTS 函数，第一个 `await` 之前的同步段）的 `catch` 块 SHALL 使用 `safeLogError` 而非 `hilog.error` → 🔵。`hilog.error` 在 NAPI 重入上下文可能抛 `Argc mismatch`（ohos-constraints 2.3），若原始错误与 hilog 错误同时发生，hilog 错误会掩盖原始失败，用户看到 `Argc mismatch` 而非真实错误。**检查方法**：grep `getUIAbilityContext\|hilog.error` 在 ArkHelper.ets 等桥接文件，确认所有被 NAPI 调用链触及的同步 catch 都用 `safeLogError`（本次检视发现共享 `getUIAbilityContext` 漏了对齐，account 操作已正确）。
 
 ## D — 线程模型
 
