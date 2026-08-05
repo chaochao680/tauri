@@ -472,6 +472,24 @@ impl<R: Runtime> AppManager<R> {
     (self.webview.invoke_handler)(invoke)
   }
 
+  #[cfg(target_env = "ohos")]
+  pub fn extend_api(self: &Arc<Self>, plugin: &str, invoke: Invoke<R>) -> bool {
+    // Always offload to the blocking pool so the main thread (event loop) is
+    // never blocked on the plugins lock. The command is still settled (plugin
+    // resolve/reject, or "plugin not found" via PluginStore::extend_api).
+    // Return true to claim the command and suppress the on_message fallback reject.
+    let this = self.clone();
+    let plugin_owned = plugin.to_owned();
+    crate::async_runtime::spawn_blocking(move || {
+      this
+        .plugins
+        .lock()
+        .expect("poisoned plugin store")
+        .extend_api(&plugin_owned, invoke)
+    });
+    true
+  }
+  #[cfg(not(target_env = "ohos"))]
   pub fn extend_api(&self, plugin: &str, invoke: Invoke<R>) -> bool {
     self
       .plugins

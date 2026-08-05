@@ -415,7 +415,51 @@
 | core | persisted-scope | save | fs scope 保存到文件 | **T0** | app 已运行（建议先点 "Persisted-Scope Clear" 清掉旧 `.persisted-scope` 避免残留干扰） | 1. 在 TestRunner UI 底部 "Window Operations & Persisted-Scope Manual Tests" 区点击 "Persisted-Scope Test" 按钮 2. 查看按钮下方显示的结果 3.（可选）`hdc shell ls -l <结果中的 state_file 路径>` 核对文件落盘 | ① `allow_directory: ✅ 成功` ② `.persisted-scope 文件: ✅ 已生成 (N bytes)` ③ `路径:` 显示 state_file 完整路径 | 因 OHOS 不支持 DragDrop（tao OHOS 未实现 DragDrop 事件），通过自定义 `test_persisted_scope` command 直接调 `scope.allow_directory(test_path, true)` 触发 PathAllowed 事件 → persisted-scope 插件监听该事件并把 `allowed_patterns()` 写入 `.persisted-scope`（bincode 二进制）。注意：该 command 返回 `allow_ok / test_path / state_file / state_file_exists / state_file_size`，**不返回 allowed_patterns 数量**，故本步只验证文件生成。 |
 | core | persisted-scope | restore | 重启后 fs scope 自动恢复 | **T0** | 已执行 save 用例（`.persisted-scope` 文件已生成） | 1. 重启 app：`hdc shell aa force-stop com.tauri.api` 后重新启动 2. 重启后**先不要点 Test**（点 Test 会再次 `allow_directory` 同一路径，使 count 恒为 2，掩盖 restore 是否生效，见备注） 3. 直接点击 "Persisted-Scope Clear" 按钮 4. 查看按钮下方**结果框**（mono 字体 div）的 `remaining_patterns_count`（注意：消息区会被随后的 "Console log saved" 覆盖，看结果框或 hilog） | ① `文件删除: ✅ 已删除`（证明 `.persisted-scope` 跨重启留存）+ `remaining_patterns_count > 0`（典型 = 2：`test_path` + `test_path/**`，因 `allow_directory(recursive=true)` 一次加 2 个 pattern，`crates/tauri/src/scope/fs.rs:284-287`）→ ✅ restore 生效 ② `remaining_patterns_count = 0` → ❌ restore 失败（文件未读 / app_data_dir 在 setup 时不可用 / 反序列化失败） | persisted-scope 插件 setup 时读取 `.persisted-scope`（bincode 反序列化）并对每个 allowed_paths 调 `allow_path`→`scope.allow_directory` 恢复 fs scope。`allow_directory(path, true)` 一次加 2 个 pattern（`path` + `path/**`），fs scope allowed_patterns 是 **HashSet**（`crates/tauri/src/scope/fs.rs`）对同路径幂等去重——故重启后点 Test 仍是 2（不新增），这正是"必须不点 Test 直接 Clear"的原因：不点 Test 时 count>0 证明 restore、count=0 证明失败；点了 Test 则 count 恒=2 无法区分。`clear_persisted_scope` 是唯一返回 count 的入口（读 `scope.allowed_patterns().len()`），但会删 `.persisted-scope`，重复验证需先点 Test 重新保存。 |
 
-## 二十一、用例统计
+## 二十一、Opener（打开文件/URL）手动用例
+
+> autotest 已移除（原 `category:'manual'` 被运行器一律 skip，零覆盖）。opener 的 OHOS 实现走 `openharmony_ability::open_with_system` / `reveal_in_dir`（系统意图），行为依赖系统，必须人眼验证。测试入口：TestRunner 底部 "Plugins Manual Tests" 区按钮。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | opener | openPath | Opener openPath — 打开文件 | **T0** | app 已运行，进入 TestRunner → "Plugins Manual Tests" 区 | 1. 点击 "Opener openPath (open file)" 按钮 2. 观察系统反应 3. 查看按钮下方 manualResult 输出 | ① manualResult 输出 `openPath(<appCacheDir>/opener-<ts>.txt) called.` ② 系统弹出默认文本查看器/编辑器打开该文件（或文件管理器） ③ 无 `OpenharmonyAbility` 错误 | OHOS 实现：`commands.rs:84` `open_path` → `openharmony_ability::open_with_system(file_uri)`。文件写入 appCacheDir。`open with` 参数在 OHOS 被忽略 |
+| core | opener | revealItemInDir | Opener revealItemInDir — 在文件管理器中定位 | **T0** | app 已运行 | 1. 点击 "Opener revealItemInDir" 按钮 2. 观察系统反应 3. 查看 manualResult | ① manualResult 输出 `revealItemInDir(<path>) called.` ② 系统文件管理器打开并定位/高亮该文件 ③ 无错误 | OHOS 实现：`commands.rs:103` `reveal_item_in_dir` → 取 parent 目录 → `openharmony_ability::reveal_in_dir(parent_uri)` |
+| core | opener | openUrl | Opener openUrl — 打开 URL | **T0** | app 已运行；设备已联网 | 1. 点击 "Opener openUrl (open browser)" 按钮 2. 观察系统反应 3. 查看 manualResult | ① manualResult 输出 `openUrl('https://tauri.app') called.` ② 系统浏览器打开 https://tauri.app ③ 无错误 | OHOS 实现：`commands.rs:42` `open_url` → `openharmony_ability::open_with_system(url)`。**autotest 从未覆盖 openUrl**，仅手动验证 |
+
+---
+
+## 二十二、Store（持久化存储）手动用例
+
+> autotest 仅覆盖内存 CRUD（set/get/has/keys/entries/delete/close），**刻意不碰 Exit/Drop 路径**。store timeout 修复（OHOS Drop-skip `store.rs:644`、Exit `save_or_skip` `store.rs:555`/`lib.rs:454`）是 defense-in-depth，autotest 不覆盖；磁盘持久化（set→退出→重开→数据在）也需手动验证。测试入口：TestRunner "Plugins Manual Tests" 区。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | store | 持久化-写入 | Store Persist — set+save 落盘 | **T0** | app 已运行 | 1. 点击 "Store Persist (set+save)" 按钮 2. 查看 manualResult | ① manualResult 输出 `store.save() done. key='manual-sentinel' value='persisted-<ts>' → manual-store.json.` ② 无错误 | 路径 `manual-store.json` 经 `resolve_store_path`（`store.rs:30`，`BaseDirectory::AppData`）解析到 AppData 目录落盘。autotest 不调 `save()`，本用例补此路径 |
+| core | store | 持久化-恢复 | Store Verify — 重启后数据留存 | **T0** | 已执行 Persist 用例 | 1. force-stop app：`hdc shell aa force-stop com.tauri.api` 2. 重新启动 app，进入 TestRunner "Plugins Manual Tests" 区 3. 点击 "Store Verify (after restart)" 按钮 4. 查看 manualResult | ① manualResult 输出 `store.get('manual-sentinel') → {"value":"persisted-<ts>"}` ② 输出 `PASS: value persisted across restart.` ③ 若输出 `FAIL: value missing` → 持久化失败 | 验证 `manual-store.json` 跨进程重启留存 + 反序列化恢复。force-stop 模拟进程退出后重启 |
+| core | store | Exit 不阻塞 | Store Exit — 退出无 appfreeze | **T1** | app 已运行，已 load 过 store（如执行过 Persist 用例） | 1. 正常关闭 app 主窗口（触发 `RunEvent::Exit`）2. 观察窗口是否立即关闭、无卡顿/超时 3. 重新启动 app 确认正常 | ① 窗口立即关闭，无 5s 卡顿/ANR ② 重启正常 ③ hilog 无 `store: StoreInner locked on exit, skipping save` 之外的异常 | 验证 OHOS Drop-skip（`store.rs:644` OHOS 下 `Drop` 完全跳过 auto-save）+ Exit `save_or_skip` 降级（`store.rs:555`，mutex 争用时 try_lock 跳过）。这是 store timeout 三处修复的核心，autotest 无法触发 Exit/Drop |
+
+---
+
+## 二十三、Upload（文件上传）手动用例
+
+> autotest 调 upload 并注册 progress 回调，但**只断言响应体非空，未断言 progress 回调触发**。本用例验证 progress 事件确实触发。测试入口：TestRunner "Plugins Manual Tests" 区。依赖 app 内 3003 端口 echo server（autotest upload 已验证可用）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | upload | progress 回调 | Upload — echo + progress 触发 | **T0** | app 已运行；3003 echo server 已起（autotest upload 通过即满足） | 1. 点击 "Upload (echo+progress)" 按钮 2. 查看 manualResult | ① manualResult 输出 `upload response: <非空>` ② 输出 `progress events: N`（N ≥ 1）③ 列出最近 5 条 progress 事件 ④ 输出 `PASS: progress callback fired.` ⑤ 若 `FAIL: no progress events` → progress 回调未触发 | 上传 64KB 文件到 `http://localhost:3003/up`，progress 回调收 `ProgressPayload{progress, progressTotal}`。autotest 仅 `Math.max(lastProgress, p.progress)` 抓了未断言，本用例补断言 |
+
+---
+
+## 二十四、Localhost（本地资源服务）手动用例
+
+> autotest fetch `127.0.0.1:3005/index.html` 断言 200 + body，但**未直接断言 CORS 头**。本用例显式检查 `Access-Control-Allow-Origin`。测试入口：TestRunner "Plugins Manual Tests" 区。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| core | localhost | serve+CORS | Localhost fetch — 200 + CORS 头 | **T0** | app 已运行；localhost 插件已在 3005 起服务 | 1. 点击 "Localhost fetch (CORS)" 按钮 2. 查看 manualResult | ① manualResult 输出 `fetch 127.0.0.1:3005/index.html → status=200 bodyLen=<N> ACAO=*` ② 输出 `PASS: localhost serve OK.` ③ ACAO 应为 `*`（OHOS CORS 兜底，`localhost/src/lib.rs:151-163`）④ 若 `warning: no Access-Control-Allow-Origin header` → CORS 头缺失 | OHOS 绑 `127.0.0.1`（`lib.rs:110`，非 `localhost`）。autotest 跨源 fetch 成功已隐式验证 CORS，本用例显式断言 ACAO 头 |
+
+---
+
+## 二十五、用例统计
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -446,5 +490,9 @@
 | Deep-Link（深度链接） | 3 | 0 | **3** |
 | Window Operations（窗口操作） | 3 | 0 | **3** |
 | Persisted Scope（fs scope 持久化） | 2 | 0 | **2** |
-| **合计** | **68** | **57** | **125** |
+| Opener（打开文件/URL） | 3 | 0 | **3** |
+| Store（持久化存储） | 2 | 1 | **3** |
+| Upload（文件上传） | 1 | 0 | **1** |
+| Localhost（本地资源服务） | 1 | 0 | **1** |
+| **合计** | **75** | **58** | **133** |
 

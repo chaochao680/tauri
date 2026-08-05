@@ -43,6 +43,10 @@ url = "2"
 [target.'cfg(not(target_env = "ohos"))'.dependencies]
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
 
+[target.'cfg(desktop)'.dependencies]
+# tungstenite is only used by the desktop-only ws echo server (lib.rs, cfg(desktop))
+tungstenite = "0.24"
+
 [target.'cfg(target_env = "ohos")'.dependencies]
 napi-ohos = { version = "1.1" }
 napi-derive-ohos = { version = "1.1" }
@@ -51,6 +55,14 @@ tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
 tauri-plugin-single-instance = { path = "../../../../plugins-workspace/plugins/single-instance" }
 tauri-plugin-global-shortcut = { path = "../../../../plugins-workspace/plugins/global-shortcut" }
 tauri-plugin-deep-link = { path = "../../../../plugins-workspace/plugins/deep-link" }
+tauri-plugin-store = { path = "../../../../plugins-workspace/plugins/store" }
+tauri-plugin-sql = { path = "../../../../plugins-workspace/plugins/sql", features = ["sqlite"] }
+tauri-plugin-websocket = { path = "../../../../plugins-workspace/plugins/websocket" }
+tauri-plugin-cli = { path = "../../../../plugins-workspace/plugins/cli" }
+tauri-plugin-upload = { path = "../../../../plugins-workspace/plugins/upload" }
+tauri-plugin-localhost = { path = "../../../../plugins-workspace/plugins/localhost" }
+tauri-plugin-opener = { path = "../../../../plugins-workspace/plugins/opener" }
+tauri-plugin-positioner = { path = "../../../../plugins-workspace/plugins/positioner" }
 
 [dependencies.tauri]
 path = "../../../crates/tauri"

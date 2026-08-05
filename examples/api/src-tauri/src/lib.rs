@@ -162,7 +162,15 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       ))
       .plugin(tauri_plugin_global_shortcut::Builder::new().build())
       .plugin(tauri_plugin_persisted_scope::init())
-      .plugin(tauri_plugin_window_state::Builder::default().build());
+      .plugin(tauri_plugin_window_state::Builder::default().build())
+      .plugin(tauri_plugin_store::Builder::new().build())
+      .plugin(tauri_plugin_sql::Builder::new().build())
+      .plugin(tauri_plugin_websocket::init())
+      .plugin(tauri_plugin_cli::init())
+      .plugin(tauri_plugin_upload::init())
+      .plugin(tauri_plugin_localhost::Builder::new(3005).build())
+      .plugin(tauri_plugin_opener::init())
+      .plugin(tauri_plugin_positioner::init());
   }
 
   #[cfg(target_env = "ohos")]
@@ -581,6 +589,44 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
               None,
             );
             let _ = request.respond(response);
+          }
+        }
+      });
+
+      // WebSocket echo fixture for plugin-websocket tests (port 3004).
+      // Echoes Text/Binary frames back to the sender.
+      #[cfg(desktop)]
+      std::thread::spawn(|| {
+        let listener = match std::net::TcpListener::bind("localhost:3004") {
+          Ok(l) => l,
+          Err(e) => {
+            log::error!("Failed to bind ws echo server on port 3004: {e}");
+            return;
+          }
+        };
+        for stream in listener.incoming() {
+          if let Ok(stream) = stream {
+            std::thread::spawn(move || {
+              let mut ws_stream = match tungstenite::accept(stream) {
+                Ok(ws) => ws,
+                Err(e) => {
+                  log::error!("ws echo handshake failed: {e}");
+                  return;
+                }
+              };
+              while let Ok(msg) = ws_stream.read() {
+                use tungstenite::Message;
+                match msg {
+                  Message::Text(_) | Message::Binary(_) => {
+                    if ws_stream.send(msg).is_err() {
+                      break;
+                    }
+                  }
+                  Message::Close(_) => break,
+                  _ => {}
+                }
+              }
+            });
           }
         }
       });

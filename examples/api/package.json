@@ -23,7 +23,15 @@
     "@tauri-apps/plugin-os": "file:../../../plugins-workspace/plugins/os",
     "@tauri-apps/plugin-process": "file:../../../plugins-workspace/plugins/process",
     "@tauri-apps/plugin-shell": "file:../../../plugins-workspace/plugins/shell",
-    "@tauri-apps/plugin-updater": "file:../../../plugins-workspace/plugins/updater"
+    "@tauri-apps/plugin-updater": "file:../../../plugins-workspace/plugins/updater",
+    "@tauri-apps/plugin-store": "file:../../../plugins-workspace/plugins/store",
+    "@tauri-apps/plugin-sql": "file:../../../plugins-workspace/plugins/sql",
+    "@tauri-apps/plugin-websocket": "file:../../../plugins-workspace/plugins/websocket",
+    "@tauri-apps/plugin-upload": "file:../../../plugins-workspace/plugins/upload",
+    "@tauri-apps/plugin-cli": "file:../../../plugins-workspace/plugins/cli",
+    "@tauri-apps/plugin-opener": "file:../../../plugins-workspace/plugins/opener",
+    "@tauri-apps/plugin-positioner": "file:../../../plugins-workspace/plugins/positioner",
+    "@tauri-apps/plugin-window-state": "file:../../../plugins-workspace/plugins/window-state"
   },
   "devDependencies": {
     "@iconify-json/codicon": "^1.2.49",

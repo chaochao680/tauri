@@ -27,6 +27,19 @@ export interface TestReport {
   results: TestResult[];
 }
 
+/**
+ * Throw to mark a test as skipped at runtime — e.g. a command is not
+ * implemented on this platform, a permission is missing, or an optional
+ * plugin is not registered. runTests recognises the `skip:` prefix and
+ * records status='skip' (with the reason) instead of 'fail'.
+ *
+ * This is the honest alternative to silently catching an error and
+ * returning (which would falsely report 'pass').
+ */
+export function skip(reason: string): never {
+  throw new Error(`skip: ${reason}`);
+}
+
 const TEST_TIMEOUT_MS = 5000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -96,12 +109,14 @@ export async function runTests(
         duration: Math.round(performance.now() - start),
       };
     } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      const isSkip = typeof msg === 'string' && msg.startsWith('skip:');
       result = {
         name: test.name,
         category: test.category,
-        status: 'fail',
+        status: isSkip ? 'skip' : 'fail',
         duration: Math.round(performance.now() - start),
-        error: e?.message || String(e),
+        error: isSkip ? msg.slice('skip:'.length).trim() : msg,
       };
     }
 
