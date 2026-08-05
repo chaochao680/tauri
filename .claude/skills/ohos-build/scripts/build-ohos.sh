@@ -92,7 +92,7 @@ bash "$SCRIPT_DIR/../../acl-check/scripts/clean-stale-acl.sh" "$SRC_TAURI"
 echo ""
 echo ">>> Step 4: Compiling Rust (aarch64-unknown-linux-ohos release, device_type=$OHOS_DEVICE_TYPE)..."
 rm -f "$SO_FILE"
-(cd "$SRC_TAURI" && cargo build --target aarch64-unknown-linux-ohos --release --features prod)
+(cd "$SRC_TAURI" && OHOS_DEVICE_TYPE="$OHOS_DEVICE_TYPE" cargo build --target aarch64-unknown-linux-ohos --release --features prod)
 
 if [ ! -f "$SO_FILE" ]; then
     echo "ERROR: Rust compilation failed - .so not found"
