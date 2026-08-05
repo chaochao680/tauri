@@ -39,13 +39,14 @@ sentry = { version = "0.42", default-features = false, features = ["reqwest", "r
 tauri-plugin-sentry = { path = "../../../../sentry-tauri" }
 chrono = "0.4"
 url = "2"
+# ws echo server fixture (port 3004) for plugin-websocket autotest; used under #[cfg(desktop)]
+# in lib.rs. Declared unconditionally because `cfg(desktop)` is injected by tauri's build.rs
+# (cargo:rustc-cfg=desktop) and is invisible to Cargo's [target.cfg] dependency resolution —
+# gating under [target.'cfg(desktop)'] left it unactivated on OHOS-desktop (E0432 unresolved import).
+tungstenite = "0.24"
 
 [target.'cfg(not(target_env = "ohos"))'.dependencies]
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
-
-[target.'cfg(desktop)'.dependencies]
-# tungstenite is only used by the desktop-only ws echo server (lib.rs, cfg(desktop))
-tungstenite = "0.24"
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 napi-ohos = { version = "1.1" }
