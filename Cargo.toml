@@ -33,6 +33,7 @@ members = [
   "examples/resources/src-tauri",
   "examples/api/src-tauri",
   "examples/api/src-tauri/tauri-plugin-sample",
+  "examples/huawei-account/src-tauri",
 ]
 resolver = "2"
 
