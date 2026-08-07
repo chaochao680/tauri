@@ -4816,6 +4816,30 @@ fn on_window_close<'a, T: UserEvent>(
   // Remove window entry from WindowsStore (idempotent)
   let removed = windows.0.borrow_mut().remove(&window_id);
   if let Some(mut window_wrapper) = removed {
+    // OHOS: tao's Window has no close/destroy impl, so the OS window is NOT
+    // destroyed by the default close path — only the Rust-side store entry is
+    // removed here. Without an explicit destroy_window call, the OS Float
+    // window stays on screen → ghost windows that diverge from Rust's records.
+    // destroy_window (NAPI→ArkHelper.closeWindow) actually destroys the OS
+    // window (Float: win.destroyWindow(); UIAbility: context.terminateSelf()).
+    //
+    // Recursion safety: destroy_window → ArkTS destroyWindow → FloatPage
+    // aboutToDisappear → notifyWindowClose → on_close_requested → on_window_close.
+    // The second on_window_close call hits `removed == None` (this block already
+    // removed it) and returns early — the idempotent remove breaks the cycle.
+    #[cfg(target_env = "ohos")]
+    {
+      use tao::platform::ohos::WindowExtOpenHarmony;
+      if let Some(ref inner) = window_wrapper.inner {
+        if let Some(ohos_id) = inner.window_id() {
+          log::info!("[wry] on_window_close: destroy_window ohos_id={}", ohos_id);
+          if let Err(e) = openharmony_ability::window::destroy_window(ohos_id) {
+            log::warn!("[wry] on_window_close: destroy_window {} failed: {:?}", ohos_id, e);
+          }
+        }
+      }
+    }
+
     // Maintain drop order: surface must be dropped before window.
     // softbuffer::Surface holds Arc<Window>; if Window drops first,
     // Surface may access freed resources on drop.

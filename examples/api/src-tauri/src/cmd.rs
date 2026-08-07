@@ -508,6 +508,7 @@ pub fn create_isolated_window<R: tauri::Runtime>(
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
     .inner_size(800.0, 600.0)
+    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
     .initialization_script(&init_script)
     .on_navigation(move |nav_url| {
       log::info!("Isolated window navigation intercepted: {}", nav_url);
@@ -592,7 +593,8 @@ pub fn create_window_with_custom_ua<R: tauri::Runtime>(
   let mut builder =
     tauri::WebviewWindowBuilder::new(&app, &unique_id, tauri::WebviewUrl::App(url_path.into()))
       .title(title)
-      .inner_size(800.0, 600.0);
+      .inner_size(800.0, 600.0)
+      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
 
   if !user_agent.is_empty() {
     builder = builder.user_agent(&user_agent);
@@ -627,6 +629,7 @@ pub fn create_window_no_throttle<R: tauri::Runtime>(
     .title("Window with No Background Throttling")
     .background_throttling(BackgroundThrottlingPolicy::Disabled)
     .inner_size(800.0, 600.0)
+    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
     .initialization_script(
       r#"
         document.addEventListener('DOMContentLoaded', () => {
@@ -747,6 +750,7 @@ pub fn create_transparent_window<R: tauri::Runtime>(
     .title("Transparent Window")
     .transparent(true)
     .inner_size(600.0, 400.0)
+    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
     .initialization_script(&init_script);
 
   // Optional build-time effects (WindowBuilder::effects path — applied at window creation via
@@ -821,11 +825,217 @@ pub fn create_borderless_window<R: tauri::Runtime>(
       .title("Borderless Window")
       .decorations(false)
       .inner_size(500.0, 350.0)
+      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
       .initialization_script(&init_script);
 
   let _window = builder.build()?;
 
   Ok(())
+}
+
+/// Test command: create a window in a new UIAbility instance via `startAbility`.
+///
+/// Requires `launchType: "standard"` in module.json5. The new instance's main
+/// window is system-managed (resize/move return 1300002); it loads the app's
+/// default page (MainPage), not the WebviewUrl passed here.
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn create_ui_ability_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+  transparent: Option<bool>,
+) -> tauri::Result<CreateUIAbilityWindowResult> {
+  let transparent = transparent.unwrap_or(false);
+  log::info!("Creating UIAbility instance window: {} (transparent={})", window_id, transparent);
+
+  use tauri::ohos::OHOSWindowKind;
+  use tauri::Manager;
+
+  let mut builder = tauri::WebviewWindowBuilder::new(
+    &app,
+    &window_id,
+    WebviewUrl::App("hello.html".into()),
+  )
+  .title("UIAbility Instance Window")
+  .inner_size(600.0, 400.0)
+  .ohos_window_kind(OHOSWindowKind::UIAbility);
+
+  if transparent {
+    builder = builder.transparent(true);
+  }
+
+  let _window = match builder.build() {
+    Ok(w) => w,
+    Err(e) => {
+      log::error!("create_ui_ability_window build failed: {:?}", e);
+      return Err(e);
+    }
+  };
+
+  // Verify the webview window was registered and is acquirable by label.
+  // get_webview_window uses the same manager lookup as IPC's get_webview.
+  let webview_acquired = app.get_webview_window(&window_id).is_some();
+  let all_labels: Vec<String> = app.webview_windows().keys().cloned().collect();
+  let main_exists = app.get_webview_window("main").is_some();
+  log::info!(
+    "[create_ui_ability_window] webview_acquired={}, label={}, main_exists={}, all_labels={:?}",
+    webview_acquired, window_id, main_exists, all_labels
+  );
+
+  Ok(CreateUIAbilityWindowResult {
+    label: window_id.clone(),
+    webview_acquired,
+    all_webview_labels: all_labels,
+  })
+}
+
+/// Diagnostic result returned by create_transparent_ui_ability_window for automated tests.
+#[cfg(target_env = "ohos")]
+#[derive(serde::Serialize)]
+pub struct CreateTransparentWindowResult {
+  /// The window label actually used (test-transparent-<window_id> unless prefixed).
+  pub label: String,
+  /// The window_id passed to the command.
+  pub window_id: String,
+  /// Whether manager.get_webview_window(label) succeeded after build.
+  pub webview_acquired: bool,
+  /// All webview labels currently registered in the manager.
+  pub all_webview_labels: Vec<String>,
+}
+
+/// Create a UIAbility instance with a transparent main window (builder.transparent(true))
+/// loading the dedicated transparent-test.html page. The page self-drives a test
+/// sequence on load (see transparent-test.html runTestSequence).
+///
+/// label uses `test-` prefix to match ACL run-app.json windows: [test-*], so the
+/// new instance's webview can call plugin:window|* commands (setBackgroundColor etc).
+/// transparent=true flows: tao → start_ui_ability → want.parameters['tauri_transparent']
+/// → new instance onWindowStageCreate → registerUIAbilityStage(transparent=true)
+/// → setWindowContainerColor('#00000000','#FFFFFFFF') (active=transparent, inactive=white).
+///
+/// Returns diagnostics (webview_acquired, all_webview_labels) so autotest can assert
+/// the communication path without listening to cross-window events.
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn create_transparent_ui_ability_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+) -> tauri::Result<CreateTransparentWindowResult> {
+  let label = if window_id.starts_with("test-") {
+    window_id.clone()
+  } else {
+    format!("test-transparent-{}", window_id)
+  };
+  log::info!("Creating transparent UIAbility: {}", label);
+
+  use tauri::ohos::OHOSWindowKind;
+  use tauri::Manager;
+
+  let _window = tauri::WebviewWindowBuilder::new(
+    &app,
+    &label,
+    WebviewUrl::App("transparent-test.html".into()),
+  )
+  .title("Transparent Test (UIAbility)")
+  .transparent(true)
+  .inner_size(700.0, 500.0)
+  .ohos_window_kind(OHOSWindowKind::UIAbility)
+  .build()?;
+
+  let acquired = app.get_webview_window(&label).is_some();
+  let all_labels: Vec<String> = app.webview_windows().keys().cloned().collect();
+  log::info!(
+    "[create_transparent_ui_ability_window] launched, label={}, acquired={}",
+    label,
+    acquired
+  );
+
+  Ok(CreateTransparentWindowResult {
+    label,
+    window_id,
+    webview_acquired: acquired,
+    all_webview_labels: all_labels,
+  })
+}
+
+/// Emits a START anchor into hilog for the verification script to delineate a test run.
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn transparent_test_start(window_id: String) -> tauri::Result<()> {
+  log::info!("[TRANSP-TEST] START window_id={}", window_id);
+  Ok(())
+}
+
+/// Diagnostic result returned by create_ui_ability_window for automated tests.
+#[cfg(target_env = "ohos")]
+#[derive(serde::Serialize)]
+pub struct CreateUIAbilityWindowResult {
+  /// The window label passed to the command.
+  pub label: String,
+  /// Whether manager.get_webview(label) succeeded after build.
+  pub webview_acquired: bool,
+  /// All webview labels currently registered in the manager.
+  pub all_webview_labels: Vec<String>,
+}
+
+/// Test command: create 3 UIAbility instance windows in sequence, returning
+/// the webview_acquired result for each. Reproduces "multiple creates →
+/// failed to acquire webview reference" in a single invoke (no dependency on
+/// the test runner reaching windowOpsTests).
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn create_ui_ability_windows_x3<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+) -> tauri::Result<Vec<CreateUIAbilityWindowResult>> {
+  use tauri::ohos::OHOSWindowKind;
+  use tauri::Manager;
+
+  let mut results = Vec::new();
+  for i in 1..=3 {
+    let window_id = format!("uiability-x3-{}-{}", std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(), i);
+    log::info!("[x3] Creating UIAbility instance #{}: {}", i, window_id);
+
+    let builder = tauri::WebviewWindowBuilder::new(
+      &app, &window_id, WebviewUrl::App("hello.html".into()),
+    )
+    .title("UIAbility Instance Window")
+    .inner_size(600.0, 400.0)
+    .ohos_window_kind(OHOSWindowKind::UIAbility);
+
+    match builder.build() {
+      Ok(w) => {
+        let acquired = app.get_webview_window(&window_id).is_some();
+        let all_labels: Vec<String> = app.webview_windows().keys().cloned().collect();
+        log::info!("[x3] #{} webview_acquired={}, label={}, all_labels={:?}", i, acquired, window_id, all_labels);
+
+        // Trigger an IPC from the new webview to verify its label is registered
+        // correctly. Use fetch to tauri://localhost (same as page JS IPC) —
+        // if the webview's label isn't in the manager, this hits
+        // "failed to acquire webview reference" in the URI scheme handler.
+        let ipc_js = r#"fetch('tauri://localhost/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cmd:'dummy_command'})}).catch(e=>console.error('IPC fetch failed: '+e))"#;
+        if let Err(e) = w.eval(ipc_js) {
+          log::error!("[x3] #{} eval (IPC trigger) failed: {:?}", i, e);
+        }
+
+        results.push(CreateUIAbilityWindowResult {
+          label: window_id,
+          webview_acquired: acquired,
+          all_webview_labels: all_labels,
+        });
+      }
+      Err(e) => {
+        log::error!("[x3] #{} build failed: {:?}", i, e);
+        results.push(CreateUIAbilityWindowResult {
+          label: window_id,
+          webview_acquired: false,
+          all_webview_labels: vec![],
+        });
+      }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(500));
+  }
+  Ok(results)
 }
 
 /// Test command: create a transparent + borderless window (decorations=false + transparent=true)
@@ -873,12 +1083,20 @@ pub fn create_transparent_borderless_window<R: tauri::Runtime>(
       .title("Transparent Borderless")
       .transparent(true)
       .decorations(false)
+      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
       .inner_size(500.0, 350.0)
       .initialization_script(&init_script);
 
   let _window = builder.build()?;
 
   Ok(())
+}
+
+/// Returns the total count of webview windows currently registered (including main).
+/// Used by the close_all_test_windows diagnostic test to verify cleanup.
+#[command]
+pub fn count_webview_windows<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<usize> {
+  Ok(app.webview_windows().len())
 }
 
 /// Close the calling webview window. Used by test windows' close buttons
@@ -889,6 +1107,54 @@ pub fn close_test_window<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) -> 
   log::info!("close_test_window called for label: {}", window.label());
   window.close()?;
   Ok(())
+}
+
+/// Close all webview windows except the main window. Used by the TestRunner
+/// "Close All Test Windows" button to clean up windows opened during a test
+/// run (Float sub-windows, UIAbility instances, isolated/UA/custom-ua/no-throttle
+/// windows, etc.).
+///
+/// On OHOS, `WebviewWindow::close()` only removes the window from Rust's manager
+/// — tao's `Window::close` is a no-op on OHOS and does NOT call ArkTS
+/// `destroyWindow()`, so the system window stays visible on screen. To actually
+/// destroy the system window, we must explicitly call `destroy_window` (which
+/// dispatches to ArkTS `WindowManager.closeWindow`):
+/// - Float sub-window: `win.destroyWindow()` (real destroy, removes from screen).
+/// - UIAbility main window: `hideAbility()` (background — OHOS doesn't allow
+///   programmatic Ability kill; instance stays in recent tasks but invisible).
+///
+/// Returns the list of labels that were attempted to close (for UI feedback).
+#[command]
+pub fn close_all_test_windows<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+) -> tauri::Result<Vec<String>> {
+  let labels: Vec<String> = app
+    .webview_windows()
+    .keys()
+    .filter(|k| k.as_str() != "main")
+    .cloned()
+    .collect();
+  let mut closed: Vec<String> = Vec::new();
+  for label in &labels {
+    if let Some(w) = app.get_webview_window(label) {
+      log::info!("[close_all_test_windows] closing {}", label);
+
+      // w.close() → on_close_requested → on_window_close. On OHOS, on_window_close
+      // calls destroy_window (NAPI→ArkHelper.closeWindow) to actually destroy the
+      // OS window (tao's close/destroy are no-ops on OHOS). On other platforms,
+      // close() handles real destruction directly.
+      match w.close() {
+        Ok(_) => closed.push(label.clone()),
+        Err(e) => log::warn!("[close_all_test_windows] close {} failed: {:?}", label, e),
+      }
+    }
+  }
+  log::info!(
+    "[close_all_test_windows] attempted {} windows, closed {}",
+    labels.len(),
+    closed.len()
+  );
+  Ok(closed)
 }
 
 /// Test command for app_handle.emit
@@ -1205,6 +1471,7 @@ pub fn cookie_manual_test<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
   tauri::WebviewWindowBuilder::new(&app, "cookie-manual-test", tauri::WebviewUrl::External(url))
     .title("Cookie Manual Test")
     .inner_size(480.0, 640.0)
+    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
     .build()
     .map_err(|e| e.to_string())?;
 

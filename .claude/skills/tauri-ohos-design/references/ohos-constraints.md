@@ -91,9 +91,8 @@
 
 | 规则 | 说明 |
 |------|------|
-| 修改 `openharmony-ability` 源码后必须重建 HAR | `ohrs build --arch arm64` + `pack.sh` + `tar -czf ability.har package` + `ohpm install` |
-| ohpm install 必须从项目根目录 (`gen/ohos`) 运行 | 不是 entry 子目录 |
-| 增量更新时需要 `rmdir /s /q oh_modules` 清理 | 避免 EPERM rename 错误 |
+| 修改 `openharmony-ability` ArkTS 源码后必须重建 HAR | `ohrs build --arch arm64` + `pack.bat`（含 tar 打 har）；改 Rust 源码跳过，直接 `cargo tauri ohos build` |
+| 严禁手动 `ohpm install` | cargo tauri ohos build/run 内部自动同步；手动会删 lock/junction/本地包 |
 | HAR 重建后 HAP 也必须重建 | ArkTS 代码变更 → HAR → HAP 全链重建 |
 
 ### 3.3 签名与部署

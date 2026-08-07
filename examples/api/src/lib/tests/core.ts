@@ -524,15 +524,11 @@ export const coreTests: TestCase[] = [
       } finally {
         unlistenStart();
         unlistenFinish();
-        // Clean up the created window (use actual label returned by Rust, not original windowId)
-        if (actualLabel) {
-          try {
-            const win = await WebviewWindow.getByLabel(actualLabel);
-            if (win) await win.close();
-          } catch (e) {
-            // Ignore if window already closed or not found
-          }
-        }
+        // Intentionally NOT closing the window here — leave it on screen for the
+        // user to clean up via the "Close All Test Windows" button. Closing in
+        // autotest left ghost windows on OHOS (tao close is no-op) and cluttered
+        // the screen mid-run. The button calls close_all_test_windows which goes
+        // through the framework on_window_close → destroy_window path.
       }
     },
   },
@@ -563,15 +559,7 @@ export const coreTests: TestCase[] = [
         assert(interceptedUrl!.length > 0, 'Intercepted URL should not be empty');
       } finally {
         unlisten();
-        // Clean up the created window
-        if (actualLabel) {
-          try {
-            const win = await WebviewWindow.getByLabel(actualLabel);
-            if (win) await win.close();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-        }
+        // Intentionally NOT closing the window — leave it for manual Close All cleanup.
       }
     },
   },
@@ -602,15 +590,7 @@ export const coreTests: TestCase[] = [
         assert(changedTitle!.length > 0, 'Title should not be empty');
       } finally {
         unlisten();
-        // Clean up the created window
-        if (actualLabel) {
-          try {
-            const win = await WebviewWindow.getByLabel(actualLabel);
-            if (win) await win.close();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-        }
+        // Intentionally NOT closing the window — leave it for manual Close All cleanup.
       }
     },
   },
@@ -758,8 +738,7 @@ export const coreTests: TestCase[] = [
       // Verify decorations are off
       const decorated = await win!.isDecorated();
       assert(decorated === false, `Borderless window should have decorations=false, got ${decorated}`);
-      // Clean up
-      await win!.close();
+      // Intentionally NOT closing — leave for manual Close All cleanup.
     },
   },
 
@@ -778,8 +757,7 @@ export const coreTests: TestCase[] = [
       // Verify decorations are off
       const decorated = await win!.isDecorated();
       assert(decorated === false, `Transparent borderless window should have decorations=false, got ${decorated}`);
-      // Clean up
-      await win!.close();
+      // Intentionally NOT closing — leave for manual Close All cleanup.
     },
   },
 
@@ -1224,7 +1202,7 @@ export const coreTests: TestCase[] = [
 
       await new Promise((r) => setTimeout(r, 1000));
 
-      await child.close();
+      // Intentionally NOT closing — leave for manual Close All cleanup.
     },
   },
   // ─── Mouse Event Tests (OHOS desktop / 2in1) ───
@@ -1462,7 +1440,7 @@ export const coreTests: TestCase[] = [
       await win.setEffects({ effects: [Effect.TabbedLight], radius: 20 });
       await win.clearEffects();
       assert(true, 'setEffects + clearEffects did not throw for all effect types');
-      await win.close();
+      // Intentionally NOT closing — leave for manual Close All cleanup.
     },
   },
   {
@@ -1521,8 +1499,34 @@ export const coreTests: TestCase[] = [
       await invoke('create_transparent_window', { windowId: 'test-vibrancy-build', effect: 'Blur', radius: 25 });
       const win = await WebviewWindow.getByLabel('test-vibrancy-build');
       if (!win) throw new Error('build-time effects window not created');
-      await win.close();
-      assert(true, 'build-time effects window created + closed without throw');
+      // Intentionally NOT closing — leave for manual Close All cleanup.
+      assert(true, 'build-time effects window created without throw');
+    },
+  },
+  // ─── Transparent UIAbility window (instance + builder.transparent(true)) ───
+  // Creates a transparent UIAbility instance loading transparent-test.html.
+  // Asserts only the communication path (instance created + webview registered);
+  // operation semantics are verified manually via hilog.
+  {
+    name: 'transparent UIAbility window (create + self-driven ops + hilog verifiable)',
+    category: 'auto',
+    timeout: 30000,
+    async fn() {
+      const windowId = 'autotest-' + Date.now();
+      const diag = await invoke<{
+        label: string;
+        webview_acquired: boolean;
+        all_webview_labels: string[];
+      }>('create_transparent_ui_ability_window', { windowId });
+
+      assert(
+        diag.webview_acquired === true,
+        `webview not acquired: label=${diag.label}, all_labels=${JSON.stringify(diag.all_webview_labels)}`,
+      );
+      assert(
+        diag.label.includes(windowId),
+        `label mismatch: expected to contain "${windowId}", got "${diag.label}"`,
+      );
     },
   },
 ];
