@@ -4470,6 +4470,9 @@ fn handle_event_loop<T: UserEvent>(
   // synchronously at the start of the next Rust event loop iteration, reading from
   // stored Rust values before the async destruction completes. See defensive guard
   // on wrapper.inner below.
+  //
+  // TODO(遗留问题一): 此 drain 是 OHOS 关窗旁路通道,补 tao ZST WindowId + MainEvent::WindowDestroy
+  //   不带身份的缺陷。根因、影响范围(不止关窗)、根治路径见 doc/OHOS窗口遗留问题.md(问题一)
   #[cfg(target_env = "ohos")]
   {
     use tao::platform::ohos::WindowExtOpenHarmony;
