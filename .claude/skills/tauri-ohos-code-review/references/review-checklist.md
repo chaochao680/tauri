@@ -58,6 +58,10 @@
 - [ ] G3: 异步回调路径完整（无 callback 丢失/drop）
 - [ ] G4: API 签名跨仓一致（如 wry 与 tauri 之间的参数传递）
 - [ ] G5: `#[serde(default)]` 不应用于语义上必填的字段（如 `id: String`, `name: String`）— 否则反序列化会静默接受空字符串，导致无效数据被存储而无法查找 → 🟡
+- [ ] G6: `ohos_win_id()` / `window_id.unwrap_or(0)` 失败路径检查 — 任何 `Option<i64>` window_id 在创建失败后 `unwrap_or(0)` 会把后续所有窗口操作静默路由到主窗口 (id=0)。Window::new 里 `create_os_window(...).ok()` / `start_ui_ability` 失败时必须 `return Err`，不能继续构造 `window_id: None` 的 Window → 🟡。**检查方法**：grep `\.ok()` 和 `unwrap_or(0)` 在 OHOS Window 创建路径，确认失败分支都走 `Err(os_error!(OsError))`
+- [ ] G7: OHOS 窗口尺寸 outer/inner 语义对齐 — `win.resize(w,h)` 设的是 **outer** 尺寸（ArkTS `WindowManager.resizeWindow` 不补偿标题栏 inset）。若 `inner_size()` 返回 content_rect（inner，比 outer 小装饰 inset），而 `set_inner_size()` 直接把该值传给 `resize_window`，则 save→restore 循环会按 inset 量级逐次缩小窗口 → 🟡。**检查方法**：确认 `inner_size()` 与 `set_inner_size()` 对 outer/inner 口径一致（要么都 outer 要么都 inner+补偿），注释说明差异
+- [ ] G8: OHOS 窗口可见性 restore+show 配对 — MINIMIZE 状态的窗口 `showWindow()` 不会自动 restore 到 FLOATING，需先 `restore()`/`recover()`。`set_visible(true)` 若只调 `show_window` 不调 `restore_window`，则 minimize（或 `set_visible(false)`→hide_window→minimize）后无法恢复 → 🟡。**检查方法**：对照 `set_visible(true)` 实现确认有 restore 调用，或 ArkTS `showWindowMethod` 对 MINIMIZE 状态先 recover
+- [ ] G9: OHOS 状态镜像 (AtomicBool) 需事件回灌 — 新增 tao 侧 `visible`/`fullscreen`/`maximized`/`minimized` 等 AtomicBool 镜像时，必须同时确认 EventLoop 有对应的 MainEvent 回灌（OHOS 系统发起的状态变更），否则 OS 标题栏操作后镜像 stale，`is_visible()` 等返回错误值 → 🔵。若为有意推迟（注释标注 future extension），至少在字段注释里写明"未回灌，OS 发起变更会 stale"。注意保持一致性：同类 getter 不能一部分查镜像、一部分查真实 OS 状态（如 `is_minimized` 查真实而 `is_visible` 查镜像）
 
 ## H — 仓库级规范
 
