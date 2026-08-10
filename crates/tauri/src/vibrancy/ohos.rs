@@ -44,6 +44,11 @@ pub fn apply_effects<R: Runtime>(window: &Window<R>, effects: WindowEffectsConfi
     Effect::Mica => window_vibrancy::apply_ohos_mica(window_id, blur_radius, None),
     Effect::MicaDark => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(true)),
     Effect::MicaLight => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(false)),
+    // TODO(known-limitation): Tabbed 系列与 Mica 系列在 OHOS 上完全等价 —— 复用同一
+    // `apply_ohos_mica` 调用，丢失 Win11 原生 "Tabbed Mica 比 Mica 略透明" 的差异。
+    // 这是 spec ohos-window-blur.md:93-96 明文规定的近似策略，非代码 bug。
+    // 未来若要还原差异，需在此分支用不同的 radius/底色参数区分 Tabbed 与 Mica，
+    // 并同步更新 spec 的 Tabbed scenario。
     Effect::Tabbed => window_vibrancy::apply_ohos_mica(window_id, blur_radius, None),
     Effect::TabbedDark => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(true)),
     Effect::TabbedLight => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(false)),

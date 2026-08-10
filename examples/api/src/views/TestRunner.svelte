@@ -5,12 +5,13 @@
   import { pluginTests } from '../lib/tests/plugins';
   import { dpiTests } from '../lib/tests/dpi';
   import { windowDpiTests } from '../lib/tests/window-dpi';
+  import { windowOpsTests } from '../lib/tests/window-ops';
   import { imageTests } from '../lib/tests/image';
   import { menuTests } from '../lib/tests/menu';
   import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { getCurrentWindow, currentMonitor, cursorPosition, Effect } from '@tauri-apps/api/window';
+  import { getCurrentWindow, currentMonitor, cursorPosition, Effect, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
   import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { appCacheDir, join } from '@tauri-apps/api/path';
@@ -62,7 +63,7 @@
     pressedKeys.clear();
   }
 
-  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests];
+  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...windowOpsTests, ...imageTests, ...menuTests, ...trayTests];
   const webview = getCurrentWebview();
 
   async function runAll() {
@@ -849,6 +850,47 @@ Expected behavior:
     });
   }
 
+  async function manualCreateUIAbilityWindow() {
+    await wrapManual('createUIAbilityWindow', async () => {
+      const windowId = 'uiability-instance-' + Date.now();
+      await invoke('create_ui_ability_window', { windowId });
+      manualResult = `UIAbility instance window requested (label: "${windowId}").\n\n` +
+        `Expected: A new EntryAbility instance starts via context.startAbility,\n` +
+        `opening a separate main window with its own lifecycle + recent-task card.\n` +
+        `Requires launchType: "standard" in module.json5.\n\n` +
+        `If a new independent window appears (separate from the Float sub-windows) → PASS.\n` +
+        `If no new window or only onNewWant fires (singleton) → FAIL: launchType not standard.\n\n` +
+        `Note: the new instance loads the app default page (MainPage), not hello.html.\n` +
+        `The new window is system-managed: resize/move return 1300002 (no-op).`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualCreateTransparentUIAbility() {
+    await wrapManual('createTransparentUIAbility', async () => {
+      const windowId = 'transparent-' + Date.now();
+      await invoke('create_transparent_ui_ability_window', { windowId });
+      manualResult = `Transparent UIAbility instance requested (label: "test-transparent-${windowId}").\n\n` +
+        `Expected: A new EntryAbility instance opens with a TRANSPARENT main window,\n` +
+        `loading transparent-test.html with test buttons.\n` +
+        `You should see the desktop / windows behind it through the window.\n\n` +
+        `The test page has 3 groups of buttons (distinct concepts):\n` +
+        `  ① setBackgroundColor — system window layer (setWindowBackgroundColor)\n` +
+        `  ② CSS body background — ArkUI content layer (document.body.style.background)\n` +
+        `  ③ CSS opacity — whole content (document.body.style.opacity)\n\n` +
+        `How transparency flows:\n` +
+        `  builder.transparent(true) → tao → start_ui_ability(transparent=true)\n` +
+        `  → want.parameters['tauri_transparent'] → new instance onWindowStageCreate\n` +
+        `  → registerUIAbilityStage(transparent=true)\n` +
+        `  → setWindowContainerColor('#00000000','#FFFFFFFF') (active=transparent, inactive=white)\n\n` +
+        `If the new window is see-through (desktop visible) → PASS.\n` +
+        `If opaque → FAIL: container color not applied.\n` +
+        `Lose focus → window becomes opaque white (inactive, expected).`;
+      onMessage(manualResult);
+    });
+  }
+
+
   async function manualToggleDecorations() {
     await wrapManual('toggleDecorations', async () => {
       const win = getCurrentWindow();
@@ -950,6 +992,211 @@ Expected behavior:
         `If frosted on appear → PASS.\nIf clear on appear (needs runtime setEffects) → FAIL.\n\n` +
         `Close with Ctrl+W or Cmd+W.`;
       onMessage(manualResult);
+    });
+  }
+
+  // ─── OHOS Window Operations Manual Tests ───
+  // 窗口位置/大小/最大化/最小化/全屏/可见性/聚焦/置顶/装饰按钮/光标
+  // 主窗口上 D 组 setDecorationFlags 为 no-op，但 is*() 状态仍翻转。
+  let ohosWinState = $state('');
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function manualSetOuterPosition() {
+    await wrapManual('setOuterPosition', async () => {
+      const win = getCurrentWindow();
+      const orig = await win.outerPosition();
+      const tx = orig.x < 200 ? 400 : 100, ty = orig.y < 200 ? 400 : 100;
+      await win.setPosition(new PhysicalPosition(tx, ty));
+      await delay(600);
+      const after = await win.outerPosition();
+      ohosWinState = `outerPosition (${orig.x},${orig.y}) → (${after.x},${after.y}) target (${tx},${ty})`;
+      manualResult = `setOuterPosition(${tx},${ty}) dispatched.\n\nExpected: 窗口左上角移动到 (${tx},${ty})。\n实际: (${after.x},${after.y})。\n若位置变化 → PASS。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetInnerSize() {
+    await wrapManual('setInnerSize', async () => {
+      const win = getCurrentWindow();
+      const orig = await win.innerSize();
+      const tw = Math.max(400, Math.floor(orig.width / 2));
+      const th = Math.max(300, Math.floor(orig.height / 2));
+      await win.setSize(new PhysicalSize(tw, th));
+      await delay(700);
+      const after = await win.innerSize();
+      ohosWinState = `innerSize ${orig.width}×${orig.height} → ${after.width}×${after.height} target ${tw}×${th}`;
+      manualResult = `setInnerSize(${tw}×${th}) dispatched.\n\nExpected: 窗口内容区变为 ${tw}×${th}。\n实际: ${after.width}×${after.height}。\n若尺寸变化 → PASS。`;
+      onMessage(manualResult);
+      await win.setSize(new PhysicalSize(orig.width, orig.height)); // 还原
+      await delay(400);
+    });
+  }
+
+  async function manualMaximize() {
+    await wrapManual('maximize', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isMaximized();
+      if (before) { await win.unmaximize(); } else { await win.maximize(); }
+      const after = await win.isMaximized();
+      ohosWinState = `isMaximized: ${before} → ${after}`;
+      manualResult = `maximize toggled: ${before} → ${after}.\n\nExpected: 窗口最大化填满屏幕 / 再次点击还原。\n若状态翻转且视觉变化 → PASS。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualMinimize() {
+    await wrapManual('minimize', async () => {
+      const win = getCurrentWindow();
+      await win.minimize();
+      ohosWinState = `minimize dispatched; 2s 后 unminimize`;
+      manualResult = `minimize() dispatched.\n\nExpected: 窗口最小化到任务栏。2 秒后自动恢复。\n若先消失再恢复 → PASS。`;
+      onMessage(manualResult);
+      setTimeout(() => getCurrentWindow().unminimize(), 2000);
+    });
+  }
+
+  async function manualFullscreen() {
+    await wrapManual('setFullscreen', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isFullscreen();
+      await win.setFullscreen(!before);
+      const after = await win.isFullscreen();
+      ohosWinState = `isFullscreen: ${before} → ${after}`;
+      manualResult = `setFullscreen(${!before}) dispatched.\n\nExpected: 全屏时进入沉浸布局（隐藏状态栏/导航条），再次点击还原。\n若系统栏隐藏/恢复 → PASS。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualShowHide() {
+    await wrapManual('showHide', async () => {
+      const win = getCurrentWindow();
+      await win.hide();
+      ohosWinState = `hide dispatched; 2s 后 show`;
+      manualResult = `hide() dispatched。\n\nExpected: 窗口隐藏（主窗口 hideAbility 后台，子窗口 minimize）。2 秒后 show() 恢复。\n若先消失再恢复 → PASS。`;
+      onMessage(manualResult);
+      setTimeout(() => getCurrentWindow().show(), 2000);
+    });
+  }
+
+  async function manualSetFocus() {
+    await wrapManual('setFocus', async () => {
+      const win = getCurrentWindow();
+      await win.setFocus();
+      const focused = await win.isFocused();
+      ohosWinState = `isFocused → ${focused}`;
+      manualResult = `setFocus() dispatched。\n\nExpected: 窗口置前获取焦点（子窗口 raiseToAppTop，主窗口系统管理）。\nisFocused() = ${focused}。\n若窗口来到最前 → PASS。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualAlwaysOnTop() {
+    await wrapManual('setAlwaysOnTop', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isAlwaysOnTop();
+      await win.setAlwaysOnTop(!before);
+      const after = await win.isAlwaysOnTop();
+      ohosWinState = `isAlwaysOnTop: ${before} → ${after}`;
+      manualResult = `setAlwaysOnTop(${!before}) dispatched。\n\nOHOS 无 z-order API：仅记录意图标志，isAlwaysOnTop()=${after}。\nFloat 子窗口天然浮于主窗口；主窗口置顶不强制生效。属 partial 实现。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetClosable() {
+    await wrapManual('setClosable', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isClosable();
+      await win.setClosable(!before);
+      const after = await win.isClosable();
+      ohosWinState = `isClosable: ${before} → ${after}`;
+      manualResult = `setClosable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 FloatPage 关闭按钮显隐）。\n主窗口装饰由系统管理，no-op，但 isClosable()=${after} 已翻转。\n在「Create Borderless Window」创建的子窗口上测试可见效果。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetMaximizable() {
+    await wrapManual('setMaximizable', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isMaximizable();
+      await win.setMaximizable(!before);
+      const after = await win.isMaximizable();
+      ohosWinState = `isMaximizable: ${before} → ${after}`;
+      manualResult = `setMaximizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 maximize 按钮显隐）。\n主窗口 no-op，isMaximizable()=${after} 已翻转。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetMinimizable() {
+    await wrapManual('setMinimizable', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isMinimizable();
+      await win.setMinimizable(!before);
+      const after = await win.isMinimizable();
+      ohosWinState = `isMinimizable: ${before} → ${after}`;
+      manualResult = `setMinimizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 minimize 按钮显隐）。\n主窗口 no-op，isMinimizable()=${after} 已翻转。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetResizable() {
+    await wrapManual('setResizable', async () => {
+      const win = getCurrentWindow();
+      const before = await win.isResizable();
+      await win.setResizable(!before);
+      const after = await win.isResizable();
+      ohosWinState = `isResizable: ${before} → ${after}`;
+      manualResult = `setResizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 resize 手柄显隐）。\n主窗口 no-op，isResizable()=${after} 已翻转。`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetFocusable() {
+    await wrapManual('setFocusable', async () => {
+      const win = getCurrentWindow();
+      await win.setFocusable(false);
+      ohosWinState = `setFocusable(false) → 3s 后恢复`;
+      manualResult = `setFocusable(false) dispatched。\n\nExpected: 窗口 3s 内不可聚焦（setWindowFocusable），点击不获取焦点。\n3 秒后自动恢复可聚焦。`;
+      onMessage(manualResult);
+      setTimeout(() => getCurrentWindow().setFocusable(true), 3000);
+    });
+  }
+
+  async function manualCursorVisible() {
+    await wrapManual('setCursorVisible', async () => {
+      const win = getCurrentWindow();
+      await win.setCursorVisible(false);
+      ohosWinState = `cursorVisible=false; 3s 后恢复`;
+      manualResult = `setCursorVisible(false) dispatched。\n\nExpected: 鼠标光标隐藏（pointer.setPointerVisible，全局）。\n移动鼠标验证光标隐藏。3 秒后自动恢复可见。`;
+      onMessage(manualResult);
+      setTimeout(() => getCurrentWindow().setCursorVisible(true), 3000);
+    });
+  }
+
+  const cursorIcons = ['default', 'hand', 'crosshair', 'text', 'wait', 'copy', 'not-allowed', 'grab', 'zoom-in'];
+  let cursorIconIdx = $state(0);
+  async function manualCursorIcon() {
+    await wrapManual('setCursorIcon', async () => {
+      const win = getCurrentWindow();
+      cursorIconIdx = (cursorIconIdx + 1) % cursorIcons.length;
+      const icon = cursorIcons[cursorIconIdx];
+      await win.setCursorIcon(icon);
+      ohosWinState = `cursorIcon = ${icon}`;
+      manualResult = `setCursorIcon("${icon}") dispatched。\n\nExpected: 鼠标光标变为 ${icon} 形状（pointer.setPointerStyleSync）。\n移动鼠标到窗口内查看光标样式。循环：${cursorIcons.join(' → ')}。`;
+      onMessage(manualResult);
+    });
+  }
+
+  let ignoreCursorState = $state(false);
+  async function manualIgnoreCursor() {
+    await wrapManual('setIgnoreCursorEvents', async () => {
+      const win = getCurrentWindow();
+      ignoreCursorState = !ignoreCursorState;
+      await win.setIgnoreCursorEvents(ignoreCursorState);
+      ohosWinState = `ignoreCursor = ${ignoreCursorState}`;
+      manualResult = `setIgnoreCursorEvents(${ignoreCursorState}) dispatched。\n\nExpected: ignore=true 时窗口点击穿透（setWindowTouchable=false），可点到后面窗口/桌面。3 秒后自动恢复可触摸。`;
+      onMessage(manualResult);
+      if (ignoreCursorState) {
+        setTimeout(() => { getCurrentWindow().setIgnoreCursorEvents(false); ignoreCursorState = false; }, 3000);
+      }
     });
   }
 
@@ -1967,6 +2214,19 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     }}>
       Clear Console
     </button>
+    <button class="btn" onclick={async () => {
+      try {
+        const closed = await invoke('close_all_test_windows');
+        const list = Array.isArray(closed) ? closed : [];
+        onMessage(list.length > 0
+          ? `Closed ${list.length} test window(s): ${list.join(', ')}`
+          : 'No test windows to close (only main remains)');
+      } catch (e) {
+        onMessage(`Failed to close test windows: ${e}`);
+      }
+    }}>
+      Close All Test Windows
+    </button>
   </div>
 
   {#if report}
@@ -2046,8 +2306,16 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Window Decorations & Transparency (Phase 1+2+3)</h5>
       <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualToggleDecorations}>Toggle Decorations (main window)</button>
         <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
         <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
+      </div>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">Window Background Color (Phase 3)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={() => manualSetBackgroundColor([255, 0, 0, 255], 'Red opaque')}>Set BG Red (opaque)</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 255, 128], 'Blue semi-transparent')}>Set BG Blue (alpha=128)</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor([0, 255, 0, 0], 'Green fully transparent')}>Set BG Green (alpha=0)</button>
+        <button class="btn" onclick={() => manualSetBackgroundColor(null, 'reset')}>Reset BG (null)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
@@ -2059,6 +2327,41 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualVibrancyClearEffects}>vibrancy: clearEffects removes blur</button>
         <button class="btn" onclick={manualVibrancyBuildTimeBlur}>vibrancy: build-time Blur (WindowBuilder::effects)</button>
       </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">OHOS Window Ops — 几何/状态</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualSetOuterPosition}>setOuterPosition (toggle 100/400)</button>
+        <button class="btn" onclick={manualSetInnerSize}>setInnerSize (half size, restore)</button>
+        <button class="btn" onclick={manualMaximize}>Toggle Maximize</button>
+        <button class="btn" onclick={manualMinimize}>Minimize (2s restore)</button>
+        <button class="btn" onclick={manualFullscreen}>Toggle Fullscreen</button>
+        <button class="btn" onclick={manualShowHide}>Hide/Show (2s restore)</button>
+        <button class="btn" onclick={manualSetFocus}>setFocus</button>
+        <button class="btn" onclick={manualAlwaysOnTop}>Toggle AlwaysOnTop (partial)</button>
+      </div>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">OHOS Window Ops — 多 UIAbility 实例 (startAbility)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualCreateUIAbilityWindow}>Create UIAbility Instance Window</button>
+        <button class="btn" onclick={manualCreateTransparentUIAbility}>Create Transparent UIAbility (主窗口透明)</button>
+      </div>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">OHOS Window Ops — 装饰按钮 (Float 子窗口生效)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualSetClosable}>Toggle Closable</button>
+        <button class="btn" onclick={manualSetMaximizable}>Toggle Maximizable</button>
+        <button class="btn" onclick={manualSetMinimizable}>Toggle Minimizable</button>
+        <button class="btn" onclick={manualSetResizable}>Toggle Resizable</button>
+        <button class="btn" onclick={manualSetFocusable}>setFocusable(false) (3s)</button>
+      </div>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">OHOS Window Ops — 光标</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualCursorVisible}>setCursorVisible(false) (3s)</button>
+        <button class="btn" onclick={manualCursorIcon}>Cycle CursorIcon</button>
+        <button class="btn" onclick={manualIgnoreCursor}>Toggle IgnoreCursor (3s)</button>
+      </div>
+      {#if ohosWinState}
+        <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400">{ohosWinState}</div>
+      {/if}
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Process & Updater Manual Tests</h5>

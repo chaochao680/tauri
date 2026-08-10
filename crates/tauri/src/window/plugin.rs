@@ -105,7 +105,7 @@ mod commands {
     label: Option<String>,
     value: Option<Color>,
   ) -> crate::Result<()> {
-    log::debug!(
+    log::info!(
       "[tauri-window] set_background_color called with value: {:?}",
       value
     );

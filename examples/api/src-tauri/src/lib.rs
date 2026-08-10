@@ -491,7 +491,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
                   format!("new-{number}"),
                   tauri::WebviewUrl::External(url.clone()),
                 )
-                .title(url.as_str());
+                .title(url.as_str())
+                .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
                 match builder.build() {
                   Ok(window) => tauri::webview::NewWindowResponse::Create { window },
                   Err(e) => {
@@ -594,8 +595,9 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       });
 
       // WebSocket echo fixture for plugin-websocket tests (port 3004).
-      // Echoes Text/Binary frames back to the sender.
-      #[cfg(desktop)]
+      // Echoes Text/Binary frames back to the sender. Excluded on OHOS —
+      // tungstenite doesn't build on ohos targets and OHOS has no desktop ws test.
+      #[cfg(all(desktop, not(target_env = "ohos")))]
       std::thread::spawn(|| {
         let listener = match std::net::TcpListener::bind("localhost:3004") {
           Ok(l) => l,
@@ -702,7 +704,17 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::create_borderless_window,
       #[cfg(desktop)]
       cmd::create_transparent_borderless_window,
+      #[cfg(target_env = "ohos")]
+      cmd::create_ui_ability_window,
+      #[cfg(target_env = "ohos")]
+      cmd::create_ui_ability_windows_x3,
+      #[cfg(target_env = "ohos")]
+      cmd::create_transparent_ui_ability_window,
+      #[cfg(target_env = "ohos")]
+      cmd::transparent_test_start,
       cmd::close_test_window,
+      cmd::close_all_test_windows,
+      cmd::count_webview_windows,
       cmd::create_counter,
       cmd::increment_counter,
       cmd::get_counter_value,
@@ -828,16 +840,11 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
             log::info!("[OHOS] calling prevent_close() for test window: {}", label);
             api.prevent_close();
             // Do not call destroy() - this is a test window, keep it open
-          } else {
-            // Other windows: prevent default close behavior, then explicitly destroy
-            log::info!("[OHOS] closing window: {}", label);
-            api.prevent_close();
-            _app_handle
-              .get_webview_window(label)
-              .unwrap()
-              .destroy()
-              .unwrap();
           }
+          // Other windows: let the default close path run. on_close_requested
+          // (wry) will call on_window_close, whose OHOS branch calls
+          // destroy_window to actually destroy the OS window. No prevent_close,
+          // no manual destroy_window here — the framework handles it uniformly.
         }
         #[cfg(not(target_env = "ohos"))]
         {

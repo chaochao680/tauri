@@ -33,8 +33,8 @@ fi
 # ─── 自动检测设备 ───
 select_device() {
     local targets
-    targets=$(hdc list targets 2>&1 | tr -d '\r' | grep -v '^\[' | grep -v '^$')
-    local count=$(echo "$targets" | wc -l)
+    targets=$(hdc list targets 2>&1 | tr -d '\r' | grep -v '^\[' | grep -v '^$' || true)
+    local count=$(echo "$targets" | grep -c . || true)
 
     if [ -z "$targets" ] || [ "$count" -eq 0 ]; then
         echo "ERROR: No device connected. Check hdc connection."

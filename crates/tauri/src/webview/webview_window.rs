@@ -25,6 +25,8 @@ use crate::{
   runtime::{window::CursorIcon, UserAttentionType},
 };
 use tauri_runtime::webview::NewWindowFeatures;
+#[cfg(target_env = "ohos")]
+use tauri_runtime::WindowDispatch;
 use tauri_utils::config::{BackgroundThrottlingPolicy, Color, WebviewUrl, WindowConfig};
 use url::Url;
 
@@ -1429,13 +1431,30 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
 impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
   /// Sets the OHOS window kind for this window.
   ///
-  /// - `UIAbility`: Main window that reuses the existing UIAbility container. Only one can exist (singleton).
+  /// - `UIAbility`: UIAbility main window. The first one (windowId=0) reuses the
+  ///   existing container; subsequent ones start a new EntryAbility instance via
+  ///   `context.startAbility` (requires `launchType: standard` in module.json5).
   /// - `Float`: Sub-window that creates a new OS-level floating window (TYPE_FLOAT).
   ///
   /// Default is `UIAbility` when not specified. Use `Float` for sub-windows.
   pub fn ohos_window_kind(mut self, kind: crate::ohos::OHOSWindowKind) -> Self {
     self.window_builder = self.window_builder.ohos_window_kind(kind);
     self
+  }
+}
+
+#[cfg(target_env = "ohos")]
+impl<R: Runtime> WebviewWindow<R> {
+  /// Returns the OHOS OS-level window ID (0 for main UIAbility window, >0 for
+  /// Float sub-windows / subsequent UIAbility instances).
+  ///
+  /// Exposed so application code (e.g. close_all_test_windows) can call
+  /// openharmony-ability's `destroy_window(id)` to actually destroy the system
+  /// window — tao's `Window::close` is a no-op on OHOS and does not call
+  /// ArkTS `destroyWindow()`, so `WebviewWindow::close()` alone leaves the
+  /// system window visible on screen.
+  pub fn ohos_window_id(&self) -> Option<i64> {
+    self.window.window.dispatcher.ohos_window_id().ok().flatten()
   }
 }
 

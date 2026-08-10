@@ -143,6 +143,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
           let _webview =
             tauri::WebviewWindowBuilder::new(app, "new", WebviewUrl::App("index.html".into()))
               .title("Tauri")
+              .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
               .build()
               .unwrap();
         }
