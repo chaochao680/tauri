@@ -4505,6 +4505,30 @@ fn handle_event_loop<T: UserEvent>(
         );
       }
     }
+
+    // 回灌系统窗口状态到 tao 镜像位(问题五 5.3)。
+    // windowStatusChange 事件经 notify_window_status NAPI 入队,这里 drain 后用
+    // 真实 OHOS windowId 路由到对应 tao Window,调 apply_window_status 更新
+    // visible/fullscreen 镜像。路由模式与上方 drain_pending_window_closes 一致
+    // (不依赖 tao ZST WindowId,多窗口正确)。详见 doc/OHOS窗口遗留问题.md(问题五 5.3)。
+    let pending_status = tao::platform::ohos::ability::drain_pending_window_status();
+    for (ohos_win_id, status) in pending_status {
+      let applied = windows.0.borrow().iter().find_map(|(_id, wrapper)| {
+        let w = wrapper.inner.as_ref()?;
+        if w.window_id() == Some(ohos_win_id as i64) {
+          w.apply_window_status(status);
+          Some(())
+        } else {
+          None
+        }
+      });
+      if applied.is_none() {
+        log::debug!(
+          "[wry] OHOS pending status: no matching Tauri window for OHOS window ID {} (status={})",
+          ohos_win_id, status
+        );
+      }
+    }
   }
 
   match event {

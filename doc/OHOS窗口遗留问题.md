@@ -538,7 +538,9 @@ if (this.isDesktop && this.windowClass && this.resizable) {   // ← resize hand
 
 ## 问题五:Window Atomic 镜像位与 ArkTS 真实状态不同步
 
-> **状态**:系统性缺陷,横切问题一~四。tao `Window` 结构体堆砌了大量 `AtomicBool`/`AtomicU8` 镜像位,用于在 Rust 侧快速读窗口状态,但这些位与 ArkTS 侧的真实状态缺乏双向同步机制,极易脱节。
+> **状态**:系统性缺陷,横跨问题一~四。tao `Window` 结构体堆砌了大量 `AtomicBool`/`AtomicU8` 镜像位,用于在 Rust 侧快速读窗口状态,但这些位与 ArkTS 侧的真实状态缺乏双向同步机制,极易脱节。
+>
+> **5.2/5.3 已实现(方案 A:事件回灌,2026-08-14)**:补 `windowStatusChange` 事件回灌链路,让 `visible`/`fullscreen` 镜像位由系统回灌维护;theme 改全局 `APP_THEME_OVERRIDE` + `app.config().color_mode`(`onConfigurationUpdated` 已自动刷新)。已全量编译通过(`cargo tauri ohos build --device-type desktop --features prod`),NAPI `notifyWindowStatus` 导出已生成。真机验证清单见下文。实现详见 [memory: ohos-window-status-readback-fix]。
 >
 > **关联代码**:
 > - [tao `Window` 结构体 Atomic 字段](../../tao/src/platform_impl/ohos/mod.rs) — 8 个镜像位
@@ -594,6 +596,8 @@ pub fn is_minimized(&self) -> bool {
 
 根因是 OHOS 侧的窗口状态变化事件(`windowStageEvent`、`windowSizeChange` 等)没有回灌到 tao 的这些 Atomic 位。ArkTS 的 `windowStageEvent` 回调([NativeAbility.ets](../../openharmony-ability/native_ability/src/main/ets/ability/NativeAbility.ets))只 forward 到 `MainEvent::ContentRectChange` 等,不更新 tao Window 的 `maximized`/`minimized`/`visible`/`fullscreen`。
 
+> **回灌主信号选型(已定)**:用 `window.on("windowStatusChange")` + `win.getWindowStatus()`(API 11+,`SystemCapability.WindowManager.WindowManager.Core`),`WindowStatusType` 枚举 `FULL_SCREEN=1 / MAXIMIZE=2 / MINIMIZE=3 / FLOATING=4 / SPLIT_SCREEN=5` 恰好覆盖。**不是** `windowRectChange`:`RectChangeReason`(API 12+)的 `MAXIMIZE` 把 maximize 与 fullscreen 合并、且**无 MINIMIZE** 态,无法表达最小化,故不能作主信号。`windowStageEvent` 的 `MINIMIZED` 等是 ability 级生命周期、粒度粗,亦不取。
+
 对比其他平台:Windows 的 `WM_SIZE`/`WM_SHOWWINDOW`、macOS 的 `windowDidMiniaturize:` 等NSEvent 都会同步更新 tao 的窗口状态字段。OHOS 缺这条回灌链路。
 
 ### 后果
@@ -607,16 +611,26 @@ pub fn is_minimized(&self) -> bool {
 
 - **删除僵尸字段**:`maximized`/`minimized` 既不被读也不被写,直接删除,避免误导。`is_maximized`/`is_minimized` 已查系统,不依赖它们。
 - **统一读源策略**:每个状态要么"始终查系统"(如 maximized/minimized,准确但慢),要么"本地镜像 + 系统回灌"(如 visible/fullscreen,快但需同步)。不可"本地写、不回灌"。
-- **补系统状态回灌**:在 ArkTS 的 `windowStageEvent`/`windowSizeChange` 回调里,把 WINDOW_ACTIVE/INACTIVE/MINIMIZED 等状态 forward 到 Rust,更新 tao 的 `visible`/`maximized`/`minimized`/`fullscreen` 镜像。这是根治——让镜像位与系统真实状态双向同步。
+- **补系统状态回灌(已实现)**:用 `window.on("windowStatusChange")` + `win.getWindowStatus()` seed 初始态,经 NAPI `notifyWindowStatus(windowId, status)` → `PENDING_WINDOW_STATUS` 队列 → `drain_pending_window_status()` → wry 用真实 windowId 路由到对应 tao Window 调 `apply_window_status(status)` 更新 `visible`/`fullscreen` 镜像。链路复制自 `notify_window_close`/`drain_pending_window_closes`,**不依赖 tao ZST WindowId**,多窗口下正确(与问题一治本解耦)。两个注册点:UIAbility 主窗口([NativeAbility.ets](../../openharmony-ability/native_ability/src/main/ets/ability/NativeAbility.ets))、Float 子窗口([FloatPage.ets](../../openharmony-ability/native_ability/src/main/ets/components/FloatPage.ets)),均 try/catch 静默降级。
 - **`always_on_top`** 因 OHOS 无 API,本质是纯意图标志(无系统态可同步),可保留本地镜像但文档说明"仅意图,不反映系统"。
+- **theme(已实现)**:删 per-window `theme` 字段,改全局 `APP_THEME_OVERRIDE`(`Light`/`Dark`/`Follow`);`Follow` 时 `theme()` 回退 `app.config().color_mode`(由 `onConfigurationUpdated` 自动刷新),无需新通道。`set_theme` 写 `APP_THEME_OVERRIDE` + dispatch `setColorMode`。
 
-### 验证清单
+### 验证清单(2026-08-14 真机人工验证,设备 HAD-W32 API23 desktop)
 
-- [ ] `maximized`/`minimized` 字段全代码库零 store/零 load(确认僵尸)
-- [ ] 系统最小化窗口后 `is_visible()`:是否仍返回 true(预期是 = 不同步)
-- [ ] 系统最大化窗口后查本地 `maximized` 字段:是否仍为 false(若是僵尸字段,必然 false)
-- [ ] `set_fullscreen(true)` 后系统外部退出全屏:`fullscreen()` 是否仍返回 Some(预期是 = 不同步)
-- [ ] `windowStageEvent` 回调是否回灌到 tao Window 的任何 Atomic 字段(预期否)
+> 验证方法:临时给 `notify_window_status`/`apply_window_status`/`ConfigChanged`/`theme()` 四处加 `log::info!` 诊断日志 → 重编装设备 → 操作设备抓 hilog → 验证后撤回诊断日志(源码已恢复正式态)。日志 tag `tauritest`(Rust,domain 0xA00000)+ `NativeAbility`/`FloatPage`(ArkTS,domain 0x1999)。
+
+- [x] `maximized`/`minimized` 字段全代码库零 store/零 load(确认僵尸)
+- [x] `windowStageEvent` 回调是否回灌到 tao Window 的任何 Atomic 字段(已实现 — 改走 `windowStatusChange` 回灌 `visible`/`fullscreen`)
+- [x] 系统最大化窗口后 `is_maximized()`:返回 true(autotest `maximize then is_maximized reflects state` 通过;日志 status=2 → apply)
+- [x] 系统最小化窗口后回灌:日志 status=3(MINIMIZE)→ `apply_window_status` visible=false(操作设备亲见)
+- [x] 最大化→还原:status=2(MAXIMIZE)→ 4(FLOATING),系统 Recover 动画 + rect 回复(亲见)
+- [x] `set_fullscreen(true)`→系统退出全屏:status=1(FULL_SCREEN)→apply fullscreen=true;退出 status=4→apply fullscreen=false(亲见)
+- [x] 深浅色切换 → `theme()` 反映系统:系统设置切深↔浅,`ConfigChanged recv: color_mode=Light`(09:53:20)/`=Dark`(09:53:22),`theme()` FOLLOW 分支读此值(亲见)
+- [x] 多窗口不串扰(UIAbility 子窗口):开 Window A/B,日志 `notify_window_status recv` window_id=0(主)/12/13 各自独立,`apply_window_status` 全命中无 `no matching`(亲见)
+- [x] Float TYPE_FLOAT 子窗口:开 borderless Float 窗口 14/15,FloatPage.aboutToAppear 注册 + seed status=4 触发,window_id=14/15 路由命中(亲见)。seed 恒 FLOATING(4);minimize/maximize 的 status 变化未单独点测(非核心)
+- [x] 回灌链路端到端:`notify_window_status recv` + `apply_window_status applied` 成对出现,真实 windowId 路由,wry drain 无 `no matching Tauri window` 警告
+- [x] 回归(autotest):257 passed / 4 failed(连跑两遍一致),4 个失败均与改动无关(#33 Resumed 生命周期、#86 clipboard write_text 不支持、#122 websocket 连接拒绝、#144 maximize innerSize 受 avoid-area 影响——均改动前既有)
+- [ ] 手机端(mobile 构建):`windowStatusChange` 注册 try/catch 不崩;`is_maximized`/`is_minimized` 恒 false 符合预期 — 需 `OHOS_DEVICE_TYPE=mobile` 构建,未测(消极验证:不崩即过)
 
 ---
 

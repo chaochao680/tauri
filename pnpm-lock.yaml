@@ -26,6 +26,9 @@ importers:
       '@tauri-apps/plugin-autostart':
         specifier: file:../../../plugins-workspace/plugins/autostart
         version: file:../plugins-workspace/plugins/autostart
+      '@tauri-apps/plugin-cli':
+        specifier: file:../../../plugins-workspace/plugins/cli
+        version: file:../plugins-workspace/plugins/cli
       '@tauri-apps/plugin-clipboard-manager':
         specifier: file:../../../plugins-workspace/plugins/clipboard-manager
         version: file:../plugins-workspace/plugins/clipboard-manager
@@ -50,18 +53,39 @@ importers:
       '@tauri-apps/plugin-notification':
         specifier: file:../../../plugins-workspace/plugins/notification
         version: file:../plugins-workspace/plugins/notification
+      '@tauri-apps/plugin-opener':
+        specifier: file:../../../plugins-workspace/plugins/opener
+        version: file:../plugins-workspace/plugins/opener
       '@tauri-apps/plugin-os':
         specifier: file:../../../plugins-workspace/plugins/os
         version: file:../plugins-workspace/plugins/os
+      '@tauri-apps/plugin-positioner':
+        specifier: file:../../../plugins-workspace/plugins/positioner
+        version: file:../plugins-workspace/plugins/positioner
       '@tauri-apps/plugin-process':
         specifier: file:../../../plugins-workspace/plugins/process
         version: file:../plugins-workspace/plugins/process
       '@tauri-apps/plugin-shell':
         specifier: file:../../../plugins-workspace/plugins/shell
         version: file:../plugins-workspace/plugins/shell
+      '@tauri-apps/plugin-sql':
+        specifier: file:../../../plugins-workspace/plugins/sql
+        version: file:../plugins-workspace/plugins/sql
+      '@tauri-apps/plugin-store':
+        specifier: file:../../../plugins-workspace/plugins/store
+        version: file:../plugins-workspace/plugins/store
       '@tauri-apps/plugin-updater':
         specifier: file:../../../plugins-workspace/plugins/updater
         version: file:../plugins-workspace/plugins/updater
+      '@tauri-apps/plugin-upload':
+        specifier: file:../../../plugins-workspace/plugins/upload
+        version: file:../plugins-workspace/plugins/upload
+      '@tauri-apps/plugin-websocket':
+        specifier: file:../../../plugins-workspace/plugins/websocket
+        version: file:../plugins-workspace/plugins/websocket
+      '@tauri-apps/plugin-window-state':
+        specifier: file:../../../plugins-workspace/plugins/window-state
+        version: file:../plugins-workspace/plugins/window-state
     devDependencies:
       '@iconify-json/codicon':
         specifier: ^1.2.49
@@ -1624,6 +1648,9 @@ packages:
   '@tauri-apps/plugin-autostart@file:../plugins-workspace/plugins/autostart':
     resolution: {directory: ../plugins-workspace/plugins/autostart, type: directory}
 
+  '@tauri-apps/plugin-cli@file:../plugins-workspace/plugins/cli':
+    resolution: {directory: ../plugins-workspace/plugins/cli, type: directory}
+
   '@tauri-apps/plugin-clipboard-manager@file:../plugins-workspace/plugins/clipboard-manager':
     resolution: {directory: ../plugins-workspace/plugins/clipboard-manager, type: directory}
 
@@ -1651,8 +1678,14 @@ packages:
   '@tauri-apps/plugin-notification@file:../plugins-workspace/plugins/notification':
     resolution: {directory: ../plugins-workspace/plugins/notification, type: directory}
 
+  '@tauri-apps/plugin-opener@file:../plugins-workspace/plugins/opener':
+    resolution: {directory: ../plugins-workspace/plugins/opener, type: directory}
+
   '@tauri-apps/plugin-os@file:../plugins-workspace/plugins/os':
     resolution: {directory: ../plugins-workspace/plugins/os, type: directory}
+
+  '@tauri-apps/plugin-positioner@file:../plugins-workspace/plugins/positioner':
+    resolution: {directory: ../plugins-workspace/plugins/positioner, type: directory}
 
   '@tauri-apps/plugin-process@file:../plugins-workspace/plugins/process':
     resolution: {directory: ../plugins-workspace/plugins/process, type: directory}
@@ -1660,8 +1693,23 @@ packages:
   '@tauri-apps/plugin-shell@file:../plugins-workspace/plugins/shell':
     resolution: {directory: ../plugins-workspace/plugins/shell, type: directory}
 
+  '@tauri-apps/plugin-sql@file:../plugins-workspace/plugins/sql':
+    resolution: {directory: ../plugins-workspace/plugins/sql, type: directory}
+
+  '@tauri-apps/plugin-store@file:../plugins-workspace/plugins/store':
+    resolution: {directory: ../plugins-workspace/plugins/store, type: directory}
+
   '@tauri-apps/plugin-updater@file:../plugins-workspace/plugins/updater':
     resolution: {directory: ../plugins-workspace/plugins/updater, type: directory}
+
+  '@tauri-apps/plugin-upload@file:../plugins-workspace/plugins/upload':
+    resolution: {directory: ../plugins-workspace/plugins/upload, type: directory}
+
+  '@tauri-apps/plugin-websocket@file:../plugins-workspace/plugins/websocket':
+    resolution: {directory: ../plugins-workspace/plugins/websocket, type: directory}
+
+  '@tauri-apps/plugin-window-state@file:../plugins-workspace/plugins/window-state':
+    resolution: {directory: ../plugins-workspace/plugins/window-state, type: directory}
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -3885,6 +3933,10 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.11.0
 
+  '@tauri-apps/plugin-cli@file:../plugins-workspace/plugins/cli':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@tauri-apps/plugin-clipboard-manager@file:../plugins-workspace/plugins/clipboard-manager':
     dependencies:
       '@tauri-apps/api': 2.11.0
@@ -3921,7 +3973,15 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.11.0
 
+  '@tauri-apps/plugin-opener@file:../plugins-workspace/plugins/opener':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@tauri-apps/plugin-os@file:../plugins-workspace/plugins/os':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-positioner@file:../plugins-workspace/plugins/positioner':
     dependencies:
       '@tauri-apps/api': 2.11.0
 
@@ -3933,7 +3993,27 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.11.0
 
+  '@tauri-apps/plugin-sql@file:../plugins-workspace/plugins/sql':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-store@file:../plugins-workspace/plugins/store':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@tauri-apps/plugin-updater@file:../plugins-workspace/plugins/updater':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-upload@file:../plugins-workspace/plugins/upload':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-websocket@file:../plugins-workspace/plugins/websocket':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-window-state@file:../plugins-workspace/plugins/window-state':
     dependencies:
       '@tauri-apps/api': 2.11.0
 
