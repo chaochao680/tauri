@@ -4523,10 +4523,23 @@ fn handle_event_loop<T: UserEvent>(
         }
       });
       if applied.is_none() {
-        log::debug!(
-          "[wry] OHOS pending status: no matching Tauri window for OHOS window ID {} (status={})",
-          ohos_win_id, status
-        );
+        // G6/跨切面(tao#20):创建失败的 Float 窗口 window_id=None(ohos_win_id()==0),
+        // 既不匹配任何 drain 出的状态,也不会产生状态事件(无真实 OHOS 窗口),其镜像位静默陈旧。
+        // 故 drain 出却未匹配 = 真实窗口(id!=0)在入队与 drain 之间被销毁(陈旧 id)或路由不匹配。
+        // 非零 id 属可排查的陈旧 id → warn;id=0(主窗口/失败 Float 哨兵)保持 debug,避免噪音。
+        if ohos_win_id != 0 {
+          log::warn!(
+            "[wry] OHOS pending status drained but no matching window for id {} (status={}); \
+             stale id (window destroyed between queue and drain) or routing mismatch \
+             (failed Float windows never match: window_id=None)",
+            ohos_win_id, status
+          );
+        } else {
+          log::debug!(
+            "[wry] OHOS pending status: no match for id 0 (main window / failed-Float sentinel), status={}",
+            status
+          );
+        }
       }
     }
   }
