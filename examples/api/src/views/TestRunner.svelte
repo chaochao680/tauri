@@ -1420,6 +1420,24 @@ Expected behavior:
     });
   }
 
+  // 同时设 min + max — 验证 tao set_min/max_inner_size "四值同下" 修复。
+  // 修复前: setMaxSize 会把之前 setMinSize 的 min 清零(max 那次写 min=0);修复后 min 保留。
+  async function manualSetMinAndMaxSize() {
+    await wrapManual('setMinAndMaxSize', async () => {
+      const win = getCurrentWindow();
+      // PhysicalSize 直接传 px,避免 LogicalSize × scale(≈2.0) 超屏幕卡死。
+      // 屏幕 3120×2080 px;min 1600×1200 < max 2400×1800 < 屏幕,安全。
+      await win.setMinSize(new PhysicalSize(1600, 1200));
+      // setMinSize → tao set_min_inner_size: 缓存 min, 读 max=0 → setWindowLimits(1600,1200,0,0)
+      await win.setMaxSize(new PhysicalSize(2400, 1800));
+      // setMaxSize → tao set_max_inner_size: 缓存 max, 读 min
+      //   修复前: setWindowLimits(0,0,2400,1800) ← min 丢!
+      //   修复后: setWindowLimits(1600,1200,2400,1800) ← min 保留 ✓
+      manualResult = `setMinSize(1600×1200 px) + setMaxSize(2400×1800 px) dispatched.\n\n验证(看 hilog tag WindowManager):\n  setWindowLimits ... OK: min=1600×1200 max=0×0      ← setMinSize\n  setWindowLimits ... OK: min=1600×1200 max=2400×1800 ← setMaxSize(min 保留=修复生效)\n修复前第二次会 min=0×0(min 丢)。\n\n拖拽验证:窗口不能缩到 < 1600×1200,不能放到 > 2400×1800。`;
+      onMessage(manualResult);
+    });
+  }
+
   // 10. 窗口主题 — toggle Dark/Light/System
   let themeState = $state(0); // 0=Light, 1=Dark, 2=System
   async function manualSetTheme() {
@@ -2636,6 +2654,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualSetBounds}>set_bounds round-trip (webview)</button>
         <button class="btn" onclick={manualSetTitle}>Set Title (main window)</button>
         <button class="btn" onclick={manualSetMinSize}>Set Min Size 1600×1200 (main window)</button>
+        <button class="btn" onclick={manualSetMinAndMaxSize}>Set Min+Max (1600×1200 / 2400×1800 px)</button>
         <button class="btn" onclick={manualResetMinSize}>Reset Min Size (null)</button>
         <button class="btn" onclick={manualSetTheme}>Set Theme (toggle Light/Dark/System)</button>
         <button class="btn" onclick={manualRequestUserAttention}>Request User Attention (notification)</button>
