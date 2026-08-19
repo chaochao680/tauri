@@ -5459,7 +5459,7 @@ You may have it installed on another user account, but it is not available for t
       None
     }
   } else {
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", not(target_env = "ohos")))]
     {
       webview_builder = webview_builder.with_bounds(wry::Rect {
         position: LogicalPosition::new(0, 0).into(),
@@ -5472,7 +5472,16 @@ You may have it installed on another user account, but it is not available for t
         height_rate: 1.,
       })
     }
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(all(not(feature = "unstable"), not(target_env = "ohos")))]
+    {
+      None
+    }
+    // On OHOS, a webview created without explicit bounds must stay bounds-less:
+    // wry marks it natural-layout in WebViewStyle (no width/height → ArkTS
+    // "100%"), so it follows window resizes. Passing full-window pixel bounds
+    // here would make it explicit-size and desync its page layout on resize
+    // (BuilderNode.update does not notify ArkWeb to relayout).
+    #[cfg(target_env = "ohos")]
     None
   };
 
