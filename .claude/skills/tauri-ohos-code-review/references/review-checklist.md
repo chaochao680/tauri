@@ -45,6 +45,7 @@
 - [ ] E1: WebView 事件在 `@Builder` 内 pre-build 注册
 - [ ] E2: 多窗口状态使用 `@LocalStorageProp` 隔离（FloatPage）
 - [ ] E3: `@Builder` 在 `@Component` 内（需要 `this` 时）
+- [ ] E4: Web 组件尺寸策略改动必须同时覆盖 natural 与 explicit 两个场景 → 🟡。`WebBuilder`/`EmbeddedWebBuilder` 的 `.width/.height` 若统一用 `"100%"` 自然布局，会破坏子 webview 的显式矩形（wry `is_child=true` 经 `WebViewStyle{x,y,w,h}` 传入的 bounds 失效，子 webview 变全窗口尺寸+位置偏移，右下溢出被窗口裁切）；若统一用 `data.style.width/height`，主 webview 在窗口 resize 后 ArkWeb 不 relayout（页面保旧布局、底部被裁，0cac4c3 曾因此回归）。正确做法：`data.style?.width ?? "100%"` 二分 + ArkTS 侧 `naturalLayout` 标记（创建时无 `style.width` → `updateWebviewStyle` 剥离运行期宽高）。**检查方法**：grep `WebBuilder`/`EmbeddedWebBuilder` 的 width/height 设置，确认两个场景都有出口且主 webview 运行期 set_bounds 宽高不会污染 "100%" → 🟡
 
 ## F — openharmony-ability 桥接
 
