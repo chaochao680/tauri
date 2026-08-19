@@ -1,7 +1,7 @@
 # OHOS 窗口能力 — 手动测试按钮清单
 
 > 创建时间: 2026-08-10
-> 最后更新: 2026-08-13(5 个新能力实现:redraw/attention/ime/drag/drag-resize)
+> 最后更新: 2026-08-19(光标抓取实现:LockCursor C API 22+,从 C 区移入 A 区)
 > 数据来源: [ohos-window-test-mapping.md](ohos-window-test-mapping.md)(能力表)+ TestRunner.svelte 实际按钮
 > 用途: 对照本清单在设备上挨个点按钮测试窗口能力
 
@@ -117,7 +117,7 @@
 | 窗口 ID | `Window ID (getCurrentWindow)` | label 非空(主窗口 "main") |
 | 窗口销毁 | `CloseRequested (close sub-window)` | 建临时子窗口→关闭→收到事件 |
 | 多窗口 | `on_new_window: Allow (window.open)` | 弹出新子窗口 |
-| 光标抓取(平台限制) | `setCursorGrab (platform limit)` | 不崩溃即 PASS(OHOS 无 pointer lock API) |
+| 光标抓取 | `setCursorGrab(true) 5s (Lock to window)` | ✅ 已实现(OH_WindowManager_LockCursor/UnlockCursor,NDK C API 22+,`LOCK_WINDOW_CURSOR` normal 权限已在 module.json5 声明)。点击锁定 5 秒:光标被限制在窗口内无法移出(窗口内仍可移动);期间点击其他窗口验证失焦自动解锁;5 秒后自动解锁恢复自由移动 |
 | 窗口事件 | `Watch Window Events`(toggle) | 切后台触发 FocusChanged,停止看事件数 |
 | 窗口状态持久化 | `window-state save+restore` | filename 非空,save+restore 幂等(已修:补偿标题栏高度) |
 | set_bounds | `set_bounds round-trip (webview)` | set_ok === true |
@@ -145,9 +145,9 @@
 | 能力 | 原因 |
 |------|------|
 | 窗口图标 | 窗口层无运行时 API,只能 module.json5 静态配置 |
-| 光标抓取 | OHOS 无 pointer lock API(两个 MCP 交叉确认) |
 | 窗口置底 | 无置底 API(只有置顶 setWindowTopmost) |
-| 窗口嵌入能力 | 平台限制(HalfScreenLaunchComponent 仅元服务) |
+| 窗口嵌入(子 WebView) | ✅ 已实现并真机验证(`WebViewBuilder::build_as_child` → `InnerWebView::new_as_child`,`is_child=true` 走 `WebViewStyle{x,y,w,h}`)。⚠️ 2026-08-19 修复:0cac4c3 曾把 ArkTS Web 组件宽高改回 "100%" 导致子 webview 实际为全窗口尺寸+位置偏移 → 右下溢出被窗口裁切(现象:右下角被挡显示不出);恢复显式宽高后真机验证通过(`create_webview (multi-webview)` 按钮,300×200@(50,50) 矩形完整)。`naturalLayout` 标记保证主 webview(创建时无 style.width)运行期 set_bounds 剥离宽高、保持 "100%" 跟随窗口 resize(0cac4c3 修复不回归) |
+| 跨应用窗口嵌入 | 平台限制(把别的应用窗口/widget 嵌进本窗口:OHOS 无公开 API,`HalfScreenLaunchComponent` 仅元服务;与子 WebView 嵌入是两回事,勿混) |
 | 折叠屏支持 | 只加了 Rust 侧框架（Event 变体 + tao 处理），但 ArkTS 侧还没注册监听。当前设备（MateBook Pro 2in1）不是折叠屏，无法验证 |
 
 ### ⚠️ 桥接已通但受架构限制(有 API,webview 场景无法生效)
@@ -156,6 +156,7 @@
 |------|---------|----------|
 | 请求重绘 | 无需 API(OHOS 由系统 vsync 自动驱动,每帧重绘) | no-op 合理。tao 调 ArkTS log,系统 VSyncGenerator 已自动驱动 MainEvent::WindowRedraw |
 | IME 位置 | **有 API** `inputMethod.updateCursor(CursorInfo)` API10+(纠正原"无位置 API"误判) | 桥接 PASS(命令→tao→ArkTS→updateCursor 全链路通),但返回 `12800009 detached`。**根因**:webview(Chromium/ArkWeb)内 HTML input 走 Chromium 自己的输入法栈,不绑定 OHOS InputMethod 客户端,所以 updateCursor 无 client 可用。原生 TextInput 组件理论上能生效,但 tauri 用 webview 非原生组件 |
+
 
 ### 已实现(从 C 区移到 A 区)
 
@@ -168,6 +169,7 @@
 | 用户注意力请求 | no-op(空) | ✅ notificationManager.publish + requestEnableNotification 授权重试 | `Request User Attention (notification)` |
 | 拖拽窗口 | Err(NotSupported) | ✅ FloatPage onTouch(Down) → win.startMoving() API14+ | (Create Decorated Window 后拖标题栏) |
 | 拖拽调整大小 | Err(NotSupported) | ✅ set_window_draggable → enableDrag(主窗口边缘拖拽缩放) | (主窗口边缘直接拖) |
+| 光标抓取 | Err(NotSupported)「平台限制」(误判:只 grep 了 ArkTS .d.ts,C API 仅在 NDK 暴露) | ✅ OH_WindowManager_LockCursor/UnlockCursor(NDK API22+,normal 权限;dlopen 弱加载,<22 设备降级 NotSupported;失焦自动解锁) | `setCursorGrab(true) 5s (Lock to window)` |
 | 可用区域避让 | |
 ---
 
@@ -190,6 +192,6 @@
 3. 子窗口测试:先 `Create Decorated Window` → 测装饰按钮 / BG / setOuterPosition / setInnerSize / Hide-Show
 4. 拖拽测试:`Create Decorated Window` 后拖动子窗口标题栏(startMoving);主窗口边缘拖拽缩放(enableDrag)
 5. 通知测试:`Request User Attention` → 首次弹授权框→允许→再点弹通知
-6. 光标测试:`Cycle CursorIcon` / `setCursorVisible` / `Toggle IgnoreCursor`
+6. 光标测试:`Cycle CursorIcon` / `setCursorVisible` / `Toggle IgnoreCursor` / `setCursorGrab(true) 5s`(锁定期间移动鼠标验证无法移出窗口)
 7. **避免**:`Set Min Size`(主窗口改尺寸触发 sizeChange 风暴)、`Run All` 全量自动测试
 8. C 区跳过(空实现/平台限制);IME 位置桥接已通但 webview 场景报 12800009(架构限制)

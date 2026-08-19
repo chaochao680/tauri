@@ -55,6 +55,9 @@
       },
       {
         "name": "ohos.permission.WINDOW_TOPMOST"
+      },
+      {
+        "name": "ohos.permission.LOCK_WINDOW_CURSOR"
       }
     ]
   }

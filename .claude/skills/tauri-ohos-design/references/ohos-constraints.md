@@ -52,6 +52,7 @@
 - ArkTS 代码必须使用 **camelCase** 名称调用 napi 函数
 - 如需保留原名, 必须用 `#[napi(js_name = "original_name")]`
 - 使用 snake_case 会导致 `typeof module.on_popup_request !== "function"` 返回 `true` (函数实际名为 `onPopupRequest`), **静默失败不报错**
+- **`napi_ohos::Result<T, S>` 的 `S` 是 Error 载荷类型, 不是自由错误类型**: 本仓 napi-ohos 版本定义为 `pub type Result<T, S = Status> = std::result::Result<T, Error<S>>` 且 `Error<S: AsRef<str>>`。要返回自定义错误枚举必须显式写 `std::result::Result<T, MyError>`;误写 `Result<T, MyError>` 会要求 `MyError: AsRef<str>`, 产生十余个 E0277/E0308 编译错误(p1-cursor-grab 踩坑, 见 `openharmony-ability/crates/ability/src/window/mod.rs` 的 `CursorGrabError`)
 
 ### 2.2 TSFN 参数传递规则
 

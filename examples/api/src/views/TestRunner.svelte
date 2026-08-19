@@ -1315,14 +1315,28 @@ Expected behavior:
     });
   }
 
-  // 4. 光标抓取 — 平台限制,校验 no-throw(命令 cfg(desktop),OHOS 上预期抛错但不崩溃)
+  // 4. Cursor grab — OH_WindowManager_LockCursor/UnlockCursor (NDK C API 22+,
+  //    ohos.permission.LOCK_WINDOW_CURSOR normal permission, declared in entry_desktop module.json5).
+  //    Confined mode (isCursorFollowMovement=true): cursor stays inside the window but keeps
+  //    moving; auto-released on focus loss.
   async function manualCursorGrab() {
     await wrapManual('setCursorGrab', async () => {
       try {
         await getCurrentWindow().setCursorGrab(true);
-        manualResult = `setCursorGrab(true) → no throw ✓ → PASS\n(OHOS 无指针锁定 API,不报错即正确)`;
+        manualResult = `setCursorGrab(true) → no throw ✓ 已锁定(5 秒后自动解锁)\n\nExpected: 移动鼠标 — 光标被限制在窗口内无法移出(窗口内仍可移动)。\n锁定期间点击其他窗口可验证失焦自动解锁(光标立即恢复自由)。`;
+        onMessage(manualResult);
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          await getCurrentWindow().setCursorGrab(false);
+          manualResult = `setCursorGrab(false) → 已解锁\n\nExpected: 鼠标光标恢复自由移动,可移出窗口。`;
+        } catch (e) {
+          // unlock-after-auto-release (1300002) is idempotent on the Rust side and
+          // should not surface here; if another window was clicked during the lock,
+          // the cursor is already free via focus-loss auto-unlock.
+          manualResult = `setCursorGrab(false) threw: ${e}\n光标应已恢复自由(失焦自动解锁兜底)。若仍被锁定请上报。`;
+        }
       } catch (e) {
-        manualResult = `setCursorGrab threw: ${e}\n预期:返回 NotSupportedError/命令未注册,但不崩溃 → PASS(平台限制)`;
+        manualResult = `setCursorGrab threw: ${e}\n预期:锁定/解锁成功不抛错(权限已声明)。抛错常见原因:权限缺失(hilog 201)/ API < 22 设备(NotSupported)`;
       }
       onMessage(manualResult);
     });
@@ -2646,7 +2660,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualWindowId}>Window ID (getCurrentWindow)</button>
         <button class="btn" onclick={manualCloseRequested}>CloseRequested (close sub-window)</button>
         <button class="btn" onclick={manualOnNewWindow}>on_new_window: Allow (window.open)</button>
-        <button class="btn" onclick={manualCursorGrab}>setCursorGrab (platform limit)</button>
+        <button class="btn" onclick={manualCursorGrab}>setCursorGrab(true) 5s (Lock to window)</button>
         <button class="btn" onclick={toggleWinEventWatch}>
           {winEventWatchActive ? 'Stop Watch Window Events' : 'Watch Window Events'}
         </button>
