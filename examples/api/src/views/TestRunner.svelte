@@ -1481,11 +1481,41 @@ Expected behavior:
 
   async function manualSetImePosition() {
     await wrapManual('setImePosition', async () => {
-      // 调后端命令 → tao Window::set_ime_position → openharmony-ability set_ime_position
-      //   → ArkTS inputMethod.updateCursor(CursorInfo{left,top,width,height})
-      // 传物理像素坐标 (200, 400)。需要窗口内有已聚焦的输入框,否则报 12800003。
-      await invoke('set_ime_position_test', { x: 200, y: 400 });
-      manualResult = 'set_ime_position_test(200, 400) dispatched.\n\nExpected: 若窗口内有聚焦的输入框,输入法感知光标位置在 (200,400)。\n无聚焦输入框时 ArkTS 报 12800003 (正常,非错误)。\n底层: tao set_ime_position → openharmony-ability → inputMethod.updateCursor(CursorInfo)。\n看 hilog setImePosition: updateCursor OK → 链路 PASS。';
+      // 聚焦 HTML input → updateCursor 上报光标位置 → 回读 ArkTS 侧真实结果
+      // 链路: invoke → tao set_ime_position → openharmony-ability →
+      //   inputMethod.getController().updateCursor(CursorInfo{left,top,width,height})
+      // 前置条件:窗口内有聚焦的编辑框(HTML input 即可,ArkWeb 走系统输入法框架)
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = 'IME test input (auto-focused)';
+      inp.style.cssText = 'position:fixed;bottom:60px;left:24px;width:320px;height:36px;font-size:16px;background:#fff;color:#111;border:1px solid #888;padding:0 8px;z-index:9999;';
+      document.body.appendChild(inp);
+      const startTs = Date.now();
+      try {
+        inp.focus();
+        await delay(600);
+        await invoke('set_ime_position_test', { x: 200, y: 400 });
+        await delay(800); // updateCursor promise 异步结算,等结果落盘再回读
+        const raw = await invoke('get_ime_position_result');
+        const r = JSON.parse(raw);
+        if (r.code === -1 && String(r.message).includes('not supported')) {
+          manualResult = '⏭️ 非 OHOS 平台(stub 返回 not supported)→ SKIP';
+        } else if (r.ts < startTs) {
+          // 回读到陈旧记录:本次 promise 未在等待窗口内结算(或同步抛出)
+          manualResult = `已聚焦输入框并上报光标位置 (200,400)。\n` +
+            `结果未就绪:回读到陈旧记录(ts=${r.ts} 早于本次按压,code=${r.code} ${r.message})→ 重试一次;持续出现则 FAIL`;
+        } else {
+          manualResult = `已聚焦输入框并上报光标位置 (200,400)。\n` +
+            `updateCursor 返回: ${r.ok ? 'OK ✅ → PASS' : `失败 code=${r.code} ${r.message} → FAIL`}\n` +
+            `上报 CursorInfo: left=${r.x} top=${r.y}(物理像素,tao 透传)`;
+        }
+      } catch (e) {
+        manualResult = `invoke/解析失败: ${e}\n(链路未走完,不能作为能力判定依据)`;
+      } finally {
+        // 无论成败都移除注入的输入框(否则聚焦 input 残留 DOM 影响后续 IME 行为)
+        inp.blur();
+        inp.remove();
+      }
       onMessage(manualResult);
     });
   }

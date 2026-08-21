@@ -1,7 +1,7 @@
 # OHOS 窗口能力 — 手动测试按钮清单
 
 > 创建时间: 2026-08-10
-> 最后更新: 2026-08-19(光标抓取实现:LockCursor C API 22+,从 C 区移入 A 区)
+> 最后更新: 2026-08-20(IME 位置双重误判纠正 + inner_position 标题栏补偿;此前 2026-08-19 光标抓取实现)
 > 数据来源: [ohos-window-test-mapping.md](ohos-window-test-mapping.md)(能力表)+ TestRunner.svelte 实际按钮
 > 用途: 对照本清单在设备上挨个点按钮测试窗口能力
 
@@ -126,7 +126,7 @@
 | 窗口大小限制(重置) | `Reset Min Size (null)` | 设 min=1×1 恢复自由缩放 |
 | 窗口主题 | `Set Theme (toggle Light/Dark/System)` | ✅ 已实现(setColorMode: LIGHT/DARK/NOT_SET 系统跟随) |
 | 用户注意力请求 | `Request User Attention (notification)` | ✅ 已实现(notificationManager.publish + requestEnableNotification 授权)。首次点弹授权框,允许后右下角弹 "Tauri App / 请查看应用窗口" 通知 |
-| IME 位置 | `Set IME Position (200,400)` | ⚠️ 桥接已实现(inputMethod.updateCursor API10+),但 webview 场景受架构限制(详见 C 区) |
+| IME 位置 | `Set IME Position (200,400)` | ✅ 已实现(`inputMethod.getController().updateCursor(CursorInfo)` API10+)。A/B 实测(2026-08-19):无聚焦输入框报 `12800009`(client detached);聚焦 HTML input 后返回 OK — **webview 场景完全可用,非架构限制**,唯一前置是调用时窗口内有聚焦的编辑框。按钮自验:自动聚焦输入框后上报,真实结果经 `get_ime_position_result` 回读显示在 manualResult |
 
 ---
 
@@ -150,13 +150,11 @@
 | 跨应用窗口嵌入 | 平台限制(把别的应用窗口/widget 嵌进本窗口:OHOS 无公开 API,`HalfScreenLaunchComponent` 仅元服务;与子 WebView 嵌入是两回事,勿混) |
 | 折叠屏支持 | 只加了 Rust 侧框架（Event 变体 + tao 处理），但 ArkTS 侧还没注册监听。当前设备（MateBook Pro 2in1）不是折叠屏，无法验证 |
 
-### ⚠️ 桥接已通但受架构限制(有 API,webview 场景无法生效)
+### ⚠️ 桥接已通但系统自动处理(no-op 合理)
 
 | 能力 | API 情况 | 测试结果 |
 |------|---------|----------|
 | 请求重绘 | 无需 API(OHOS 由系统 vsync 自动驱动,每帧重绘) | no-op 合理。tao 调 ArkTS log,系统 VSyncGenerator 已自动驱动 MainEvent::WindowRedraw |
-| IME 位置 | **有 API** `inputMethod.updateCursor(CursorInfo)` API10+(纠正原"无位置 API"误判) | 桥接 PASS(命令→tao→ArkTS→updateCursor 全链路通),但返回 `12800009 detached`。**根因**:webview(Chromium/ArkWeb)内 HTML input 走 Chromium 自己的输入法栈,不绑定 OHOS InputMethod 客户端,所以 updateCursor 无 client 可用。原生 TextInput 组件理论上能生效,但 tauri 用 webview 非原生组件 |
-
 
 ### 已实现(从 C 区移到 A 区)
 
@@ -170,14 +168,14 @@
 | 拖拽窗口 | Err(NotSupported) | ✅ FloatPage onTouch(Down) → win.startMoving() API14+ | (Create Decorated Window 后拖标题栏) |
 | 拖拽调整大小 | Err(NotSupported) | ✅ set_window_draggable → enableDrag(主窗口边缘拖拽缩放) | (主窗口边缘直接拖) |
 | 光标抓取 | Err(NotSupported)「平台限制」(误判:只 grep 了 ArkTS .d.ts,C API 仅在 NDK 暴露) | ✅ OH_WindowManager_LockCursor/UnlockCursor(NDK API22+,normal 权限;dlopen 弱加载,<22 设备降级 NotSupported;失焦自动解锁) | `setCursorGrab(true) 5s (Lock to window)` |
-| 可用区域避让 | |
+| IME 位置 | 「平台限制」双重误判(①"inputMethod 无位置 API";②"webview 不绑定 OHOS IMF client,走 Chromium 自己的输入法栈") | ✅ `inputMethod.getController().updateCursor(CursorInfo)` API10+。A/B 实测(2026-08-19):无聚焦输入框报 `12800009`(client detached,任何应用无聚焦编辑框皆如此,非 webview 特有);程序化聚焦 HTML input 后返回 OK — ArkWeb HTML input 走系统输入法(官方《Web 组件对接软键盘》),webview 场景可用 | `Set IME Position (200,400)`(自验:manualResult 显示真实结果) |
 ---
 
 ## 已修复的遗留问题
 
 | 问题 | 状态 | 修复内容 |
 |------|------|---------|
-| 问题二:inner/outer 语义错位 | ✅ 已修 | set_inner_size 补偿标题栏高度(window_rect - content_rect) |
+| 问题二:inner/outer 语义错位 | ✅ 已修(双侧闭环) | setter:`set_inner_size` 补偿标题栏高度(window_rect−content_rect);getter:`inner_position` 补 decor_height(2026-08-20,真机验证 inner(598,754)=outer(598,608)+146) |
 | 问题三:hide/show 不对称 | ✅ 已修 | 主窗口:hide=`win.minimize()`(hideAbility 在 PC/2in1 不支持),show=`startAbility(instanceKey='main')` + AbilityStage onAcceptWant 复用实例(specified launchType,不爆发新窗口)。子窗口:minimize + showWindow 对称 |
 | 问题四:装饰 flag 语义错位 | ✅ 已修 | 双层拦截(tao Rust + ArkTS WindowManager),flag=false 时 API 被拦截 |
 | 问题五 5.1:僵尸字段 | ✅ 已修 | 删除 maximized/minimized 僵尸字段(is_* 直接查系统 API) |
@@ -194,4 +192,4 @@
 5. 通知测试:`Request User Attention` → 首次弹授权框→允许→再点弹通知
 6. 光标测试:`Cycle CursorIcon` / `setCursorVisible` / `Toggle IgnoreCursor` / `setCursorGrab(true) 5s`(锁定期间移动鼠标验证无法移出窗口)
 7. **避免**:`Set Min Size`(主窗口改尺寸触发 sizeChange 风暴)、`Run All` 全量自动测试
-8. C 区跳过(空实现/平台限制);IME 位置桥接已通但 webview 场景报 12800009(架构限制)
+8. C 区跳过(空实现/平台限制)。IME 位置可测:点 `Set IME Position (200,400)`,manualResult 显示 `updateCursor 返回: OK ✅ → PASS` 即通过(按钮自动注入并聚焦输入框,真实结果经回读命令显示,无需看 hilog)

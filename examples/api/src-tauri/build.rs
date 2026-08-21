@@ -34,6 +34,7 @@ fn main() {
         "devtools_close_only",
         "set_bounds_test",
         "set_ime_position_test",
+        "get_ime_position_result",
         "test_persisted_scope",
         "clear_persisted_scope",
         "clear_window_state",

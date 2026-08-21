@@ -1707,9 +1707,10 @@ pub fn clear_window_state<R: tauri::Runtime>(
 }
 
 /// Test command: set IME (input method) cursor position on a window.
-/// On OHOS this calls inputMethod.updateCursor(CursorInfo) via
+/// On OHOS this calls inputMethod.getController().updateCursor(CursorInfo) via
 /// openharmony-ability bridge (same path tao uses).
-/// Requires a focused edit box in the webview, else ArkTS logs 12800003 (expected).
+/// Requires a focused edit box in the webview (HTML input works), else
+/// ArkTS logs 12800009 (input method client detached).
 #[cfg(target_env = "ohos")]
 #[command]
 pub fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
@@ -1722,9 +1723,25 @@ pub fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
   Ok(())
 }
 
+/// Test command: read back the real updateCursor result recorded by ArkTS.
+/// Poll pattern — call ~500ms after set_ime_position_test (the promise settles async).
+/// Returns JSON: {"ok":bool,"code":number,"message":string,"x":number,"y":number,"ts":number}
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn get_ime_position_result() -> Result<String, String> {
+  use openharmony_ability::window::get_ime_position_result;
+  get_ime_position_result().map_err(|e| e.to_string())
+}
+
 /// Non-ohos stub.
 #[cfg(not(target_env = "ohos"))]
 #[command]
 pub fn set_ime_position_test(_x: i32, _y: i32) -> tauri::Result<()> {
   Ok(())
+}
+
+#[cfg(not(target_env = "ohos"))]
+#[command]
+pub fn get_ime_position_result() -> Result<String, String> {
+  Ok(r#"{"ok":false,"code":-1,"message":"not supported on this platform","x":0,"y":0,"ts":0}"#.into())
 }
