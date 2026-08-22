@@ -645,5 +645,5 @@
 | OHOS 移动原生插件 — nfc（is_available/scan/write） | 0 | 1 | **1** |
 | OHOS 移动原生插件 — huawei-account（一键登录） | 0 | 1 | **1** |
 | OHOS Plugin emit/Channel（geolocation watch/notification action） | 1 | 4 | **5** |
-| **合计** | **95** | **78** | **173** |
+| **合计** | **95** | **77** | **172** |
 

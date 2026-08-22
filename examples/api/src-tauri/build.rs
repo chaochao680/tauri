@@ -48,7 +48,6 @@ fn main() {
         "create_borderless_window",
         "create_decorated_window",
         "create_transparent_borderless_window",
-        "create_ohos_test_webview",
         "create_ui_ability_window",
         "create_ui_ability_windows_x3",
         "create_transparent_ui_ability_window",
