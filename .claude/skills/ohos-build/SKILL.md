@@ -99,6 +99,48 @@ PR #59 将 app 拆分为 mobile 和 desktop 两个 entry 模块：
 | `build-ohos.sh` | prerequisites + `cargo tauri ohos build`（Rust 编译/.so/hvigorw/签名由 CLI 处理）。项目专属 feature 经 `TAURI_BUILD_FEATURES` 传入 |
 | `install.sh` | 仅安装启动（使用已签名 HAP），不构建不签名。日常流程已被 `cargo tauri ohos run` 替代；保留供单独安装场景 |
 
+## openharmony-ability ArkTS 源码修改后的完整生效流程
+
+修改了 `openharmony-ability/` 下的 **ArkTS 源码**（非 Rust）后，HAR 必须重建，否则 entry 模块仍引用 stale HAR（新代码从未编译进 HAP）。
+
+### ⚠️ 必须改真实源，不要改 package/ 镜像
+
+`openharmony-ability/package/` 是 **pack.bat 的产物**，不是源！`pack.bat` 每次运行会：
+1. `rmdir /s /q package\src\main\ets` 删掉整个 package ets 源
+2. 从 `native_ability/src/main/ets/` 重新拷贝
+3. `pack-plugins.ps1` 从 `plugins/<name>/src/main/ets/` 重新拷贝每个插件源，并改写 import 路径（`@ohos-rs/ability` → `../../ability_exports`）
+
+**真实源位置**：
+- 基础能力（ArkHelper/WindowManager/menu.ets/helper/*）：`openharmony-ability/native_ability/src/main/ets/`
+- 桥接插件（WebviewPlugin/StatusbarPlugin/MenuPlugin 等 13 个）：`openharmony-ability/plugins/<name>/src/main/ets/<PluginClass>.ets`
+
+改 package/ 镜像会被下次 pack.bat 覆盖，改动丢失。改源后必须跑 pack.bat 才能让改动进 HAR。
+
+### 完整流程
+
+```bash
+cd ${PROJECT_ROOT}/openharmony-ability
+source ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/env.sh
+./pack.bat            # Windows 批处理：同步 native_ability ETS → package/ + 13 插件聚合 + tar 打 ability.har
+# 验证 HAR 含新代码（HAR 是 tar.gz 不是 zip）：
+#   cp ability.har /tmp/x.tar.gz && cd /tmp && mkdir hc && cd hc && tar -xzf x.tar.gz
+#   grep -c "你的标记" package/src/main/ets/...
+cd ${PROJECT_ROOT}/tauri/examples/api/src-tauri
+cargo tauri ohos build --device-type desktop --features prod
+```
+
+`cargo tauri ohos build/run` 内部自动跑 ohpm install 同步依赖（受 `oh-package-lock.json5` 约束）。**严禁手动 `ohpm install` / `rm -rf oh_modules/@ohos-rs+ability`** —— 会删 lock、清空 `oh_modules/@tauri/` junction、误删本地包，导致 00304056 / 00625003。改 HAR 后只需重新 `cargo tauri ohos build`，CLI 会检测 HAR 变化并重新装包。
+
+> 也可用 `run-tests.sh`，其 Step 0 自动检测 openharmony-ability 源码变更并重建 HAR，无需手动 pack。
+
+### pack.bat 执行注意（Windows 批处理吃字符陷阱）
+
+git bash / PowerShell 直接跑 `pack.bat` 会**吃掉前 2 字符**（`set`/`del`/`xcopy` 等行静默 no-op），导致 package 同步不完整但 pack.bat exit=0 假成功。必须用 **cmd.exe 显式调用**：
+```bash
+cmd.exe //c "D:\\xuqiu\\tauri-3.0\\openharmony-ability\\pack.bat"
+```
+跑完后手动校验 package 镜像 diff 是否与源一致，或验证 HAR 内含新代码标记。
+
 ## 模板修改后的完整生效流程
 
 修改了 `crates/tauri-cli/templates/mobile/open-harmony/` 下的模板文件后，需要：

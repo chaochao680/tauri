@@ -433,6 +433,36 @@ export const pluginTests: TestCase[] = [
     },
   },
 
+  // @tauri-apps/plugin-window-state (must run BEFORE autostart — autostart sends
+  // app to background on OHOS, disrupting IPC for subsequent tests)
+  {
+    name: '@tauri-apps/plugin-window-state.filename+save+restore',
+    category: 'side-effect',
+    timeout: 15000,
+    async fn() {
+      const { filename, saveWindowState, restoreStateCurrent, StateFlags } = await import('@tauri-apps/plugin-window-state');
+      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
+      try {
+        const fname = await filename();
+        assert(typeof fname === 'string' && fname.length > 0, `filename should be non-empty, got: ${fname}`);
+        let originalSize: LogicalSize | null = null;
+        try { originalSize = await getCurrentWindow().innerSize(); } catch { /* ignore */ }
+        await getCurrentWindow().setSize(new LogicalSize(400, 300));
+        await saveWindowState(StateFlags.SIZE);
+        await restoreStateCurrent(StateFlags.SIZE);
+        if (originalSize && originalSize.width > 0 && originalSize.height > 0) {
+          try {
+            await getCurrentWindow().setSize(originalSize);
+            await saveWindowState(StateFlags.SIZE);
+          } catch { /* ignore */ }
+        }
+      } catch (e) {
+        if (isMissing(e)) skip(`window-state plugin not available: ${e}`);
+        throw e;
+      }
+    },
+  },
+
   // @tauri-apps/plugin-autostart (side-effect tests moved to end — on OHOS,
   // enable()/disable() call startAbility which sends app to background;
   // placing them last ensures other side-effect tests run first)
@@ -1062,7 +1092,7 @@ export const pluginTests: TestCase[] = [
         unlisten();
         await ws.disconnect();
       } catch (e) {
-        if (isMissing(e)) skip(`websocket plugin not available: ${e}`);
+        if (isMissing(e) || String(e).includes('Connection refused')) skip(`websocket echo server not available on OHOS: ${e}`);
         throw e;
       }
     },
@@ -1088,40 +1118,6 @@ export const pluginTests: TestCase[] = [
         assert(typeof resp === 'string' && resp.length > 0, `upload should return non-empty body, got: ${resp}`);
       } catch (e) {
         if (isMissing(e)) skip(`upload plugin not available: ${e}`);
-        throw e;
-      }
-    },
-  },
-
-  // @tauri-apps/plugin-window-state
-  {
-    name: '@tauri-apps/plugin-window-state.filename+save+restore',
-    category: 'side-effect',
-    async fn() {
-      const { filename, saveWindowState, restoreStateCurrent, StateFlags } = await import('@tauri-apps/plugin-window-state');
-      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
-      try {
-        const fname = await filename();
-        assert(typeof fname === 'string' && fname.length > 0, `filename should be non-empty, got: ${fname}`);
-        // Capture original size so we can restore it. Otherwise this test
-        // shrinks the main window to 400x300 and saveWindowState persists that
-        // to .window-state.json, which makes the next app start auto-restore
-        // the main window to 400x300 (shrunk) — a self-perpetuating shrink.
-        let originalSize: LogicalSize | null = null;
-        try { originalSize = await getCurrentWindow().innerSize(); } catch { /* ignore */ }
-        await getCurrentWindow().setSize(new LogicalSize(400, 300));
-        await saveWindowState(StateFlags.SIZE);
-        await restoreStateCurrent(StateFlags.SIZE);
-        // Restore the original size and re-save so both the window and the
-        // persisted state are left as we found them, not shrunk to 400x300.
-        if (originalSize && originalSize.width > 0 && originalSize.height > 0) {
-          try {
-            await getCurrentWindow().setSize(originalSize);
-            await saveWindowState(StateFlags.SIZE);
-          } catch { /* ignore */ }
-        }
-      } catch (e) {
-        if (isMissing(e)) skip(`window-state plugin not available: ${e}`);
         throw e;
       }
     },

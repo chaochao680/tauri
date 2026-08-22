@@ -53,7 +53,7 @@ codegen-units = 1
 lto = true
 incremental = false
 opt-level = "s"
-strip = true
+strip = false  # TEMP: keep symbols to symbolize main-thread freeze (tauri-ohos)
 
 # profiles for tauri-cli
 [profile.dev.package.miniz_oxide]

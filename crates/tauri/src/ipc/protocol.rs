@@ -304,6 +304,7 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         let options = message.options.unwrap_or_default();
 
         let uri = request.uri().to_string();
+        #[cfg(target_env = "ohos")]
         let url = if uri == "/" {
           webview
             .url()
@@ -311,6 +312,8 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         } else {
           Url::parse(&uri).expect("invalid IPC request URL")
         };
+        #[cfg(not(target_env = "ohos"))]
+        let url = Url::parse(&uri).expect("invalid IPC request URL");
         let request = InvokeRequest {
           cmd: message.cmd,
           callback: message.callback,
@@ -324,6 +327,14 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         #[cfg(feature = "tracing")]
         let request_span = tracing::trace_span!("ipc::request::handle", cmd = request.cmd);
 
+        #[cfg(target_env = "ohos")]
+        log::info!(
+          "[IPC-DIAG] cmd={} callback={} reached Rust on thread={:?}",
+          request.cmd,
+          request.callback.0,
+          std::thread::current().id()
+        );
+
         webview.on_message(
           request,
           Box::new(move |webview, cmd, response, callback, error| {
@@ -336,6 +347,14 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
             )
             .entered();
 
+            #[cfg(target_env = "ohos")]
+            log::info!(
+              "[IPC-DIAG] cmd={} respond invoked on thread={:?} ok={}",
+              cmd,
+              std::thread::current().id(),
+              matches!(response, InvokeResponse::Ok(_))
+            );
+
             fn responder_eval<R: Runtime>(
               webview: &crate::Webview<R>,
               js: crate::Result<String>,
@@ -346,6 +365,13 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
                 Err(e) => crate::ipc::format_callback::format(error, &e.to_string())
                   .expect("unable to serialize response error string to json"),
               };
+
+              #[cfg(target_env = "ohos")]
+              log::info!(
+                "[IPC-DIAG] responder_eval thread={:?} js_head={:?}",
+                std::thread::current().id(),
+                eval_js.chars().take(80).collect::<String>()
+              );
 
               let _ = webview.eval(eval_js);
             }

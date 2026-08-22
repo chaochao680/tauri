@@ -18,7 +18,7 @@
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
-        "launchType": "standard",
+        "launchType": "singleton",
         "recoverable": true,
         "skills": [
           {
@@ -58,6 +58,14 @@
       },
       {
         "name": "ohos.permission.LOCK_WINDOW_CURSOR"
+      },
+      {
+        "name": "ohos.permission.PRINT",
+        "reason": "$string:reason_print",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
       }
     ]
   }

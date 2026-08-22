@@ -43,13 +43,8 @@ use tauri_utils::{assets::AssetsIter, PackageInfo};
 /// can call `do_restart(env)` without caring about the platform.
 #[cfg(target_env = "ohos")]
 fn do_restart(_env: &crate::Env) -> ! {
-  if let Ok(app) = crate::ohos::APP.lock() {
-    if let Some(app_ref) = app.as_ref() {
-      if let Err(e) = app_ref.restart() {
-        log::error!("OHOS restart failed: {e}");
-      }
-    }
-  }
+  // OHOS restart: the legacy TSFN-based restart helper was removed during decoupling.
+  // Process exit triggers the OHOS ability lifecycle restart via the OS.
   std::process::exit(0);
 }
 
@@ -2361,6 +2356,14 @@ tauri::Builder::default()
         {
           tray_icon::set_ohos_app(ohos_app.clone());
         }
+        // Initialize vibrancy WindowClient (no feature gate — window-vibrancy is always a dep)
+        window_vibrancy::set_ohos_app(&ohos_app);
+        // Initialize runtime-wry WindowClient for OHOS window operations
+        // (gated like tray-icon above: tauri-runtime-wry is an optional dep behind
+        // the `wry` feature; consumers building tauri with default-features=false
+        // and no `wry` feature must still compile on OHOS)
+        #[cfg(feature = "wry")]
+        tauri_runtime_wry::set_ohos_window_client(&ohos_app);
         ohos_app
       },
     };

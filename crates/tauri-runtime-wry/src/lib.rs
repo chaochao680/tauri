@@ -135,6 +135,76 @@ use tauri_runtime::ActivationPolicy;
 #[cfg(target_env = "ohos")]
 pub use tauri_runtime::OHOSWindowKind;
 
+// ─── OHOS: global WindowClient for fire-and-forget bridge calls ────────────────
+// The bridge facade is async, but tauri-runtime-wry's call sites (focus_window,
+// set_window_focusable, destroy_window) run on the main thread where block_on
+// would deadlock. We store a WindowClient globally and spawn a worker thread for
+// each call, letting the main thread process the TSFN response asynchronously.
+#[cfg(target_env = "ohos")]
+static OHOS_WINDOW_CLIENT: std::sync::OnceLock<openharmony_ability_plugin_window::WindowClient> =
+  std::sync::OnceLock::new();
+
+/// Initializes the global `WindowClient` used by tauri-runtime-wry for OHOS window
+/// operations. Must be called once during app setup.
+#[cfg(target_env = "ohos")]
+pub fn set_ohos_window_client(app: &openharmony_ability::OpenHarmonyApp) {
+  // Register the Rust-side WebView bridge plugin. `WebviewClient::create`
+  // (called from wry's webview builder) is a bridge call routed through
+  // `WebviewBridgePlugin`; the ArkTS counterpart (`WebviewPlugin`) is already
+  // in EntryAbility's `bridgePlugins` list, but without registering the Rust
+  // side here, `create` fails with "not installed for '<module>'". This mirrors
+  // how tray-icon's `set_ohos_app` registers StatusBarBridgePlugin/MenuBridgePlugin.
+  if let Err(e) = app.register_plugin(wry::WebviewBridgePlugin) {
+    log::error!("[WRY] failed to register WebviewBridgePlugin: {}", e);
+  }
+  // Register the Rust-side Window bridge plugin (id="ohos.window"). tao's OHOS window ops
+  // (restore_window / set_window_decorations / show_window / move_window_to / resize_window ...)
+  // are routed through WindowBridgePlugin via WindowClient. The ArkTS counterpart (WindowPlugin)
+  // is already in EntryAbility's bridgePlugins list, but without this Rust-side declaration
+  // configurePlugins never installs it and every window op fails with
+  // "Bridge plugin 'ohos.window' is not installed for '<module>'". Symmetric with the
+  // WebviewBridgePlugin registration above and the demo's app.register_plugin(WindowBridgePlugin).
+  if let Err(e) = app.register_plugin(openharmony_ability_plugin_window::WindowBridgePlugin) {
+    log::error!("[WRY] failed to register WindowBridgePlugin: {}", e);
+  }
+  // Register the Rust-side URL bridge plugin (id="ohos.url"). tauri_plugin_opener's
+  // open_url/open_path route through UrlBridgePlugin via UrlExt. The ArkTS counterpart
+  // (UrlPlugin) is already in EntryAbility's bridgePlugins list, but without this Rust-side
+  // declaration configurePlugins never installs it and every open call fails with
+  // "Bridge plugin 'ohos.url' is not installed for '<module>'". Symmetric with the
+  // Webview/WindowBridgePlugin registrations above.
+  if let Err(e) = app.register_plugin(openharmony_ability_plugin_url::UrlBridgePlugin) {
+    log::error!("[WRY] failed to register UrlBridgePlugin: {}", e);
+  }
+  if let Ok(client) = openharmony_ability_plugin_window::WindowClient::new(app) {
+    if OHOS_WINDOW_CLIENT.set(client).is_err() {
+      log::warn!("[WRY] OHOS_WINDOW_CLIENT already initialized");
+    }
+  } else {
+    log::error!("[WRY] Failed to create WindowClient for OHOS");
+  }
+}
+
+/// Fire-and-forget helper: spawns a worker thread to call an async WindowClient method.
+/// Avoids main-thread deadlock since the bridge TSFN dispatch is processed on the main
+/// thread's event loop, which remains free.
+#[cfg(target_env = "ohos")]
+fn ohos_window_spawn<F>(label: &'static str, f: F)
+where
+  F: std::future::Future<Output = napi_ohos::Result<()>> + Send + 'static,
+{
+  if let Some(client) = OHOS_WINDOW_CLIENT.get() {
+    let client = client.clone();
+    std::thread::spawn(move || {
+      if let Err(e) = futures_executor::block_on(f) {
+        log::warn!("[WRY] {} failed: {:?}", label, e);
+      }
+    });
+  } else {
+    log::warn!("[WRY] {} skipped: OHOS_WINDOW_CLIENT not initialized", label);
+  }
+}
+
 use std::{
   cell::RefCell,
   collections::{
@@ -2520,15 +2590,17 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
             "[WRY] set_focus: dispatching focus_window({}) to main thread",
             id
           );
-          // NAPI env is only available on the main thread — dispatch via event loop
-          return send_user_message(
-            &self.context,
-            Message::Task(Box::new(move || {
-              if let Err(e) = openharmony_ability::window::focus_window(id) {
-                log::warn!("[WRY] focus_window({}) failed: {:?}", id, e);
-              }
-            })),
-          );
+          // Bridge facade is async; use fire-and-forget worker thread to avoid
+          // main-thread deadlock (bridge TSFN dispatch needs main thread free).
+          ohos_window_spawn("focus_window", async move {
+            OHOS_WINDOW_CLIENT
+              .get()
+              .ok_or_else(|| napi_ohos::Error::from_reason("WindowClient not init"))?
+              .clone()
+              .focus_window(id)
+              .await
+          });
+          return Ok(());
         }
         return Ok(()); // Main window: focus is OS-managed
       }
@@ -2549,19 +2621,15 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
       };
       if let Some(id) = ohos_id {
         if id > 0 {
-          return send_user_message(
-            &self.context,
-            Message::Task(Box::new(move || {
-              if let Err(e) = openharmony_ability::window::set_window_focusable(id, focusable) {
-                log::warn!(
-                  "[WRY] set_window_focusable({},{}) failed: {:?}",
-                  id,
-                  focusable,
-                  e
-                );
-              }
-            })),
-          );
+          ohos_window_spawn("set_window_focusable", async move {
+            OHOS_WINDOW_CLIENT
+              .get()
+              .ok_or_else(|| napi_ohos::Error::from_reason("WindowClient not init"))?
+              .clone()
+              .set_window_focusable(id, focusable)
+              .await
+          });
+          return Ok(());
         }
         return Ok(());
       }
@@ -4549,7 +4617,7 @@ fn handle_event_loop<T: UserEvent>(
       callback(RunEvent::Ready);
     }
 
-    Event::NewEvents(StartCause::Poll) => {
+    Event::Resumed => {
       callback(RunEvent::Resumed);
     }
 
@@ -4873,9 +4941,14 @@ fn on_window_close<'a, T: UserEvent>(
       if let Some(ref inner) = window_wrapper.inner {
         if let Some(ohos_id) = inner.window_id() {
           log::info!("[wry] on_window_close: destroy_window ohos_id={}", ohos_id);
-          if let Err(e) = openharmony_ability::window::destroy_window(ohos_id) {
-            log::warn!("[wry] on_window_close: destroy_window {} failed: {:?}", ohos_id, e);
-          }
+          ohos_window_spawn("destroy_window", async move {
+            OHOS_WINDOW_CLIENT
+              .get()
+              .ok_or_else(|| napi_ohos::Error::from_reason("WindowClient not init"))?
+              .clone()
+              .destroy_window(ohos_id)
+              .await
+          });
         }
       }
     }
@@ -5295,8 +5368,23 @@ You may have it installed on another user account, but it is not available for t
     use tao::platform::ohos::WindowExtOpenHarmony;
     use wry::WebViewBuilderExtOhos;
     if let Some(window_id) = window.window_id() {
+      log::info!("[tauri-runtime-wry DBG] window.window_id()=Some({}), passing to wry WebViewBuilder", window_id);
       webview_builder = webview_builder.with_window_id(window_id);
+    } else {
+      log::info!("[tauri-runtime-wry DBG] window.window_id()=None, NOT passing window_id to wry");
     }
+    // Forward use_https_scheme to wry (OHOS branch was missing this — Windows/Android
+    // branch above sets it, but OHOS didn't, so pl_attrs.use_https was always false
+    // and rewrite_https_url_if_matching never triggered). See ohos-webview-https-scheme.
+    webview_builder = webview_builder.with_https_scheme(webview_attributes.use_https_scheme);
+    // Forward drag_drop_overlay to wry (OHOS-only: transparent Stack that receives
+    // ArkUI drag events when ArkWeb doesn't bubble OS file drags to Web handlers).
+    // See ohos-webview-drag-drop-overlay.
+    webview_builder = webview_builder.with_drag_drop_overlay(webview_attributes.drag_drop_overlay);
+    // Pass the BridgeRuntime from the tao Window to wry's WebViewBuilder.
+    // This is required for the bridge-based webview backend (Phase B2).
+    let bridge_runtime = window.bridge_runtime();
+    webview_builder = webview_builder.with_bridge_runtime(bridge_runtime);
   }
 
   if let Some(background_throttling) = webview_attributes.background_throttling {
@@ -5390,9 +5478,13 @@ You may have it installed on another user account, but it is not available for t
         ),
       );
       match response {
-        tauri_runtime::webview::NewWindowResponse::Allow => wry::NewWindowResponse::Allow,
+        tauri_runtime::webview::NewWindowResponse::Allow => {
+          log::info!("[tauri-runtime-wry DBG] on_new_window response: Allow");
+          wry::NewWindowResponse::Allow
+        }
         #[cfg(all(desktop, not(target_env = "ohos")))]
         tauri_runtime::webview::NewWindowResponse::Create { window_id } => {
+          log::info!("[tauri-runtime-wry DBG] on_new_window response: Create (non-OHOS) window_id={:?}", window_id);
           let windows = &context.main_thread.windows.0;
           let webview = windows
             .borrow()
@@ -5423,10 +5515,14 @@ You may have it installed on another user account, but it is not available for t
           }
         }
         #[cfg(target_env = "ohos")]
-        tauri_runtime::webview::NewWindowResponse::Create { .. } => {
+        tauri_runtime::webview::NewWindowResponse::Create { window_id } => {
+          log::info!("[tauri-runtime-wry DBG] on_new_window response: Create (OHOS) window_id={:?}", window_id);
           wry::NewWindowResponse::Create {}
         }
-        tauri_runtime::webview::NewWindowResponse::Deny => wry::NewWindowResponse::Deny,
+        tauri_runtime::webview::NewWindowResponse::Deny => {
+          log::info!("[tauri-runtime-wry DBG] on_new_window response: Deny");
+          wry::NewWindowResponse::Deny
+        }
       }
     });
   }

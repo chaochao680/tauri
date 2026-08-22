@@ -16,6 +16,7 @@
     "@tauri-apps/plugin-deep-link": "file:../../../plugins-workspace/plugins/deep-link",
     "@tauri-apps/plugin-dialog": "file:../../../plugins-workspace/plugins/dialog",
     "@tauri-apps/plugin-fs": "file:../../../plugins-workspace/plugins/fs",
+    "@tauri-apps/plugin-geolocation": "file:../../../plugins-workspace/plugins/geolocation",
     "@tauri-apps/plugin-global-shortcut": "file:../../../plugins-workspace/plugins/global-shortcut",
     "@tauri-apps/plugin-http": "file:../../../plugins-workspace/plugins/http",
     "@tauri-apps/plugin-log": "file:../../../plugins-workspace/plugins/log",

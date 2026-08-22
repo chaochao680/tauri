@@ -170,7 +170,15 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       .plugin(tauri_plugin_upload::init())
       .plugin(tauri_plugin_localhost::Builder::new(3005).build())
       .plugin(tauri_plugin_opener::init())
-      .plugin(tauri_plugin_positioner::init());
+      .plugin(tauri_plugin_positioner::init())
+      // mobile-native plugins adapted to OHOS (mobile.rs run_mobile_plugin bridge)
+      .plugin(tauri_plugin_haptics::init())
+      .plugin(tauri_plugin_geolocation::init())
+      .plugin(tauri_plugin_biometric::init())
+      .plugin(tauri_plugin_nfc::init())
+      .plugin(tauri_plugin_barcode_scanner::init())
+      // OHOS-only: Huawei one-tap account login
+      .plugin(tauri_plugin_huawei_account::init());
   }
 
   #[cfg(target_env = "ohos")]
@@ -257,8 +265,32 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(all(desktop, not(test)))]
       {
         let handle = app.handle();
+        log::info!("[setup] before create_tray");
         tray::create_tray(handle)?;
+        log::info!("[setup] after create_tray, before menu_plugin::init");
         handle.plugin(menu_plugin::init())?;
+        log::info!("[setup] after menu_plugin::init");
+      }
+
+      // OHOS: forward print-job terminal states (succeed/fail/cancel/block) from the
+      // openharmony-ability crossbeam channel to the frontend as "ohos-print-state"
+      // events. The channel is fed by the bridge "print-state" main-thread event
+      // (WebviewPlugin.ets PrintTask handlers). recv runs on this worker thread only —
+      // never on the NAPI main thread (deadlock precedent).
+      #[cfg(target_env = "ohos")]
+      {
+        let app_handle = app.handle().clone();
+        std::thread::spawn(move || {
+          let receiver = openharmony_ability_plugin_webview::print_state_receiver();
+          while let Ok(event) = receiver.recv() {
+            let payload = serde_json::json!({
+              "id": event.id,
+              "state": event.state,
+              "error": event.error,
+            });
+            let _ = app_handle.emit("ohos-print-state", payload);
+          }
+        });
       }
 
       #[cfg(target_os = "macos")]
@@ -476,7 +508,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
               let deny_state = app_.state::<cmd::NewWindowDenyState>();
               *deny_state.last_url.lock().unwrap() = Some(url.to_string());
               let should_deny = deny_state.deny.load(std::sync::atomic::Ordering::SeqCst);
-              let should_create = deny_state.create.load(std::sync::atomic::Ordering::SeqCst);
 
               // Emit event for frontend test verification
               let _ = app_.emit("new-window-requested", url.to_string());
@@ -484,25 +515,50 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
               if should_deny {
                 log::debug!("[OHOS] on_new_window: DENY for URL: {}", url);
                 tauri::webview::NewWindowResponse::Deny
-              } else if should_create {
-                log::debug!("[OHOS] on_new_window: CREATE real OS window for URL: {}", url);
+              } else {
+                // #85: window.open produces a SEPARATE child window (Float OS
+                // sub-window) that loads the target URL — NOT an in-page dialog
+                // overlaying the main webview, and NOT a cancelled popup. We
+                // collapse the Allow path into Create so every window.open
+                // (unless explicitly denied) builds a real WebviewWindow with
+                // OHOSWindowKind::Float.
+                //
+                // build() is non-blocking on the UI thread (createOSWindow
+                // discards its returned Promise; webview create is
+                // runtime.spawn'd), so this ArkWeb onWindowNew callback
+                // returns synchronously — no deadlock. wry maps Create => false,
+                // so the bridge calls setWebController(null) (non-blocking
+                // cancel of ArkWeb's own popup) while the Float window is the
+                // actual popup. Verified at runtime: ARK_APP_SUBWINDOW_apiNN
+                // sub-window is created, shown, draggable, child of the main
+                // window; the Allow auto-test passes (event delivered, 2071ms).
+                log::info!("[OHOS DBG] on_new_window: CREATE real OS window for URL: {}", url);
                 let builder = WebviewWindowBuilder::new(
                   &app_,
                   format!("new-{number}"),
                   tauri::WebviewUrl::External(url.clone()),
                 )
                 .title(url.as_str())
+                // Size + offset the Float sub-window so it appears as a distinct
+                // floating popup, not a full-screen window covering the main
+                // window (createOSWindow defaults to the display size when no
+                // inner_size is set). Logical px; at DPR=2 this yields ~900x700
+                // physical pixels — a medium popup. Position offset so the main
+                // window stays visible.
+                .inner_size(450.0, 350.0)
+                .position(60.0, 45.0)
                 .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+                log::info!("[OHOS DBG] builder configured, calling build()...");
                 match builder.build() {
-                  Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                  Ok(window) => {
+                    log::info!("[OHOS DBG] build() succeeded, window created");
+                    tauri::webview::NewWindowResponse::Create { window }
+                  }
                   Err(e) => {
-                    log::error!("[OHOS] on_new_window: CREATE failed, falling back to Allow: {}", e);
-                    tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
+                    log::error!("[OHOS DBG] on_new_window: CREATE failed, falling back to Allow: {}", e);
+                    tauri::webview::NewWindowResponse::Allow
                   }
                 }
-              } else {
-                log::debug!("[OHOS] on_new_window: ALLOW dialog for URL: {}", url);
-                tauri::webview::NewWindowResponse::Allow(std::marker::PhantomData)
               }
             }
           });
@@ -530,12 +586,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       webview.eval_with_callback("document.title", |title| {
         log::info!("Window title from JS: {}", title);
       })?;
-      webview.eval(r#"
-        const div = document.createElement('div');
-        div.style.cssText = 'position:fixed;top:20px;left:20px;background:green;color:white;padding:20px;font-size:24px;z-index:9999;';
-        div.textContent = '✅ Rust eval is working!';
-        document.body.appendChild(div);
-      "#)?;
 
       #[cfg(not(target_env = "ohos"))]
       {
@@ -595,9 +645,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       });
 
       // WebSocket echo fixture for plugin-websocket tests (port 3004).
-      // Echoes Text/Binary frames back to the sender. Excluded on OHOS —
-      // tungstenite doesn't build on ohos targets and OHOS has no desktop ws test.
-      #[cfg(all(desktop, not(target_env = "ohos")))]
+      // Echoes Text/Binary frames back to the sender. tungstenite 0.24 builds
+      // on OHOS-desktop (no TLS deps in default features); same pattern as the
+      // HTTP echo server above (port 3003) which already works under cfg(desktop).
+      #[cfg(desktop)]
       std::thread::spawn(|| {
         let listener = match std::net::TcpListener::bind("localhost:3004") {
           Ok(l) => l,
@@ -691,10 +742,12 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::devtools_open_only,
       #[cfg(any(debug_assertions, feature = "devtools"))]
       cmd::devtools_close_only,
+      #[cfg(desktop)]
       cmd::set_bounds_test,
       cmd::test_persisted_scope,
       cmd::clear_persisted_scope,
       cmd::clear_window_state,
+      cmd::create_ohos_test_webview,
       cmd::create_isolated_window,
       cmd::dummy_command,
       cmd::create_window_with_custom_ua,
@@ -740,6 +793,7 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(target_env = "ohos")]
       cmd::get_ohos_version_info,
       cmd::test_web_page_snapshot,
+      #[cfg(target_env = "ohos")]
       cmd::test_create_pdf,
       cmd::set_download_test_mode,
       #[cfg(desktop)]

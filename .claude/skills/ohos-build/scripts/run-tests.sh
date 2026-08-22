@@ -55,7 +55,7 @@ if [ -d "$ABILITY_ROOT" ]; then
         ABILITY_CHANGED=true
     else
         # Check if any source file is newer than the HAR
-        NEWER=$(find "$ABILITY_ROOT/native_ability/src" "$ABILITY_ROOT/crates" -newer "$ABILITY_HAR" -type f 2>/dev/null | head -1)
+        NEWER=$(find "$ABILITY_ROOT/native_ability/src" "$ABILITY_ROOT/crates" "$ABILITY_ROOT/plugins" -newer "$ABILITY_HAR" -type f 2>/dev/null | head -1)
         if [ -n "$NEWER" ]; then
             ABILITY_CHANGED=true
         fi

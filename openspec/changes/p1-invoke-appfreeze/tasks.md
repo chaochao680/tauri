@@ -31,3 +31,13 @@
 - [x] 5.2 对照 OHOS 三铁律：openharmony-ability 桥接（不涉及）、cfg 隔离（`cfg(target_env = "ohos")`）、OHOS_DEVICE_TYPE（desktop/mobile 均硬化）
 - [x] 5.3 对照 ohos-constraints.md 线程模型：确认未引入 `run_on_main_thread + recv()` 死锁、未跨阻塞 I/O 持锁（降级路径在阻塞池线程持锁，非主线程）
 - [x] 5.4 非 OHOS 平台 invoke 行为回归：手工/自动测试 plugin 命令派发与 reject 路径，确认无回归
+
+## 6. 异步命令响应 waker/drain 通道（Addendum，#81 第二层根因）
+
+- [x] 6.1 drain 修复（前序会话）：`tao/.../ohos/mod.rs:690` `MainEvent::UserEvent` 分支由单次 `try_recv` 改 `while let` 全量 drain（应对 TSFN NonBlocking 唤醒合并）
+- [x] 6.2 根因定位：`OpenHarmonyWaker` 在 `create_proxy` 时快照 `WAKER`，而 `WAKER` 由 `create_lifecycle_handle` 在 `#fn_name` 之后（derive/lib.rs:136）才填充 → 快照永久 None → `wake()` 空操作 → `MainEvent::UserEvent` 不 fire → 异步响应不 drain → 超时
+- [x] 6.3 waker live-read 修复：`openharmony-ability/crates/ability/src/waker.rs` `OpenHarmonyWaker::wake()` 改实时读 `WAKER` 全局；struct 改零字段 + `#[derive(Clone)]`；`create_waker`（app.rs:160）返回 `OpenHarmonyWaker::new()` 不快照；移除 app.rs 的 `WAKER` 未用 import
+- [x] 6.4 审计子 agent 复核：live-read 修法 sound、保留 `WindowsStore` 主线程 borrow 不变量、三铁律合规；指出残留 TSFN 主线程派发风险须实测
+- [x] 6.5 实测验证（HUAWEI MateBook Pro desktop）：`[WAKE-CALL] waker=Some` + `[WAKE-FIRE]` 在主线程 ThreadId(1) fire + `[DRAIN-DIAG]` drained N events（修前 count=0）；163 wake→163 fire→163 drain；修前超时的异步窗口命令（set_position/set_size/maximize/unmaximize/create_transparent_borderless_window）现在 PASS
+- [x] 6.6 清理本会话临时 `[WAKE-CALL]`/`[WAKE-FIRE]` INFO 诊断日志（已确认修复，高频刷屏 hilog 挤掉测试结果）；`[DRAIN-DIAG]`/`[IPC-DIAG]` 待 #65 统一清理
+- [ ] 6.7 残留：#85 多窗口 `window.open` 死锁（#81 修好后由"5s 超时"转为"主线程死锁"，须修 #85 才能跑完整套件）

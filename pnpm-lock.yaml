@@ -41,6 +41,9 @@ importers:
       '@tauri-apps/plugin-fs':
         specifier: file:../../../plugins-workspace/plugins/fs
         version: file:../plugins-workspace/plugins/fs
+      '@tauri-apps/plugin-geolocation':
+        specifier: file:../../../plugins-workspace/plugins/geolocation
+        version: file:../plugins-workspace/plugins/geolocation
       '@tauri-apps/plugin-global-shortcut':
         specifier: file:../../../plugins-workspace/plugins/global-shortcut
         version: file:../plugins-workspace/plugins/global-shortcut
@@ -1662,6 +1665,9 @@ packages:
 
   '@tauri-apps/plugin-fs@file:../plugins-workspace/plugins/fs':
     resolution: {directory: ../plugins-workspace/plugins/fs, type: directory}
+
+  '@tauri-apps/plugin-geolocation@file:../plugins-workspace/plugins/geolocation':
+    resolution: {directory: ../plugins-workspace/plugins/geolocation, type: directory}
 
   '@tauri-apps/plugin-global-shortcut@file:../plugins-workspace/plugins/global-shortcut':
     resolution: {directory: ../plugins-workspace/plugins/global-shortcut, type: directory}
@@ -3950,6 +3956,10 @@ snapshots:
       '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-fs@file:../plugins-workspace/plugins/fs':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-geolocation@file:../plugins-workspace/plugins/geolocation':
     dependencies:
       '@tauri-apps/api': 2.11.0
 

@@ -933,7 +933,12 @@ struct MenuChannels(Mutex<HashMap<MenuId, Channel<MenuId>>>);
 pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
   #[cfg(target_env = "ohos")]
   {
-    openharmony_ability::start_popup_forwarder();
+    // Legacy popup/menu forwarder replaced by the MenuBridgePlugin facade.
+    // Menu operations (set-menubar, popup, set-menubar-visible, execute-predefined)
+    // now route through MenuClient (openharmony-ability-plugin-menu) which calls
+    // the ArkTS MenuPlugin directly via the typed bridge.
+    // Menu click events flow back through MenuBridgePlugin::on_main_thread_event
+    // → MENU_EVENT_SENDER, which muda registers via register_menu_event_sender().
   }
 
   #[allow(unused_mut)]

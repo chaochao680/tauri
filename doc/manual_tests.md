@@ -14,13 +14,13 @@
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
-| core | tray | 创建与图标 | Full Test Tray — 创建托盘与图标显示 | **T0** | 应用已启动，进入 Tray 页面 | 1. 点击 "Full Test Tray" 按钮 2. 确认状态栏出现托盘图标 3. 左键点击托盘图标 | ① UI 输出 `Full test tray created` ② 状态栏显示托盘图标（32×32 默认图标） ③ 左键点击弹出 QuickOperation 系统面板，标题 "Tauri API"（无 TrayIconEvent 输出） | QuickOperation 配置：title="Tauri API"，height=300，abilityName="TestTrayAbility" |
+| core | tray | 创建与图标 | Full Test Tray — 创建托盘与图标显示 | **T0** | 应用已启动，进入 Tray 页面 | 1. 点击 "Full Test Tray" 按钮 2. 确认状态栏出现托盘图标 3. 左键点击托盘图标 | ① UI 输出 `Full test tray created` ② 状态栏显示托盘图标（32×32 默认图标） ③ 左键点击弹出 QuickOperation 系统面板，标题 "Tauri API"（QuickOp 面板拦截左键点击；验证 TrayIconEvent 输出需清空 abilityName，见 icon-click 用例 L308） | QuickOperation 配置：title="Tauri API"，height=300，abilityName="TestTrayAbility" |
 | core | tray | 右键菜单显示 | Full Test Tray — 右键菜单结构与项类型 | **T0** | 已创建 Full Test Tray | 1. 右键点击（或长按）状态栏托盘图标 2. 检查菜单整体结构 3. 逐项检查各类型菜单项显示 | ① 弹出上下文菜单 ② 自定义项正确显示：Normal Item（普通文字）、Check Item（未勾选状态）、Icon Item（带图标+文字）、Another Normal（普通文字） ③ 分隔符正确渲染为分隔线 ④ 预定义项正确显示：Copy/Cut/SelectAll/Undo/Redo/Minimize/Maximize/Fullscreen/CloseWindow/Hide/Quit | 菜单共含 4 个自定义项 + 4 个分隔符 + 11 个预定义项（不含 Paste 和 3 个分隔符预定义项） |
 | core | tray | 菜单项点击事件 | Full Test Tray — 自定义菜单项点击 | **T0** | 已创建 Full Test Tray；已右键打开菜单 | 1. 点击菜单中的 "Normal Item" 2. 重新打开菜单，点击 "Check Item" 3. 重新打开菜单，点击 "Icon Item" | ① 点击 Normal Item → Menu Event Log 输出 `[menu-event #N lid=1] global:normal-item at <时间>` ② 点击 Check Item → 输出 `[menu-event #N lid=1] global:check-item at <时间>` ③ 点击 Icon Item → 输出 `[menu-event #N lid=1] global:icon-item at <时间>` ④ 每次点击后菜单自动关闭 | 验证自定义 MenuItem action 回调 + Rust 全局事件转发 |
-| core | tray | 预定义菜单项功能 | Full Test Tray — 预定义菜单项操作验证 | **T0** | 已创建 Full Test Tray；输入框有文本可用于剪贴板测试 | 1. 在输入框中选中一段文本 2. 右键打开托盘菜单，点击 Copy → 在另一处粘贴，验证复制成功 3. 重新选中输入框文本 4. 打开菜单，点击 Cut → 粘贴验证剪切成功 5. 打开菜单，点击 Minimize → 窗口最小化到任务栏，点击任务栏图标恢复窗口 6. 打开菜单，点击 Maximize → 窗口铺满全屏 7. 打开菜单，点击 Fullscreen → 进入沉浸式全屏，按 Esc 退出 8. 打开菜单，点击 Hide → 窗口隐藏，从任务栏点击恢复 9. 打开菜单，点击 CloseWindow → 窗口关闭 | ① Copy：文本被复制到剪贴板，Menu Event Log 输出 `global:copy` ② Cut：文本从输入框消失且被复制到剪贴板，输出 `global:cut` ③ Minimize：窗口最小化到任务栏 ④ Maximize：窗口铺满全屏 ⑤ Fullscreen：进入沉浸式全屏，菜单栏隐藏，Esc 恢复 ⑥ Hide：窗口隐藏，从任务栏点击可恢复 ⑦ CloseWindow：窗口关闭 ⑧ 每个操作 Menu Event Log 均有对应 id 输出 | **不测试 Paste**（OHOS 剪贴板读权限限制）；Quit 会退出应用，建议最后测试 |
+| core | tray | 预定义菜单项功能 | Full Test Tray — 预定义菜单项操作验证 | **T0** | 已创建 Full Test Tray；输入框有文本可用于剪贴板测试 | 1. 在输入框中选中一段文本 2. 右键打开托盘菜单，点击 Copy → 在另一处粘贴，验证复制成功 3. 重新选中输入框文本 4. 打开菜单，点击 Cut → 粘贴验证剪切成功 5. 打开菜单，点击 Minimize → 窗口最小化到任务栏，点击任务栏图标恢复窗口 6. 打开菜单，点击 Maximize → 窗口铺满全屏 7. 打开菜单，点击 Fullscreen → 进入沉浸式全屏，按 Esc 退出 8. 打开菜单，点击 Hide → 窗口隐藏，从任务栏点击恢复 9. 打开菜单，点击 CloseWindow → 窗口关闭 | ① Copy：文本被复制到剪贴板，Menu Event Log 输出 `global:copy` ② Cut：文本从输入框消失且被复制到剪贴板，输出 `global:cut` ③ Minimize：窗口最小化到任务栏，无闪烁（窗口不弹回前台） ④ Maximize：窗口铺满全屏 ⑤ Fullscreen：进入沉浸式全屏，菜单栏隐藏，Esc 恢复 ⑥ Hide：窗口隐藏，从任务栏点击可恢复 ⑦ CloseWindow：窗口关闭 ⑧ 每个操作 Menu Event Log 均有对应 id 输出 | **不测试 Paste**（OHOS 剪贴板读权限限制）；Quit 会退出应用，建议最后测试；Minimize 验证 minimizeWithRestoreGuard 已恢复（WINDOW_ACTIVE 竞态保护，hilog 标记 `minimizeWithRestoreGuard: minimizing (settled)`） |
 | core | tray | 托盘创建 | Tray Page — 自定义参数创建托盘 | **T1** | 应用已启动，进入 Tray 页面 | 1. 填写 Title/Tooltip/Icon 等参数 2. 点击 "Create tray" 按钮 | 托盘图标按配置参数创建成功；状态栏显示对应图标；悬停显示 tooltip | 会先移除已有的 tray-1 和 manual-tray；OHOS 有 500ms 延迟 |
 | core | tray | 托盘清理 | Tray Page — Remove All Trays | **T1** | 已创建过托盘图标 | 1. 点击 "Remove All Trays" 按钮 | 所有托盘图标（tray-1、manual-tray、full-test-tray）从状态栏消失 | 验证批量移除能力 |
-| core | tray | QuickOperation | Enable QuickOp — 启用快速操作面板 | **T1** | 应用已启动；tray-1 存在；TestTrayAbility 已在 module.json5 注册 | 1. 点击 "Enable QuickOp" 按钮 2. 左键点击状态栏托盘图标 | 系统弹出快速操作面板，标题 "Test Panel"，高度 250vp | **仅 OHOS 平台**；需预注册 abilityName |
+| core | tray | QuickOperation | Enable QuickOp — 启用快速操作面板 | **T1** | 应用已启动；tray-1 已创建（Tray 页 "Create tray"）；TestTrayAbility 已在 module.json5 注册 | 1. 在 TestRunner 页 Manual Tests 区域点击 "Enable QuickOp" 按钮 2. 左键点击状态栏托盘图标 | 系统弹出快速操作面板，标题 "Test Panel"，高度 250vp | **仅 OHOS 平台**；需预注册 abilityName；按钮内部 `getById('tray-1')`，只对 tray-1 生效 |
 | core | tray | QuickOperation | Update QuickOp — 更新快速操作参数 | **T1** | QuickOperation 已启用 | 1. 点击 "Update QuickOp" 按钮 2. 左键点击托盘图标 | 弹出面板标题变为 "Updated Title"，高度变为 400vp | **仅 OHOS 平台** |
 | core | tray | QuickOperation | Disable QuickOp — 禁用快速操作 | **T1** | QuickOperation 已启用 | 1. 点击 "Disable QuickOp" 按钮 2. 左键点击托盘图标 | 不再弹出面板，仅触发点击事件 | **仅 OHOS 平台**；setQuickOperation(null) |
 | core | tray | icon_as_template | Icon as Template — template 模式下深色/浅色壁纸适配 | **T0** | 应用已启动，进入 Manual Tests 区域 | 1. 点击 "Icon as Template (check wallpaper)" 按钮 2. 确认状态栏出现托盘图标 3. 切换系统深色/浅色壁纸 4. 观察状态栏图标颜色变化 | ① 托盘图标创建成功（iconAsTemplate=true） ② 深色壁纸下图标为白色版本（保持可见） ③ 浅色壁纸下图标为黑色版本（保持可见） ④ 切换后图标颜色自动适配，无需重建托盘 | **仅 OHOS 平台**；验证 `to_monochrome()` 生成的白/黑双色 PixelMap 正确工作 |
@@ -305,7 +305,7 @@
 | core | predefined-multi-window | hide-restore | Menu Close 主窗口 → 托盘左键恢复 | **T0** | 应用已启动；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空 | 1. 点击主窗口使其成为焦点 2. 右键点击托盘图标打开菜单 3. 点击 CloseWindow 4. 确认应用隐藏到后台 5. 左键点击状态栏托盘图标 | ① 步骤 4 应用隐藏（主窗口 close 等价于 hideAbility），所有窗口不可见 ② 步骤 5 应用恢复到前台 ③ hilog 无 crash 或 freeze | 验证：closeWindow(id=0) → hideAbility()；主窗口不可 destroyWindow（WindowStage 会失效） |
 | core | predefined-multi-window | window-lifecycle | Menu Minimize — 最小化到最近任务 | **T1** | 应用已启动 | 1. 右键点击托盘图标打开菜单 2. 点击 Minimize | ① 窗口最小化到最近任务列表 ② 从最近任务列表点击可恢复应用 ③ 行为与修改前一致（未回归） | 验证：minimize 行为不变 |
 | core | predefined-multi-window | window-lifecycle | Menu Quit — 应用退出 | **T1** | 应用已启动 | 1. 右键点击托盘图标打开菜单 2. 点击 Quit | ① 应用完全退出 ② 不在最近任务列表中 ③ 行为与修改前一致（未回归） | 验证：quit 使用 terminateSelf()，行为不变 |
-| core | predefined-multi-window | icon-click | 前台点击托盘图标 — 无副作用 | **T1** | 应用已启动且在前台；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空 | 1. 确保应用在前台显示 2. 左键点击状态栏托盘图标 | ① 应用保持在前台，无闪烁或抖动 ② 无异常行为 ③ hilog 无错误日志 | 验证：startAbility() 幂等安全，应用已在前台时不产生副作用 |
+| core | predefined-multi-window | icon-click | 前台点击托盘图标 — 无副作用 | **T1** | 应用已启动且在前台；已创建 Full Test Tray；QuickOperation 的 abilityName 已清空 | 1. 确保应用在前台显示 2. 左键点击状态栏托盘图标 | ① 应用保持在前台，无闪烁或抖动 ② Tray 页面消息输出 `tray event: {"type":"click",...,"button":"Left","buttonState":"Up"}`（TrayIconEvent 已转发到前端） ③ hilog 无错误日志 | 验证：startAbility() 幂等安全 + iconClickHandler → bridge icon-click → Rust TrayIconEvent 事件链完整 |
 | core | predefined-multi-window | restore | Tray ShowAll — 隐藏后恢复应用 | **T0** | 应用已启动；已创建 Full Test Tray（含 ShowAll 菜单项） | 1. 右键点击托盘图标打开菜单 2. 点击 Hide 3. 确认应用隐藏 4. 右键点击托盘图标打开菜单 5. 点击 ShowAll | ① 步骤 3 应用隐藏到后台 ② 步骤 5 应用恢复到前台 ③ 所有窗口可见 | 验证：showAll → showAbility() + 遍历窗口 showWindow() |
 | core | predefined-multi-window | restore | Tray BringAllToFront — 隐藏后恢复应用 | **T0** | 应用已启动；已创建 Full Test Tray（含 BringAllToFront 菜单项） | 1. 右键点击托盘图标打开菜单 2. 点击 Hide 3. 确认应用隐藏 4. 右键点击托盘图标打开菜单 5. 点击 BringAllToFront | ① 步骤 3 应用隐藏到后台 ② 步骤 5 应用恢复到前台 ③ 所有窗口可见 | 验证：bringAllToFront 在 OHOS 上等价于 showAll（无跨应用置顶权限） |
 | core | predefined-multi-window | restore | BringAllToFront 子窗口恢复 | **T1** | 应用已启动；已创建子窗口；子窗口处于最小化状态 | 1. 确保主窗口可见 2. 右键点击托盘图标打开菜单 3. 点击 BringAllToFront | ① 主窗口保持可见 ② 被最小化的子窗口恢复显示 | 验证：遍历 WindowManager 所有窗口调用 showWindow() 可恢复最小化子窗口 |
@@ -396,7 +396,7 @@
 
 ---
 
-## 十九、Deep-Link 手动用例
+## 二十、Deep-Link 手动用例
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
@@ -404,7 +404,7 @@
 | core | deep-link | getCurrent | getCurrent 冷启动 — 首启动链接拉起 | **T0** | app 未运行 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://coldstart"` 3. 等 app 冷启动后在 TestRunner UI manual 区点击 "getCurrent" 按钮 | UI 消息区显示 `[deep-link] getCurrent → ["taurideeplink://coldstart"]` | 冷启动 onCreate want.uri 经 lazy take 注入 |
 | core | deep-link | 外部唤起 | 外部链接唤起 app — 跨 app 跳转 | **T0** | app 已安装 | 1. `hdc shell "aa force-stop com.tauri.api"` 2. `hdc shell "aa start -U taurideeplink://foreground-test"` | app 唤起到前台（onCreate 冷启动或 onNewWant 运行中） | aa start -U 与浏览器点击 `<a href>` 走相同系统 Want 路由（module.json5 skills 匹配）；浏览器地址栏直接输入 scheme 会被当搜索词 |
 
-## 二十、Window Operations（窗口操作）手动用例
+## 二十一、Window Operations（窗口操作）手动用例
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
@@ -414,19 +414,22 @@
 | core | persisted-scope | save | fs scope 保存到文件 | **T0** | app 已运行（建议先点 "Persisted-Scope Clear" 清掉旧 `.persisted-scope` 避免残留干扰） | 1. 在 TestRunner UI 底部 "Window Operations & Persisted-Scope Manual Tests" 区点击 "Persisted-Scope Test" 按钮 2. 查看按钮下方显示的结果 3.（可选）`hdc shell ls -l <结果中的 state_file 路径>` 核对文件落盘 | ① `allow_directory: ✅ 成功` ② `.persisted-scope 文件: ✅ 已生成 (N bytes)` ③ `路径:` 显示 state_file 完整路径 | 因 OHOS 不支持 DragDrop（tao OHOS 未实现 DragDrop 事件），通过自定义 `test_persisted_scope` command 直接调 `scope.allow_directory(test_path, true)` 触发 PathAllowed 事件 → persisted-scope 插件监听该事件并把 `allowed_patterns()` 写入 `.persisted-scope`（bincode 二进制）。注意：该 command 返回 `allow_ok / test_path / state_file / state_file_exists / state_file_size`，**不返回 allowed_patterns 数量**，故本步只验证文件生成。 |
 | core | persisted-scope | restore | 重启后 fs scope 自动恢复 | **T0** | 已执行 save 用例（`.persisted-scope` 文件已生成） | 1. 重启 app：`hdc shell aa force-stop com.tauri.api` 后重新启动 2. 重启后**先不要点 Test**（点 Test 会再次 `allow_directory` 同一路径，使 count 恒为 2，掩盖 restore 是否生效，见备注） 3. 直接点击 "Persisted-Scope Clear" 按钮 4. 查看按钮下方**结果框**（mono 字体 div）的 `remaining_patterns_count`（注意：消息区会被随后的 "Console log saved" 覆盖，看结果框或 hilog） | ① `文件删除: ✅ 已删除`（证明 `.persisted-scope` 跨重启留存）+ `remaining_patterns_count > 0`（典型 = 2：`test_path` + `test_path/**`，因 `allow_directory(recursive=true)` 一次加 2 个 pattern，`crates/tauri/src/scope/fs.rs:284-287`）→ ✅ restore 生效 ② `remaining_patterns_count = 0` → ❌ restore 失败（文件未读 / app_data_dir 在 setup 时不可用 / 反序列化失败） | persisted-scope 插件 setup 时读取 `.persisted-scope`（bincode 反序列化）并对每个 allowed_paths 调 `allow_path`→`scope.allow_directory` 恢复 fs scope。`allow_directory(path, true)` 一次加 2 个 pattern（`path` + `path/**`），fs scope allowed_patterns 是 **HashSet**（`crates/tauri/src/scope/fs.rs`）对同路径幂等去重——故重启后点 Test 仍是 2（不新增），这正是"必须不点 Test 直接 Clear"的原因：不点 Test 时 count>0 证明 restore、count=0 证明失败；点了 Test 则 count 恒=2 无法区分。`clear_persisted_scope` 是唯一返回 count 的入口（读 `scope.allowed_patterns().len()`），但会删 `.persisted-scope`，重复验证需先点 Test 重新保存。 |
 
-## 二十一、Opener（打开文件/URL）手动用例
+## 二十二、Opener（打开文件/URL）手动用例
 
-> autotest 已移除（原 `category:'manual'` 被运行器一律 skip，零覆盖）。opener 的 OHOS 实现走 `openharmony_ability::open_with_system` / `reveal_in_dir`（系统意图），行为依赖系统，必须人眼验证。测试入口：TestRunner 底部 "Plugins Manual Tests" 区按钮。
+> autotest 已移除（原 `category:'manual'` 被运行器一律 skip，零覆盖）。opener 的 OHOS 实现走 `openharmony_ability::open_with_system` / plugin-url bridge `reveal-in-dir`（系统意图），行为依赖系统，必须人眼验证。测试入口：TestRunner 底部 "Plugins Manual Tests" 区按钮。
+>
+> **revealItemInDir 平台限制说明**：OHOS 文件管理器**不支持高亮选中文件**（无此 API），只能打开目标路径的**父目录**。**应用沙箱路径**（appCacheDir、`/data/storage/` 等）无法在文件管理器打开（平台限制，非 bug），会返回 documented 错误；只有**公共目录**（`/storage/media/100/local/files/<顶层>` 且顶层可映射为 FM 虚拟名）可 reveal。
 
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
 | core | opener | openPath | Opener openPath — 打开文件 | **T0** | app 已运行，进入 TestRunner → "Plugins Manual Tests" 区 | 1. 点击 "Opener openPath (open file)" 按钮 2. 观察系统反应 3. 查看按钮下方 manualResult 输出 | ① manualResult 输出 `openPath(<appCacheDir>/opener-<ts>.txt) called.` ② 系统弹出默认文本查看器/编辑器打开该文件（或文件管理器） ③ 无 `OpenharmonyAbility` 错误 | OHOS 实现：`commands.rs:84` `open_path` → `openharmony_ability::open_with_system(file_uri)`。文件写入 appCacheDir。`open with` 参数在 OHOS 被忽略 |
-| core | opener | revealItemInDir | Opener revealItemInDir — 在文件管理器中定位 | **T0** | app 已运行 | 1. 点击 "Opener revealItemInDir" 按钮 2. 观察系统反应 3. 查看 manualResult | ① manualResult 输出 `revealItemInDir(<path>) called.` ② 系统文件管理器打开并定位/高亮该文件 ③ 无错误 | OHOS 实现：`commands.rs:103` `reveal_item_in_dir` → 取 parent 目录 → `openharmony_ability::reveal_in_dir(parent_uri)` |
+| core | opener | revealItemInDir | Opener revealItemInDir — 沙箱路径返回 documented 错误 | **T0** | app 已运行 | 1. 点击 "Opener revealItemInDir (sandbox→err)" 按钮 2. 查看 manualResult 3. 观察系统反应 | ① manualResult 输出 `revealItemInDir(<appCacheDir>/opener-reveal-<ts>.txt) → documented error (expected):` ② 错误信息含 `app-sandbox paths` / `platform limitation` ③ 文件管理器/备忘录**不**打开 | OHOS 平台限制：FM 无法打开应用沙箱路径。实现：`reveal_item_in_dir.rs` OHOS imp 传父目录真实路径 → `UrlPlugin.ets` `mapToVirtualUri` 沙箱检测 → `[reveal-in-dir]` 错误上抛 |
+| core | opener | revealItemInDir | Opener revealItemInDir — 公共目录打开 FM | **T0** | app 已运行；输入框路径默认 `/storage/media/100/local/files/Docs/IDEProjects`（该目录需真实存在，可改为 Docs 下任意已存在文件/目录） | 1. 在输入框确认/填入公共目录下真实存在的路径 2. 点击 "Opener revealItemInDir (public dir→FM)" 3. 观察 FM | ① FM 打开所填路径的**父目录**（地址栏显示 `我的电脑>文档>...`） ② **不**高亮选中文件（OHOS 无此能力，平台限制，非 FAIL 项） ③ 无错误 | 实证形态：显式 Want `{bundleName:com.huawei.hmos.filemanager, abilityName:MainAbility, moduleName:pc, uri:file://docs/storage/Users/currentUser/<虚拟名>/<子路径>}`（viewData+file:// 永远到不了 FM，只注册压缩包类型）。仅 Documents 虚拟名实证；Desktop/Download/Images/Music/Videos 为推断待验。**公共路径在应用命名空间不可见**（/storage/media 未挂载 + hmdfs hmmac 拒绝，均 ENOENT），Rust 侧 canonicalize 失败时按原始路径透传（沙箱路径仍校验），映射支持三种基前缀（/storage/media/100/local/files/、/storage/Users/currentUser/files/、/storage/Users/currentUser/） |
 | core | opener | openUrl | Opener openUrl — 打开 URL | **T0** | app 已运行；设备已联网 | 1. 点击 "Opener openUrl (open browser)" 按钮 2. 观察系统反应 3. 查看 manualResult | ① manualResult 输出 `openUrl('https://tauri.app') called.` ② 系统浏览器打开 https://tauri.app ③ 无错误 | OHOS 实现：`commands.rs:42` `open_url` → `openharmony_ability::open_with_system(url)`。**autotest 从未覆盖 openUrl**，仅手动验证 |
 
 ---
 
-## 二十二、Store（持久化存储）手动用例
+## 二十三、Store（持久化存储）手动用例
 
 > autotest 仅覆盖内存 CRUD（set/get/has/keys/entries/delete/close），**刻意不碰 Exit/Drop 路径**。store timeout 修复（OHOS Drop-skip `store.rs:644`、Exit `save_or_skip` `store.rs:555`/`lib.rs:454`）是 defense-in-depth，autotest 不覆盖；磁盘持久化（set→退出→重开→数据在）也需手动验证。测试入口：TestRunner "Plugins Manual Tests" 区。
 
@@ -438,7 +441,7 @@
 
 ---
 
-## 二十三、Upload（文件上传）手动用例
+## 二十四、Upload（文件上传）手动用例
 
 > autotest 调 upload 并注册 progress 回调，但**只断言响应体非空，未断言 progress 回调触发**。本用例验证 progress 事件确实触发。测试入口：TestRunner "Plugins Manual Tests" 区。依赖 app 内 3003 端口 echo server（autotest upload 已验证可用）。
 
@@ -448,7 +451,7 @@
 
 ---
 
-## 二十四、Localhost（本地资源服务）手动用例
+## 二十五、Localhost（本地资源服务）手动用例
 
 > autotest fetch `127.0.0.1:3005/index.html` 断言 200 + body，但**未直接断言 CORS 头**。本用例显式检查 `Access-Control-Allow-Origin`。测试入口：TestRunner "Plugins Manual Tests" 区。
 
@@ -458,7 +461,121 @@
 
 ---
 
-## 二十五、用例统计
+## 二十六、OHOS 适配真 gap 功能 手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| ohos | drag-overlay | drag-in | Overlay 拖拽接收 — 文件拖入 webview | **T0** | 修改 app 配置添加 `.with_drag_drop_overlay(true)` + `drag_drop_handler`，重新构建部署；desktop 形态 | 1. 从文件管理器拖拽文件到 webview 区域 2. 释放 3. 观察 hilog 搜 `onDragAndDrop` | ① `Enter` → `Over` → `Drop(paths)` → `Leave` 事件序列 ② paths 含拖入文件的 URI ③ Web 级 handler 被抑制（不双发） | 若 overlay 也不触发 → ArkUI 不下发拖拽事件（平台限制）；需改 app 配置重建 |
+| ohos | drag-overlay | pointer-passthrough | Overlay 透传 — 鼠标/触摸不受影响 | **T0** | 同上（overlay 已渲染） | 1. 在 webview 区域点击、滚动、选中文本 2. 页内 HTML5 拖拽（DOM 元素间拖动） | ① 鼠标点击/滚动/触摸正常响应 ② 文本选择正常 ③ HTML5 DnD 不被 overlay 干扰 | `HitTestMode.Transparent` 透传指针事件 |
+| ohos | https-scheme | page-load | HTTPS Scheme — 页面加载 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "HTTPS Scheme" 按钮 2. 观察弹出的测试窗口页面是否渲染 3. hilog 搜 `onInterceptRequest` | ① `onInterceptRequest` 触发 ② custom_protocol 闭包被调用 ③ 页面 HTML 正常渲染 | 若不触发 → onInterceptRequest 不对主框架导航生效（降级） |
+| ohos | https-scheme | secure-context | HTTPS Scheme — Secure Context 验证 | **T0** | 同上；页面加载成功 | 1. 在测试窗口的 DevTools 控制台执行 `window.isSecureContext` 2. 执行 `crypto.subtle.digest('SHA-256', new TextEncoder().encode('hello'))` 3. hilog 搜 `isSecureContext` | ① `isSecureContext === true` ② `crypto.subtle.digest(...)` 返回 ArrayBuffer（32 bytes） ③ 不抛异常 | **最终验收门槛**：若 `false` → ArkWeb 不识别自定义 https origin（降级 A/B/C） |
+| ohos | https-scheme | external-https | HTTPS Scheme — 外部 HTTPS 不被误拦截 | **T1** | 同上 | 1. 在测试窗口的 DevTools 控制台执行 `fetch('https://example.com')` 2. 观察请求是否正常完成 3. hilog 确认 `onInterceptRequest` 返回 null | ① 外部 https 请求正常完成 ② `onInterceptRequest` 返回 null（不匹配 custom protocol） | 非匹配 URL 返回 null，ArkWeb 走默认网络栈 |
+| ohos | https-scheme | subresource | HTTPS Scheme — 子资源 fetch/XHR 拦截 | **T1** | 同上 | 1. 在测试窗口的 DevTools 控制台执行 `fetch('tauri://localhost/api')`（改写为 `https://tauri.localhost/api`） 2. hilog 搜 `onInterceptRequest` | ① `onInterceptRequest` 对 fetch/XHR 子资源触发 ② custom_protocol 闭包被调用 ③ fetch 返回闭包响应 | 验证子资源请求也被拦截 |
+
+## 二十七、OHOS 适配 8 项功能 手动用例
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| ohos | monitor | refresh-rate | 刷新率真实值 — DisplayManager | **T0** | 应用已启动，进入 Tests 页面 | 1. 等待 auto 测试自动运行 2. 查看 `monitor.real-size` 结果 3. hilog 搜 `monitor` 看输出的 size/scaleFactor | ① auto 测试 PASS ② `size.width > 0 && size.height > 0` ③ 值不随窗口最小化/恢复变化（DisplayManager 物理像素） | `app.refresh_rate()` 取真实刷新率（非硬编码 60） |
+| ohos | monitor | from-point | monitor_from_point — 边界判定 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "Monitor Info" 按钮 2. 查看输出的 monitor size + 测试点说明 3. hilog 确认 `monitor_from_point` 无 warn 日志 | ① 显示 monitor size（DisplayManager 物理像素） ② 屏幕内坐标返回 `Some(primary)` ③ 屏幕外坐标返回 `None` ④ 无 warn | OHOS 单显示器，边界判定 `0<=x<w && 0<=y<h`；JS API 不暴露 from_point，通过 hilog/Rust 验证 |
+| ohos | webview | print | WebView 打印 — 系统打印对话框 | **T0** | 应用已启动；页面已加载（onPageEnd）；进入 Tests 页面 | 1. 点击 "WebView Print" 按钮 2. 观察系统打印对话框 3. 检查临时 PDF 清理（hilog 搜 `print`） | ① 弹出系统打印对话框 ② 打印任务提交后 `log.info('print: job submitted')` ③ 临时 PDF 文件清理（`fileIo.unlinkSync`） ④ 页面未加载时返回 Err | `@ohos.print` + `createPdf` 降级 |
+| ohos | event | start-resumed | MainEvent::Start → Event::Resumed 转发 | **T0** | 应用已启动 | 1. 点 `RunEvent::Resumed` 按钮（监听 tauri://resumed）2. 按 Home 键将应用切到后台 3. 从最近任务列表切回应用 4. 看按钮结果（30s 内 PASS/FAIL） | ① 切回时 `Resumed` 事件触发，按钮显示 PASS ② hilog 无 `warn: TODO: forward onStart` ③ 与 SurfaceCreate/Resume 的重复 Resumed 可接受（幂等） | tao `MainEvent::Start`（SHOWN）转发为 `Event::Resumed`；按钮自动监听 30s |
+| ohos | event | save-state | MainEvent::SaveState 降级 | **T1** | 应用已启动 | 1. 触发系统内存回收（打开多个应用占用内存后切回） 2. hilog 搜 `SaveState` | ① `debug: SaveState has no tao Event equivalent; dropped` ② 无 `warn` 噪音 ③ 不转发任何 Event | tao 无 SaveState 变体，降级为 debug log |
+| ohos | clipboard | flag-off | with_clipboard(false) — 拦截 Ctrl+C | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Clipboard OFF" 按钮 2. 在弹出的测试窗口选中文本 3. 按 Ctrl+C 4. 在输入框 Ctrl+V 粘贴 | ① 剪贴板内容**不变**（未复制） ② hilog 无错误 | ArkUI `onKeyPreIme` 拦截 CLIPBOARD_ACCELERATORS |
+| ohos | clipboard | flag-on | with_clipboard(true) — 正常复制 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Clipboard ON" 按钮 2. 在弹出的测试窗口选中文本 3. 按 Ctrl+C 4. 在输入框 Ctrl+V 粘贴 | ① 剪贴板内容**已更新**（复制成功） | ArkWeb 原生处理（flag=true 不拦截） |
+| ohos | zoom | flag-off | with_zoom_hotkeys(false) — 拦截 Ctrl+= | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Zoom OFF" 按钮 2. 在弹出的测试窗口按 Ctrl+= 3. 按 Ctrl+- 4. 按 Ctrl+0 | ① 页面缩放**不变** ② hilog 无错误 | `onKeyPreIme` 拦截 ZOOM_HOTKEY_ACCELERATORS |
+| ohos | zoom | flag-on | with_zoom_hotkeys(true) — 正常缩放 | **T0** | 应用已启动，进入 Tests 页面 | 1. 点击 "Zoom ON" 按钮 2. 在弹出的测试窗口按 Ctrl+= 3. 按 Ctrl+- 4. 按 Ctrl+0 | ① Ctrl+= 放大 ② Ctrl+- 缩小 ③ Ctrl+0 重置 | ArkWeb 原生缩放（flag=true 不拦截） |
+| ohos | dialog | error-degrade | dialog::error() 降级 — 不 panic | **T1** | 应用已启动；进入 Tests 页面 | 1. 点击 "Dialog Error (degrade)" 按钮 2. 查看 hilog 搜 `dialog::error` | ① 按钮显示说明信息（该函数仅 Windows 运行时调用） ② OHOS 分支为 `log::error!` 不 panic ③ 应用不崩溃 | `log::error!` 替代 `unimplemented!()`；实际运行时不触发（仅 Windows 调用） |
+
+---
+
+## 二十八、Window Ignore Cursor Events（窗口事件穿透）手动用例
+
+> **背景**: Tauri `Window::set_ignore_cursor_events(ignore)` 在 OHOS 映射到 `ohos.window.setWindowTouchable(!ignore)`（`ignore=true` 穿透 ↔ `touchable=false` 不消费事件，取反在 tao 层）。桥接走 TSFN fire-and-forget（对称 `set_window_blur`）：Rust 始终返回 Ok，ArkTS Promise reject（1300002/1300003）由 `.catch` 捕获不闪退、不反向通知 Rust。
+>
+> **API 版本矛盾（待真机定论）**: 本地缓存文档标注 setWindowTouchable API 9+/12+，但华为官方智能问答确认为 **API 15+（HarmonyOS 5.0.0+）**。tauri api demo 默认 `compatibleSdkVersion = API 12`。若设备 API < 15，`win.setWindowTouchable` 为 undefined → ArkTS 同步抛 TypeError → 被 ArkHelper `safeLogError` 捕获，**不闪退**，仅穿透不生效。真机验证设备实际 API level 为定论步骤（design R5）。
+>
+> **测试入口**: `examples/api` 应用 → Tests 页面 → Manual Tests 区域 → `setIgnoreCursorEvents (3s toggle)` 按钮（smoke：toggle true→false 验证 TSFN 桥接 + 3s 穿透观察）。完整穿透验证需手动创建 Float overlay 子窗口（见 T0 用例）。
+>
+> **日志监控**: `hdc shell hilog | grep -iE "setWindowTouchable|WindowManager"`
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| ohos | ignore-cursor-events | touch-passthrough | setIgnoreCursorEvents(true) 触摸穿透 | **T0** | 应用已启动；已创建一个 Float 子窗口叠在主窗口上方（如透明 overlay）；设备 API ≥ 15 | 1. 在 overlay 子窗口上调用 `setIgnoreCursorEvents(true)` 2. 用手指/鼠标点击 overlay 覆盖区域 3. 观察主窗口是否收到点击 4. hilog 搜 `setWindowTouchable` 5. 调 `setIgnoreCursorEvents(false)` 恢复 | ① 点击穿透到下层主窗口（overlay 不消费触摸/鼠标事件）② hilog 输出 `setWindowTouchable: window N touchable=false`（debug）③ `setIgnoreCursorEvents(false)` 恢复后 overlay 重新消费事件 | `ignore=true` ↔ `touchable=false`（tao 层取反）；fire-and-forget，Rust 返回 Ok 不代表 ArkTS 成功，以 hilog + 视觉为准 |
+| ohos | ignore-cursor-events | hover-passthrough | setIgnoreCursorEvents hover 穿透 + API 版本 | **T1** | 同上 | 1. overlay 调 `setIgnoreCursorEvents(true)` 2. 鼠标悬停 overlay 覆盖区域 3. 观察下层主窗口的 hover/光标交互是否生效 4. 若 hover 不穿透，确认触摸仍穿透 5. 确认设备 API level（`hdc shell param get const.ohos.apicomversion` 或 deviceInfo.sdkApiVersion） | ① **API ≥ 15 且 hover 穿透**：单 setWindowTouchable 足够 ② **hover 不穿透但触摸穿透**：需追加组件级 `hitTestBehavior(HitTestMode.Transparent)`（参考 R72 drag-drop-overlay，task 4.3）③ **API < 15**：hilog 输出 `setWindowTouchable failed: ...`（TypeError），穿透完全不生效，需在 WindowManager 加 `deviceInfo.sdkApiVersion >= 15` 版本守卫静默跳过 | 真机为定论（design R1/R5）；hover fallback 走 task 4.3；版本守卫属底层仓（openharmony-ability）职责，不加在 tao 层 |
+
+
+## 二十九、OHOS 初始化链（init-chain）手动用例
+
+> **背景**: OHOS 初始化链由 `Builder::build` 自动调用（`crates/tauri/src/app.rs`），依次执行：① `ohos::BASE_PATH.set` / `MODULE_NAME.set` ② `tray_icon::set_ohos_app`（传递性调 `muda::set_menu_client`）③ `window_vibrancy::set_ohos_app` ④ `tauri_runtime_wry::set_ohos_window_client`（注册 WebviewBridgePlugin + WindowBridgePlugin）⑤ `with_openharmony_app`。链上任一环丢失的回归症状：窗口操作报 `"not initialized"` / `"Unknown OS sub-window"`、托盘/菜单报 `"not installed for 'api_lib'"` / `"client not initialized"`（bridge 重构丢注入点事故的回归特征）。
+>
+> **自动测试**: `examples/api/src/lib/tests/ohos-init.ts` → `ohos-init.chain.window-menu-tray`（side-effect 类别），启动 Tests 视图自动执行。
+>
+> **日志监控**: `hdc shell hilog | grep -aiE "not installed|not initialized|client not initialized"`（**应零命中**）
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| ohos | init-chain | window-op | Init Chain — 窗口操作不抛 "not initialized" | **T0** | 应用已启动，进入 Tests 页面 | 1. 等待 auto 测试自动运行（或点 Run All）2. 查看 `ohos-init.chain.window-menu-tray` 结果 3. hilog 搜 `not initialized` | ① 测试 PASS ② `scaleFactor > 0`、`innerPosition.x/y` 为数字 ③ hilog 零命中 `not initialized` / `Unknown OS sub-window` | 验证 `set_ohos_window_client`（WebviewBridgePlugin + WindowBridgePlugin）已注册 |
+| ohos | init-chain | menu-op | Init Chain — 菜单操作不抛 "client not initialized" | **T0** | 同上 | 1. 同上自动测试 2. 查看 menu leg 日志 3. hilog 搜 `client not initialized` | ① `Menu.new` + `items()` 成功，`items.length === 1` ② hilog 零命中 `client not initialized` | 验证 `tray_icon::set_ohos_app` → `muda::set_menu_client` 链路完整；mobile 形态无 menubar 时 leg 跳过（非回归） |
+| ohos | init-chain | tray-op | Init Chain — 托盘操作不抛 "not installed for 'api_lib'" | **T0** | 同上（desktop 形态） | 1. 同上自动测试 2. 查看 tray leg 日志（创建+移除唯一 id 托盘）3. hilog 搜 `not installed` | ① `TrayIcon.new` + `removeById` 成功 ② hilog 零命中 `not installed for 'api_lib'` | desktop 形态必测；mobile 形态无状态栏托盘，leg 跳过（非回归） |
+
+---
+
+## 三十、OHOS Gap 补测（os/notification/clipboard/shell/updater）手动用例
+
+> **背景**: 测试覆盖率分析发现的零覆盖缺口补测。自动测试位于 `examples/api/src/lib/tests/ohos-gap.ts`，覆盖 os 插件 type/family/arch/eol/exeExtension/version/locale/hostname、notification onAction/onNotificationReceived register（auto）+ 触发（manual）、clipboard writeHtml/clear（side-effect，实现未落地时 isMissing 跳过）。shell sidecar/Command 与 updater check 因环境前置条件无法自动测试，仅记录手动占位。
+>
+> **版本兼容策略**: 任务1（os.version/locale、notification 调度、clipboard writeHtml/clear 实现）落地前，相关测试用 `isMissing(e)` 诚实跳过（skip），不 fail-green；version() 占位 "0.0.0" 记录不 fail。任务1落地后断言自然收紧（version > 0.0.0）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| plugin | os | type/family/arch/eol/exeExtension | os 插件零覆盖项自动断言 | **T0** | 应用已启动，进入 Tests 页面 | 1. 等待 auto 测试自动运行（或点 Run All）2. 查看 5 个 os.* 测试结果 | ① `os.type` → `"ohos"` ② `os.family` → `"unix"` ③ `os.arch` → `"aarch64"` ④ `os.eol` → `"\n"` ⑤ `os.exeExtension` → `""` | 自动测试（auto 类别）；原仅 platform() 有 autotest，其余靠手动 OS Info 按钮 |
+| plugin | os | version | os.version — 版本号占位与语义化 | **T1** | 同上 | 1. 查看 `os.version` 测试结果 | ① 返回非空字符串 ② 任务1落地前为 `"0.0.0"`（skip，非回归）③ 任务1落地后应 > `0.0.0`（major>0） | side-effect 类别；占位是文档记录的 pre-task1 状态 |
+| plugin | os | locale/hostname | os.locale / os.hostname — BCP-47 / 主机名 | **T1** | 同上 | 1. 查看 `os.locale`、`os.hostname` 测试结果 | ① locale 返回 BCP-47 字符串或 null ② hostname 返回非空字符串或 null ③ 命令未注册时 skip（pre-task1） | auto 类别 |
+| plugin | notification | onAction/trigger | onAction 触发 — 展开通知点 Action 按钮 | **T0** | 应用已启动；通知权限已授予；进入 Tests 页面 | 1. 点 `@tauri-apps/plugin-notification.onAction trigger (manual)` 2. 下拉通知栏，展开 "Gap Test — tap action" 通知 3. 点击 "Tap Me" Action 按钮 4. 等待最多 30s | ① console 输出 `PASS: onAction callback fired` ② 回调 payload 含 action id | manual 类别；回调触发依赖真机通知交付 |
+| plugin | notification | onNotificationReceived/trigger | onNotificationReceived 触发 — 发送后回调 | **T1** | 同上 | 1. 点 `onNotificationReceived trigger (manual)` 按钮 2. 等待最多 15s | ① console 输出 `PASS: callback fired` ② 回调 payload 含通知内容 | manual 类别；OHOS 通知投递时序不确定 |
+| plugin | clipboard | writeHtml/clear | writeHtml + clear — HTML 写入与清空 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点 Run All 或 Run Side-Effect 2. 查看 `clipboard-manager.writeHtml`、`clipboard-manager.clear`、`writeHtml+readText round-trip` 结果 | ① 任务1落地后三项 PASS ② 任务1落地前 isMissing skip（不 fail-green）③ writeHtml+readText readText 返回 altText | side-effect 类别；OHOS 剪贴板读权限限制（见 memory ohos-paste-getdata-hang） |
+| plugin | shell | sidecar/Command | shell Sidecar/Command.spawn — 外部二进制 | **T1** | 应用已配置 `externalBin` sidecar 二进制（tauri.conf.json）+ 重新构建部署 | 1. 配置 sidecar 二进制路径 2. 点击 `plugin-shell.sidecar (manual)` 占位测试 3. hilog 搜 `sidecar` | ① sidecar 进程启动并 stdout 回传 ② Command.spawn 能获取子进程输出 | 成本高（需外部二进制 + tauri.conf 配置）；仅手动占位 + 草稿，examples/api 不集成 |
+| plugin | updater | check | updater.check — AppGallery 更新检查 | **T1** | 应用已发布到 AppGallery 且存在更高版本 | 1. 点击 `plugin-updater.check (manual)` 占位测试 2. 查看 console 输出 | ① check() 返回非 null Update 对象（有新版本）② 无 AppGallery 源时 reject（预期）| 仅手动占位；需 AppGallery 环境（T1，前置条件重） |
+
+---
+
+## 三十一、OHOS 移动原生插件（barcode/biometric/geolocation/haptics/nfc/huawei-account）手动用例
+
+> **背景**: 任务3 新适配的 5 个移动原生插件 + huawei-account 集成。UI 交互类流程无法自动化，自动测试仅覆盖安全子集（`examples/api/src/lib/tests/ohos-mobile-plugins.ts`：biometric.status / nfc.is_available / barcode.check_permissions / geolocation.check_permissions / haptics.selection_feedback 路由冒烟）。本节为 UI 绑定流程的手动用例。
+>
+> **前置**: 集成落地后重新构建部署（5 插件已注册到 examples/api lib.rs OHOS builder 链；entry module.json5 已声明 VIBRATE/LOCATION/APPROXIMATELY_LOCATION/CAMERA 权限）。测试页无专属 UI，用开发者工具 console + `invoke` 直调（或加临时按钮）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| plugin | barcode-scanner | scan | 扫码 — 拉起相机扫码 | **T0** | 应用已启动；CAMERA 权限已授予（首次触发系统弹窗） | 1. console 执行 `invoke('plugin:barcode-scanner|check_permissions')` 确认 camera 状态 2. `invoke('plugin:barcode-scanner|request_permissions')`（如未授予）3. `invoke('plugin:barcode-scanner|scan')` 4. 对准任意二维码 | ① scan resolve 返回 `{ content, format, bounds }`，content 为二维码内容 ② 相机扫码 UI 正常拉起与关闭 ③ PC 无摄像头时 reject 且报错清晰 | context 注入修复后 scan 才可用（audit B2）；PC（MateBook Pro）可能无摄像头 |
+| plugin | barcode-scanner | vibrate | 扫码成功振动反馈 | **T1** | 设备有振动马达 | 1. 完成一次 scan 2. 触发 vibrate 命令 | ① 设备振动 ② 无马达设备 reject/静默 | 复用 @ohos.vibrator |
+| plugin | biometric | authenticate | 生物认证 — 拉起系统认证框 | **T0** | 应用已启动；设备已录入指纹/人脸 | 1. `invoke('plugin:biometric|status')` 确认 isAvailable=true 2. `invoke('plugin:biometric|authenticate', { reason: 'test' })` 3. 完成认证/取消 | ① 认证成功 resolve（result.success=true）② 取消/失败 reject 且 errorCode 清晰 ③ 系统认证 UI 正常显示 | userIAM getUserAuthInstance 链路；PC 无生物识别硬件时 status.isAvailable=false |
+| plugin | geolocation | get_current_position | 定位 — 获取当前位置 | **T1** | LOCATION 权限已授予；设备定位服务开启 | 1. `invoke('plugin:geolocation|check_permissions')` 2. `invoke('plugin:geolocation|request_permissions')`（触发系统弹窗）3. `invoke('plugin:geolocation|get_current_position')` | ① request_permissions 弹权限框（context 注入后为真请求）② 返回 `{ coords: { latitude, longitude, ... }, timestamp }` 数值合理 | PC 无 GPS 时可能超时 reject——记录形态即可；watchPosition 流式回推是已知架构限制（Plugin 基类无 emit/Channel），resolve('') 即当前预期 |
+| plugin | haptics | vibrate 效果 | 触觉反馈 — 三种效果 | **T1** | 设备有振动马达 | 1. `invoke('plugin:haptics|vibrate', { duration: 200 })` 2. `invoke('plugin:haptics|impact_feedback', { style: 'Medium' })` 3. `invoke('plugin:haptics|notification_feedback', { type: 'Success' })` 4. `invoke('plugin:haptics|selection_feedback')` | ① 各命令 resolve ② 有马达设备产生对应振动模式 | PC 无马达时 BusinessError 801→测试 skip（路由链已验证） |
+| plugin | nfc | scan/write | NFC 扫描/写入 | **T1** | 设备支持 NFC；备一张可写 NFC 标签 | 1. `invoke('plugin:nfc|is_available')` 2. `invoke('plugin:nfc|scan')` 3. 靠近标签 | ① is_available 返回 `{ available }` ② scan/write 当前明确 reject（未实现，设计决策）③ 报错信息含能力说明 | scan/write 属下一轮（需 Plugin 基类 emit/Channel）；本轮只验 is_available |
+| plugin | huawei-account | login | 华为账号一键登录 | **T1** | 设备已登录华为账号；AppGallery Connect 配置完成 | 1. `invoke('plugin:huawei-account|login')` 2. 完成一键登录授权 | ① resolve 返回 { openId, unionId, ... } ② silent_login 免弹窗返回 ③ logout 后 silent_login reject | 需真实华为账号环境；零自动覆盖为已知缺口（任务5 结论），真机集成验证补 |
+
+---
+
+## 三十二、OHOS Plugin 基类 emit/Channel 事件回传机制
+
+> **背景**: 打通 ArkTS→webview 事件流：ArkTS `Plugin.emit(channelId, payload)` → NAPI `tauri_send_channel_data` → Rust CHANNELS 注册表 → `Channel.send` → webview.eval → JS 回调。对标 Android `send_channel_data` / iOS `send_channel_data_handler`。
+>
+> **改动范围**: Rust（channel.rs cfg + mobile.rs CHANNELS pub + ohos_plugin.rs NAPI）、ArkTS Plugin 基类（emit/setEmitHandler/parseChannelId/onNotificationAction）、PluginManager（getPlugin）、EntryAbility（setEmitHandler 注入 + onNewWant/handleNotificationAction）、geolocation（watchPosition channel emit）、notification（registerListener/removeListener + action dispatch）。
+>
+> **自动测试**（`examples/api/src/lib/tests/ohos-mobile-plugins.ts`）：notification.registerListener（注册/注销不报错即通过）。geolocation watchPosition 的 emit 事件流依赖设备位置开关与位置 fix，环境依赖强，转为手动用例（TestRunner「Geolocation Manual Tests」两按钮：①请求权限+打开定位设置 ②Watch Position (emit)）。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| plugin | geolocation | 权限+开关 | 请求权限 + 打开定位设置（按钮一） | **T1** | 应用已安装 | 1. 点击「请求权限 + 打开定位设置」按钮 2. 系统弹权限对话框时选"允许" 3. 跳转设置页后开启「定位服务」总开关 4. 返回应用 | ① 弹出位置权限对话框（LOCATION + APPROXIMATELY_LOCATION）② 跳转到系统定位设置页（uri=location_manager_settings；失败则兜底跳应用详情页 application_info_settings）③ requestPermissions 返回 granted ④ 弹窗授权后数秒内完成（不挂起） | 平台坑（2026-08-22 修复+真机验证）：`requestPermissionsFromUser` 的 Promise 在地图预览弹窗形态下可能永不 resolve（事件循环不冻结，是 Promise 本身不结算）→ ArkTS 侧 fire-and-forget + 四路兜底 settle（onForeground 生命周期 / on('selfPermissionStateChange') 事件（API 18+）/ 60s setTimeout 安全网 / Promise 本身）；且 selfPermissionStateChange 事件在 ATM 提交前触发，同步 checkAccessTokenSync 读到旧 denied → settle 后轮询（立即首查+300ms×6 次直到全 granted）；应用级权限与系统总开关是两道独立门槛，总开关关闭时 locManager 报 3301100 |
+| plugin | geolocation | watchPosition | Watch Position 位置流回传（按钮二） | **T1** | 按钮一已完成（权限 granted + 定位服务开启） | 1. 点击「Watch Position (emit)」按钮 2. 观察 10s 内结果区的位置更新计数 3. 自动 clearWatch 结束 | ① watchPosition resolve 返回 channelId ② 设备产生位置 fix 时收到 `{ coords: { latitude, longitude, accuracy, ... }, timestamp }` 回调（计数递增）③ 结果区显示「emit 端到端链路验证通过」④ clearWatch 后不再有回调 ⑤ 无位置 fix 时提示注册/注销链路已通过，事件流待有 fix 设备验证 | 验证链路：locationChange → Plugin.emit(channelId, position) → NAPI tauri_send_channel_data → Rust CHANNELS → Channel.send → JS 回调；MateBook Pro 无 GPS，事件依赖 Wi-Fi/网络定位 fix |
+| plugin | notification | actionPerformed | 通知 action 按钮 — 冷启动 | **T0** | 通知权限已授予；已 registerActionTypes；前台发一条带 actionTypeId 的通知 | 1. `onAction(cb)` 注册监听 2. 发通知 `notify({ id, title, body, actionTypeId })` 3. 切到后台 4. 点击通知 action 按钮 5. App 冷启动拉起 | ① App 被拉起 ② cb 收到 `{ id, actionId }` ③ actionId 与点击的按钮一致 | 冷启动 webview 可能未就绪→emit 被 warn 吞（不 crash）；热启动更可靠 |
+| plugin | notification | actionPerformed | 通知 action 按钮 — 热启动 | **T1** | 同上；App 在后台运行 | 1. `onAction(cb)` 注册监听 2. 发通知 3. 点击通知 action 按钮 4. App 回到前台（onNewWant） | ① cb 收到 `{ id, actionId }` ② actionId 与点击的按钮一致 ③ `removeListener` 注销后不再收到回调 | 热启动走 onNewWant→handleNotificationAction→onNotificationAction→emit 链路 |
+
+---
+
+## 三十三、手动用例统计汇总
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -493,5 +610,28 @@
 | Store（持久化存储） | 2 | 1 | **3** |
 | Upload（文件上传） | 1 | 0 | **1** |
 | Localhost（本地资源服务） | 1 | 0 | **1** |
-| **合计** | **75** | **58** | **133** |
+| OHOS — Drag Overlay（拖拽降级） | 2 | 0 | **2** |
+| OHOS — HTTPS Scheme（安全上下文） | 2 | 2 | **4** |
+| OHOS — Monitor（真实值 + from-point） | 1 | 1 | **2** |
+| OHOS — WebView Print（打印） | 1 | 0 | **1** |
+| OHOS — Event Lifecycle（Start→Resumed + SaveState） | 1 | 1 | **2** |
+| OHOS — Clipboard Flag（with_clipboard 开/关） | 2 | 0 | **2** |
+| OHOS — Zoom Flag（with_zoom_hotkeys 开/关） | 2 | 0 | **2** |
+| OHOS — Dialog Error（降级不 panic） | 0 | 1 | **1** |
+| OHOS — Window Ignore Cursor Events（事件穿透） | 1 | 1 | **2** |
+| OHOS — Init Chain（初始化链） | 3 | 0 | **3** |
+| OHOS Gap — os 零覆盖项（type/family/arch/eol/exeExtension） | 1 | 0 | **1** |
+| OHOS Gap — os version/locale/hostname | 0 | 1 | **1** |
+| OHOS Gap — notification 触发（onAction/onNotificationReceived） | 1 | 1 | **2** |
+| OHOS Gap — clipboard writeHtml/clear | 0 | 1 | **1** |
+| OHOS Gap — shell sidecar/Command（占位） | 0 | 1 | **1** |
+| OHOS Gap — updater check（AppGallery 占位） | 0 | 1 | **1** |
+| OHOS 移动原生插件 — barcode-scanner（scan/vibrate） | 1 | 1 | **2** |
+| OHOS 移动原生插件 — biometric（authenticate） | 1 | 0 | **1** |
+| OHOS 移动原生插件 — geolocation（定位/权限） | 0 | 1 | **1** |
+| OHOS 移动原生插件 — haptics（三种效果） | 0 | 1 | **1** |
+| OHOS 移动原生插件 — nfc（is_available/scan/write） | 0 | 1 | **1** |
+| OHOS 移动原生插件 — huawei-account（一键登录） | 0 | 1 | **1** |
+| OHOS Plugin emit/Channel（geolocation watch/notification action） | 1 | 4 | **5** |
+| **合计** | **95** | **78** | **173** |
 

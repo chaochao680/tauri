@@ -504,11 +504,15 @@ pub fn create_isolated_window<R: tauri::Runtime>(
         if (h1) {{ h1.textContent = num <= 1 ? 'Hello World' : 'Hello World' + num; }} \
       }});"
   );
-  tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
+  let mut builder = tauri::WebviewWindowBuilder::new(&app, &unique_window_id, webview_url)
     .title(format!("Isolated Window: {}", data_suffix))
     .data_directory(data_dir)
-    .inner_size(800.0, 600.0)
-    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
+    .inner_size(800.0, 600.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  builder
     .initialization_script(&init_script)
     .on_navigation(move |nav_url| {
       log::info!("Isolated window navigation intercepted: {}", nav_url);
@@ -593,8 +597,11 @@ pub fn create_window_with_custom_ua<R: tauri::Runtime>(
   let mut builder =
     tauri::WebviewWindowBuilder::new(&app, &unique_id, tauri::WebviewUrl::App(url_path.into()))
       .title(title)
-      .inner_size(800.0, 600.0)
-      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+      .inner_size(800.0, 600.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
 
   if !user_agent.is_empty() {
     builder = builder.user_agent(&user_agent);
@@ -625,11 +632,15 @@ pub fn create_window_no_throttle<R: tauri::Runtime>(
 
   use tauri::utils::config::BackgroundThrottlingPolicy;
 
-  let _window = tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
+  let mut builder = tauri::WebviewWindowBuilder::new(&app, window_id, WebviewUrl::default())
     .title("Window with No Background Throttling")
     .background_throttling(BackgroundThrottlingPolicy::Disabled)
-    .inner_size(800.0, 600.0)
-    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
+    .inner_size(800.0, 600.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  let _window = builder
     .initialization_script(
       r#"
         document.addEventListener('DOMContentLoaded', () => {
@@ -720,7 +731,7 @@ pub fn create_transparent_window<R: tauri::Runtime>(
   let close_link = CLOSE_LINK_HTML;
   // Autotest-created windows (label prefix "test-") are created and closed
   // programmatically; on OHOS programmatic close doesn't destroy the Float window
-  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // (the windowing backend's OHOS Window::close is unimplemented), so a lingering closed popup would
   // poll is_decorated on an unregistered webview → "failed to acquire webview
   // reference". Skip the live isDecorated badge for autotest windows to avoid that
   // noisy error; manual test windows keep the badge (they stay open and work).
@@ -746,31 +757,48 @@ pub fn create_transparent_window<R: tauri::Runtime>(
   "#
   );
 
+  // `mut` is only needed for the desktop effects reassignment below; on mobile the
+  // effects block is cfg-gated out so `mut` would be unused. Suppress per-platform.
+  #[allow(unused_mut)]
   let mut builder = tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
     .title("Transparent Window")
     .transparent(true)
-    .inner_size(600.0, 400.0)
-    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
-    .initialization_script(&init_script);
+    .inner_size(800.0, 600.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  builder = builder.initialization_script(&init_script);
 
-  // Optional build-time effects (WindowBuilder::effects path — applied at window creation via
-  // registerController inject, distinct from runtime setEffects which uses AttributeUpdater).
-  if let Some(effect_name) = &effect {
-    let effect = match effect_name.as_str() {
-      "Blur" => tauri::window::Effect::Blur,
-      "Acrylic" => tauri::window::Effect::Acrylic,
-      other => return Err(tauri::Error::Anyhow(anyhow::anyhow!("unknown effect: {}", other))),
-    };
-    let effects = tauri::utils::config::WindowEffectsConfig {
-      effects: vec![effect],
-      radius,
-      state: None,
-      color: color.map(|c| tauri::utils::config::Color(c[0], c[1], c[2], c[3])),
-    };
-    builder = builder.effects(effects);
+  // Optional build-time effects (WindowBuilder::effects path — desktop-only, applied at
+  // window creation via registerController inject, distinct from runtime setEffects which
+  // uses AttributeUpdater). On non-desktop (OHOS mobile) window effects don't apply; the
+  // effect/radius/color params are consumed to avoid unused-variable warnings.
+  #[cfg(desktop)]
+  {
+    if let Some(effect_name) = &effect {
+      let effect = match effect_name.as_str() {
+        "Blur" => tauri::window::Effect::Blur,
+        "Acrylic" => tauri::window::Effect::Acrylic,
+        other => return Err(tauri::Error::Anyhow(anyhow::anyhow!("unknown effect: {}", other))),
+      };
+      let effects = tauri::utils::config::WindowEffectsConfig {
+        effects: vec![effect],
+        radius,
+        state: None,
+        color: color.map(|c| tauri::utils::config::Color(c[0], c[1], c[2], c[3])),
+      };
+      builder = builder.effects(effects);
+    }
+  }
+  #[cfg(not(desktop))]
+  {
+    let _ = (&effect, &radius, &color);
   }
 
+  eprintln!("[create_transparent_window] building window: {} effect={:?}", window_id, effect);
   let _window = builder.build()?;
+  eprintln!("[create_transparent_window] build() returned OK for: {}", window_id);
 
   Ok(())
 }
@@ -789,7 +817,7 @@ pub fn create_borderless_window<R: tauri::Runtime>(
   let close_link = CLOSE_LINK_HTML;
   // Autotest-created windows (label prefix "test-") are created and closed
   // programmatically; on OHOS programmatic close doesn't destroy the Float window
-  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // (the windowing backend's OHOS Window::close is unimplemented), so a lingering closed popup would
   // poll is_decorated on an unregistered webview → "failed to acquire webview
   // reference". Skip the live isDecorated badge for autotest windows to avoid that
   // noisy error; manual test windows keep the badge (they stay open and work).
@@ -814,13 +842,16 @@ pub fn create_borderless_window<R: tauri::Runtime>(
   "#
   );
 
-  let builder =
+  let mut builder =
     tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
       .title("Borderless Window")
       .decorations(false)
-      .inner_size(500.0, 350.0)
-      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
-      .initialization_script(&init_script);
+      .inner_size(800.0, 600.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  builder = builder.initialization_script(&init_script);
 
   let _window = builder.build()?;
 
@@ -898,7 +929,7 @@ pub fn create_ui_ability_window<R: tauri::Runtime>(
     WebviewUrl::App("hello.html".into()),
   )
   .title("UIAbility Instance Window")
-  .inner_size(600.0, 400.0)
+  .inner_size(800.0, 600.0)
   .ohos_window_kind(OHOSWindowKind::UIAbility);
 
   if transparent {
@@ -950,7 +981,7 @@ pub struct CreateTransparentWindowResult {
 ///
 /// label uses `test-` prefix to match ACL run-app.json windows: [test-*], so the
 /// new instance's webview can call plugin:window|* commands (setBackgroundColor etc).
-/// transparent=true flows: tao → start_ui_ability → want.parameters['tauri_transparent']
+/// transparent=true flows: windowing backend → start_ui_ability → want.parameters['ohos_transparent']
 /// → new instance onWindowStageCreate → registerUIAbilityStage(transparent=true)
 /// → setWindowContainerColor('#00000000','#FFFFFFFF') (active=transparent, inactive=white).
 ///
@@ -979,7 +1010,7 @@ pub fn create_transparent_ui_ability_window<R: tauri::Runtime>(
   )
   .title("Transparent Test (UIAbility)")
   .transparent(true)
-  .inner_size(700.0, 500.0)
+  .inner_size(800.0, 600.0)
   .ohos_window_kind(OHOSWindowKind::UIAbility)
   .build()?;
 
@@ -1041,7 +1072,7 @@ pub fn create_ui_ability_windows_x3<R: tauri::Runtime>(
       &app, &window_id, WebviewUrl::App("hello.html".into()),
     )
     .title("UIAbility Instance Window")
-    .inner_size(600.0, 400.0)
+    .inner_size(800.0, 600.0)
     .ohos_window_kind(OHOSWindowKind::UIAbility);
 
     match builder.build() {
@@ -1092,7 +1123,7 @@ pub fn create_transparent_borderless_window<R: tauri::Runtime>(
   let close_link = CLOSE_LINK_HTML;
   // Autotest-created windows (label prefix "test-") are created and closed
   // programmatically; on OHOS programmatic close doesn't destroy the Float window
-  // (tao OHOS Window::close is unimplemented), so a lingering closed popup would
+  // (the windowing backend's OHOS Window::close is unimplemented), so a lingering closed popup would
   // poll is_decorated on an unregistered webview → "failed to acquire webview
   // reference". Skip the live isDecorated badge for autotest windows to avoid that
   // noisy error; manual test windows keep the badge (they stay open and work).
@@ -1119,14 +1150,16 @@ pub fn create_transparent_borderless_window<R: tauri::Runtime>(
   "#
   );
 
-  let builder =
+  let mut builder =
     tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
       .title("Transparent Borderless")
       .transparent(true)
-      .decorations(false)
-      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
-      .inner_size(500.0, 350.0)
-      .initialization_script(&init_script);
+      .decorations(false);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  builder = builder.inner_size(800.0, 600.0).initialization_script(&init_script);
 
   let _window = builder.build()?;
 
@@ -1156,7 +1189,7 @@ pub fn close_test_window<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) -> 
 /// windows, etc.).
 ///
 /// On OHOS, `WebviewWindow::close()` only removes the window from Rust's manager
-/// — tao's `Window::close` is a no-op on OHOS and does NOT call ArkTS
+/// — the windowing backend's `Window::close` is a no-op on OHOS and does NOT call ArkTS
 /// `destroyWindow()`, so the system window stays visible on screen. To actually
 /// destroy the system window, we must explicitly call `destroy_window` (which
 /// dispatches to ArkTS `WindowManager.closeWindow`):
@@ -1182,7 +1215,7 @@ pub fn close_all_test_windows<R: tauri::Runtime>(
 
       // w.close() → on_close_requested → on_window_close. On OHOS, on_window_close
       // calls destroy_window (NAPI→ArkHelper.closeWindow) to actually destroy the
-      // OS window (tao's close/destroy are no-ops on OHOS). On other platforms,
+      // OS window (the windowing backend's close/destroy are no-ops on OHOS). On other platforms,
       // close() handles real destruction directly.
       match w.close() {
         Ok(_) => closed.push(label.clone()),
@@ -1227,94 +1260,66 @@ pub fn test_async_spawn<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<(
 
 /// Test command for web_page_snapshot on OHOS
 #[command]
-pub fn test_web_page_snapshot<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+pub fn test_web_page_snapshot<R: Runtime>(
+  app: tauri::AppHandle<R>,
+  window: tauri::WebviewWindow<R>,
+) -> tauri::Result<()> {
   log::info!("test_web_page_snapshot called");
 
   #[cfg(target_env = "ohos")]
   {
-    use tauri::Manager;
-    if let Some(webview_window) = app.get_webview_window("main") {
-      let app_emit = app.clone();
-      webview_window.with_webview(move |platform_webview| {
-        let handle = platform_webview.inner();
-        let app_cb = app_emit.clone();
-        if let Err(e) = handle.web_page_snapshot(move |result| match result {
-          Ok(data) => {
+    let app_clone = app.clone();
+    window.with_webview(move |w| {
+      let handle = w.inner();
+      tauri::async_runtime::spawn(async move {
+        match handle.web_page_snapshot().await {
+          Ok(resp) => {
             log::info!(
-              "web_page_snapshot success: {}x{}, rgba len={}",
-              data.width,
-              data.height,
-              data.rgba.len()
+              "web_page_snapshot success: {}x{} ({} bytes)",
+              resp.width, resp.height, resp.rgba_len
             );
-            if let Err(e) = app_cb.emit(
+            let _ = app_clone.emit(
               "web-page-snapshot-result",
               serde_json::json!({
-                "success": true,
-                "width": data.width,
-                "height": data.height,
-                "rgba_len": data.rgba.len(),
-                "rgba": data.rgba,
+                "success": resp.success,
+                "width": resp.width,
+                "height": resp.height,
+                "rgba_len": resp.rgba_len,
               }),
-            ) {
-              log::error!("Failed to emit snapshot result: {}", e);
-            }
+            );
           }
           Err(e) => {
             log::error!("web_page_snapshot failed: {}", e);
-            if let Err(emit_err) = app_cb.emit(
+            let _ = app_clone.emit(
               "web-page-snapshot-result",
               serde_json::json!({
                 "success": false,
-                "error": e,
+                "error": e.to_string(),
               }),
-            ) {
-              log::error!("Failed to emit snapshot error: {}", emit_err);
-            }
-          }
-        }) {
-          log::error!("web_page_snapshot setup failed: {}", e);
-          if let Err(emit_err) = app_emit.emit(
-            "web-page-snapshot-result",
-            serde_json::json!({
-              "success": false,
-              "error": format!("setup failed: {}", e),
-            }),
-          ) {
-            log::error!("Failed to emit setup error: {}", emit_err);
+            );
           }
         }
-      })?;
-    } else {
-      log::error!("test_web_page_snapshot: 'main' webview window not found");
-      if let Err(e) = app.emit(
-        "web-page-snapshot-result",
-        serde_json::json!({
-          "success": false,
-          "error": "main webview window not found",
-        }),
-      ) {
-        log::error!("Failed to emit window not found error: {}", e);
-      }
-    }
+      });
+    })?;
   }
 
   #[cfg(not(target_env = "ohos"))]
   {
-    if let Err(e) = app.emit(
+    let _ = window;
+    let _ = app.emit(
       "web-page-snapshot-result",
       serde_json::json!({
         "success": false,
         "error": "web_page_snapshot only available on OHOS",
       }),
-    ) {
-      log::error!("Failed to emit non-OHOS error: {}", e);
-    }
+    );
   }
 
   Ok(())
 }
 
 /// Test command for webview.create_pdf (OHOS only)
+#[cfg(target_env = "ohos")]
 #[command]
 pub fn test_create_pdf<R: Runtime>(
   app: tauri::AppHandle<R>,
@@ -1429,64 +1434,121 @@ pub fn set_download_test_mode<R: Runtime>(
 /// - delete_cookie no-op (platform lacks single-cookie deletion)
 #[command]
 pub fn cookie_test<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
   window: tauri::WebviewWindow<R>,
-) -> tauri::Result<serde_json::Value> {
-  use tauri::webview::Cookie;
+) -> tauri::Result<()> {
+  #[cfg(target_env = "ohos")]
+  {
+    let app_clone = app.clone();
+    window.with_webview(move |w| {
+      let handle = w.inner();
+      tauri::async_runtime::spawn(async move {
+        let cookie_url = "https://example.com".to_string();
+        let cookie_value = "tauri_test_cookie=value123; Domain=example.com; Path=/".to_string();
 
-  let cookie = Cookie::build(("tauri_test_cookie", "value123"))
-    .domain("example.com")
-    .path("/")
-    .build();
+        let mut r = serde_json::json!({
+          "set_cookie": null,
+          "cookies_for_url": null,
+          "test_cookie_found": false,
+          "cookies_all": null,
+          "delete_cookie": "ok (no-op on OHOS, see log warning)",
+        });
 
-  let mut report = serde_json::json!({
-    "set_cookie": null,
-    "cookies_for_url": null,
-    "test_cookie_found": false,
-    "cookies_all": null,
-    "delete_cookie": null,
-  });
+        // 1. set_cookie via facade
+        match handle.set_cookie(&cookie_url, &cookie_value).await {
+          Ok(()) => r["set_cookie"] = serde_json::json!("ok"),
+          Err(e) => r["set_cookie"] = serde_json::json!(format!("error: {}", e)),
+        }
 
-  // 1. set_cookie
-  match window.set_cookie(cookie.clone()) {
-    Ok(_) => report["set_cookie"] = serde_json::json!("ok"),
-    Err(e) => report["set_cookie"] = serde_json::json!(format!("error: {}", e)),
+        // 2. cookies_for_url via facade
+        match handle.cookies_with_url(&cookie_url).await {
+          Ok(cookie_str) => {
+            let cookies: Vec<String> = cookie_str
+              .split(';')
+              .map(|s| s.trim().to_string())
+              .filter(|s| !s.is_empty())
+              .collect();
+            let found = cookies.iter().any(|c| c.starts_with("tauri_test_cookie="));
+            r["test_cookie_found"] = serde_json::json!(found);
+            r["cookies_for_url"] = serde_json::json!(cookies);
+          }
+          Err(e) => r["cookies_for_url"] = serde_json::json!(format!("error: {}", e)),
+        }
+
+        // 3. cookies for current URL (best-effort)
+        match handle.cookies_with_url(&cookie_url).await {
+          Ok(cookie_str) => {
+            let cookies: Vec<String> = cookie_str
+              .split(';')
+              .map(|s| s.trim().to_string())
+              .filter(|s| !s.is_empty())
+              .collect();
+            r["cookies_all"] = serde_json::json!(cookies);
+          }
+          Err(e) => r["cookies_all"] = serde_json::json!(format!("error: {}", e)),
+        }
+
+        let _ = app_clone.emit("cookie-test-result", r);
+      });
+    })?;
   }
 
-  // 2. cookies_for_url — verify the cookie we just set is readable
-  match url::Url::parse("https://example.com") {
-    Ok(url) => match window.cookies_for_url(url) {
+  #[cfg(not(target_env = "ohos"))]
+  {
+    use tauri::webview::Cookie;
+
+    let cookie = Cookie::build(("tauri_test_cookie", "value123"))
+      .domain("example.com")
+      .path("/")
+      .build();
+
+    let mut report = serde_json::json!({
+      "set_cookie": null,
+      "cookies_for_url": null,
+      "test_cookie_found": false,
+      "cookies_all": null,
+      "delete_cookie": null,
+    });
+
+    match window.set_cookie(cookie.clone()) {
+      Ok(_) => report["set_cookie"] = serde_json::json!("ok"),
+      Err(e) => report["set_cookie"] = serde_json::json!(format!("error: {}", e)),
+    }
+
+    match url::Url::parse("https://example.com") {
+      Ok(url) => match window.cookies_for_url(url) {
+        Ok(cookies) => {
+          let found = cookies.iter().any(|c| c.name() == "tauri_test_cookie");
+          report["test_cookie_found"] = serde_json::json!(found);
+          report["cookies_for_url"] = serde_json::json!(cookies
+            .iter()
+            .map(|c| format!("{}={}", c.name(), c.value()))
+            .collect::<Vec<_>>());
+        }
+        Err(e) => report["cookies_for_url"] = serde_json::json!(format!("error: {}", e)),
+      },
+      Err(e) => report["cookies_for_url"] = serde_json::json!(format!("url parse error: {}", e)),
+    }
+
+    match window.cookies() {
       Ok(cookies) => {
-        let found = cookies.iter().any(|c| c.name() == "tauri_test_cookie");
-        report["test_cookie_found"] = serde_json::json!(found);
-        report["cookies_for_url"] = serde_json::json!(cookies
+        report["cookies_all"] = serde_json::json!(cookies
           .iter()
           .map(|c| format!("{}={}", c.name(), c.value()))
-          .collect::<Vec<_>>());
+          .collect::<Vec<_>>())
       }
-      Err(e) => report["cookies_for_url"] = serde_json::json!(format!("error: {}", e)),
-    },
-    Err(e) => report["cookies_for_url"] = serde_json::json!(format!("url parse error: {}", e)),
-  }
-
-  // 3. cookies() — on OHOS returns cookies for the current URL (best-effort)
-  match window.cookies() {
-    Ok(cookies) => {
-      report["cookies_all"] = serde_json::json!(cookies
-        .iter()
-        .map(|c| format!("{}={}", c.name(), c.value()))
-        .collect::<Vec<_>>())
+      Err(e) => report["cookies_all"] = serde_json::json!(format!("error: {}", e)),
     }
-    Err(e) => report["cookies_all"] = serde_json::json!(format!("error: {}", e)),
+
+    match window.delete_cookie(cookie) {
+      Ok(_) => report["delete_cookie"] = serde_json::json!("ok"),
+      Err(e) => report["delete_cookie"] = serde_json::json!(format!("error: {}", e)),
+    }
+
+    let _ = app.emit("cookie-test-result", report);
   }
 
-  // 4. delete_cookie — no-op on OHOS (platform lacks single-cookie deletion)
-  match window.delete_cookie(cookie) {
-    Ok(_) => report["delete_cookie"] = serde_json::json!("ok (no-op on OHOS, see log warning)"),
-    Err(e) => report["delete_cookie"] = serde_json::json!(format!("error: {}", e)),
-  }
-
-  log::info!("[cookie_test] report: {}", report);
-  Ok(report)
+  Ok(())
 }
 
 /// Manual test: set a cookie for httpbin.org on the main webview cookie store
@@ -1509,10 +1571,14 @@ pub fn cookie_manual_test<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
   let url = "https://httpbin.org/cookies"
     .parse()
     .map_err(|e| format!("invalid url: {}", e))?;
-  tauri::WebviewWindowBuilder::new(&app, "cookie-manual-test", tauri::WebviewUrl::External(url))
+  let mut builder = tauri::WebviewWindowBuilder::new(&app, "cookie-manual-test", tauri::WebviewUrl::External(url))
     .title("Cookie Manual Test")
-    .inner_size(480.0, 640.0)
-    .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
+    .inner_size(480.0, 640.0);
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
+  builder
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -1554,14 +1620,22 @@ pub fn desktop_features_test<R: Runtime>(
     .unwrap_or_else(|_| "(error)".to_string());
   let path_has_double_files = app_data_dir.contains("files/files");
 
-  // Check click-through returns NotSupported
+  // Check click-through — set_ignore_cursor_events delegates to Window::set_ignore_cursor_events
+  // which is in tauri's #[cfg(desktop)] impl block. On OHOS desktop (2in1) the method exists and
+  // the fire-and-forget no-op behavior is verified (command succeeds, the windowing backend discards NotSupported).
+  // On OHOS mobile the method is unavailable; report a sentinel so the frontend can skip.
+  #[cfg(desktop)]
   let click_through_result = window
     .set_ignore_cursor_events(true)
     .map(|_| "ok".to_string())
     .unwrap_or_else(|e| format!("err: {}", e));
-
-  // Reset click-through
+  #[cfg(desktop)]
   let _ = window.set_ignore_cursor_events(false);
+  #[cfg(not(desktop))]
+  let click_through_result = {
+    let _ = &window;
+    "mobile_skip".to_string()
+  };
 
   Ok(serde_json::json!({
     "app_data_dir": app_data_dir,
@@ -1593,6 +1667,11 @@ pub fn devtools_close_only<R: tauri::Runtime>(
 /// Test set_bounds / bounds round-trip for the main webview. Verifies that
 /// set_bounds calls ArkTS setBounds without error and bounds() returns
 /// consistent values after the round-trip.
+///
+/// Desktop-only: `Webview::bounds`/`set_bounds` are in tauri's `#[cfg(desktop)]`
+/// impl block. On OHOS mobile the methods don't exist, so the command is not
+/// registered; the frontend test wraps the invoke in try/catch to skip silently.
+#[cfg(desktop)]
 #[command]
 pub fn set_bounds_test<R: tauri::Runtime>(
   window: tauri::WebviewWindow<R>,
@@ -1700,31 +1779,59 @@ pub fn clear_window_state<R: tauri::Runtime>(
   }))
 }
 
+/// Last updateCursor result recorded by `set_ime_position_test` (D3.8: the
+/// facade awaits the promise directly — no ArkTS-side poll storage — so Rust
+/// caches the response here for the frontend's readback command).
+#[cfg(target_env = "ohos")]
+static LAST_IME_POSITION_RESULT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
 /// Test command: set IME (input method) cursor position on a window.
 /// On OHOS this calls inputMethod.getController().updateCursor(CursorInfo) via
-/// openharmony-ability bridge (same path tao uses).
+/// the plugin-window bridge facade (same path tao uses), awaiting the result
+/// directly (D3.8 — replaces the old ArkHelper fire-and-forget + poll scheme).
 /// Requires a focused edit box in the webview (HTML input works), else
-/// ArkTS logs 12800009 (input method client detached).
+/// ArkTS returns 12800009 (input method client detached).
 #[cfg(target_env = "ohos")]
 #[command]
-pub fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
-  use openharmony_ability::window::set_ime_position;
-  // Main window id = 0 (matches tao's ohos_win_id() for the primary window).
+pub async fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
+  use openharmony_ability_plugin_window::WindowClient;
+  // Main window id = 0 (matches tao's placeholder for the primary window).
   log::info!("[cmd] set_ime_position_test x={} y={} (window_id=0)", x, y);
-  if let Err(e) = set_ime_position(0, x as i64, y as i64) {
-    log::warn!("[cmd] set_ime_position bridge failed: {}", e);
-  }
+  let result = match tauri::ohos::APP.lock().unwrap().clone() {
+    Some(app) => match WindowClient::new(&app) {
+      Ok(client) => match client.set_ime_position(0, x as i64, y as i64).await {
+        Ok(r) => serde_json::json!({
+          "ok": r.ok, "code": r.code, "message": r.message,
+          "x": x, "y": y,
+          "ts": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0),
+        })
+        .to_string(),
+        Err(e) => {
+          log::warn!("[cmd] set_ime_position bridge failed: {}", e);
+          serde_json::json!({"ok": false, "code": -1, "message": e.to_string(), "x": x, "y": y, "ts": 0}).to_string()
+        }
+      },
+      Err(e) => serde_json::json!({"ok": false, "code": -1, "message": e.to_string(), "x": x, "y": y, "ts": 0}).to_string(),
+    },
+    None => serde_json::json!({"ok": false, "code": -1, "message": "OpenHarmonyApp not initialized", "x": x, "y": y, "ts": 0}).to_string(),
+  };
+  log::info!("[cmd] set_ime_position_test result: {}", result);
+  *LAST_IME_POSITION_RESULT.lock().unwrap() = Some(result);
   Ok(())
 }
 
-/// Test command: read back the real updateCursor result recorded by ArkTS.
-/// Poll pattern — call ~500ms after set_ime_position_test (the promise settles async).
-/// Returns JSON: {"ok":bool,"code":number,"message":string,"x":number,"y":number,"ts":number}
+/// Test command: read back the updateCursor result recorded by the last
+/// `set_ime_position_test`. Returns JSON:
+/// {"ok":bool,"code":number,"message":string,"x":number,"y":number,"ts":number}
 #[cfg(target_env = "ohos")]
 #[command]
 pub fn get_ime_position_result() -> Result<String, String> {
-  use openharmony_ability::window::get_ime_position_result;
-  get_ime_position_result().map_err(|e| e.to_string())
+  Ok(LAST_IME_POSITION_RESULT
+    .lock()
+    .unwrap()
+    .clone()
+    .unwrap_or_else(|| r#"{"ok":false,"code":-1,"message":"no result recorded yet","x":0,"y":0,"ts":0}"#.into()))
 }
 
 /// Non-ohos stub.
@@ -1738,4 +1845,74 @@ pub fn set_ime_position_test(_x: i32, _y: i32) -> tauri::Result<()> {
 #[command]
 pub fn get_ime_position_result() -> Result<String, String> {
   Ok(r#"{"ok":false,"code":-1,"message":"not supported on this platform","x":0,"y":0,"ts":0}"#.into())
+}
+
+/// Create a test webview window with specific OHOS adapter flags.
+/// Used by manual test buttons in TestRunner to verify clipboard/zoom/https flags
+/// without needing to modify app config and rebuild.
+#[command]
+pub fn create_ohos_test_webview<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+  label: String,
+  clipboard: Option<bool>,
+  zoom_hotkeys: Option<bool>,
+  https_scheme: Option<bool>,
+  drag_drop_overlay: Option<bool>,
+) -> tauri::Result<()> {
+  log::info!(
+    "[OHOS-TEST] Creating test webview '{}' (clipboard={:?}, zoom_hotkeys={:?}, https_scheme={:?}, drag_drop_overlay={:?})",
+    window_id, clipboard, zoom_hotkeys, https_scheme, drag_drop_overlay
+  );
+
+  let mut builder = tauri::WebviewWindowBuilder::new(
+    &app,
+    &window_id,
+    WebviewUrl::App("index.html".into()),
+  )
+  .title(&label)
+  .inner_size(400.0, 300.0);
+
+  if clipboard == Some(true) {
+    builder = builder.enable_clipboard_access();
+  }
+  if let Some(z) = zoom_hotkeys {
+    builder = builder.zoom_hotkeys_enabled(z);
+  }
+  if let Some(h) = https_scheme {
+    builder = builder.use_https_scheme(h);
+    // Inject a script that logs isSecureContext + crypto.subtle availability
+    // to the webview console (visible in hilog as ARKWEB-CONSOLE). This lets
+    // us verify the https-scheme rewrite produced a secure context without
+    // needing DevTools (release build has no devtools feature).
+    builder = builder.initialization_script(
+      r#"window.addEventListener('DOMContentLoaded', () => {
+        console.log('[https-scheme] isSecureContext=' + window.isSecureContext);
+        console.log('[https-scheme] location.href=' + window.location.href);
+        try {
+          crypto.subtle.digest('SHA-256', new TextEncoder().encode('hello')).then(buf => {
+            console.log('[https-scheme] crypto.subtle OK, bytes=' + buf.byteLength);
+          }).catch(e => {
+            console.log('[https-scheme] crypto.subtle FAIL: ' + e);
+          });
+        } catch(e) {
+          console.log('[https-scheme] crypto.subtle unavailable: ' + e);
+        }
+      });"#,
+    );
+  }
+
+  #[cfg(target_env = "ohos")]
+  {
+    if let Some(d) = drag_drop_overlay {
+      builder = builder.drag_drop_overlay(d);
+    }
+  }
+  #[cfg(not(target_env = "ohos"))]
+  {
+    let _ = drag_drop_overlay;
+  }
+
+  builder.build()?;
+  Ok(())
 }
