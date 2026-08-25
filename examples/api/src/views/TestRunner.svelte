@@ -11,9 +11,10 @@
   import { trayTests } from '../lib/tests/tray';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { getCurrentWindow, currentMonitor, cursorPosition, Effect, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
+  import { getCurrentWindow, currentMonitor, cursorPosition, Effect, LogicalSize, PhysicalPosition, PhysicalSize, UserAttentionType } from '@tauri-apps/api/window';
   import { getCurrentWebview, Webview } from '@tauri-apps/api/webview';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { saveWindowState, restoreStateCurrent, filename as windowStateFilename, StateFlags } from '@tauri-apps/plugin-window-state';
   import { appCacheDir, join } from '@tauri-apps/api/path';
   import { flushConsoleLog, clearConsoleLog } from '../lib/console-capture';
 
@@ -28,6 +29,11 @@
   let focusWatchActive = $state(false);
   let focusWatchUnlisten = null;
   let focusEvents = $state([]);
+  // Window-event watch state (Resized/Moved/FocusChanged) for the toggle button
+  let winEventWatchActive = $state(false);
+  let winEventUnlistens = null;
+  let winEventCount = $state(0);
+  let winEventTypes = $state([]);
   let menuEvents = $state([]);
   let snapshotCanvas = $state(null);
   let snapshotContainer = $state(null);
@@ -819,16 +825,23 @@ Expected behavior:
 
   // ─── Window Decorations & Transparency Manual Tests (Phase 1+2+3) ───
   let decorationsState = $state('unknown');
+  // Tracks the label of the most-recently-created Float sub-window so the BG
+  // buttons (set_background_color) can target it instead of the main window.
+  // @tauri-apps/api Window.setBackgroundColor omits `label` in the invoke payload
+  // (upstream bug), so we invoke the command directly with this label.
+  let lastCreatedWindowLabel = $state(null);
 
   async function manualCreateBorderlessWindow() {
     await wrapManual('createBorderlessWindow', async () => {
       const windowId = 'borderless-test-' + Date.now();
       await invoke('create_borderless_window', { windowId });
+      lastCreatedWindowLabel = windowId;
       manualResult = `Borderless window created (id: "${windowId}").\n\n` +
         `Expected: Window should appear WITHOUT title bar, drag area, or close button.\n` +
         `Only the dark content area with "🖼️ Borderless Window" text should be visible.\n\n` +
         `If no title bar visible → PASS.\n` +
         `If title bar still visible → FAIL (decorations=false not working).\n\n` +
+        `This window is now the BG color target — click a Set BG button below to change its background.\n\n` +
         `Close with Ctrl+W or Cmd+W.`;
       onMessage(manualResult);
     });
@@ -838,6 +851,7 @@ Expected behavior:
     await wrapManual('createTransparentBorderlessWindow', async () => {
       const windowId = 'transparent-borderless-' + Date.now();
       await invoke('create_transparent_borderless_window', { windowId });
+      lastCreatedWindowLabel = windowId;
       manualResult = `Transparent + borderless window created (id: "${windowId}").\n\n` +
         `Expected: Window should appear WITHOUT title bar AND with transparent background.\n` +
         `You should see the desktop/apps behind the window through the transparent areas.\n` +
@@ -845,7 +859,31 @@ Expected behavior:
         `If transparent AND no title bar → PASS.\n` +
         `If opaque background → transparent=true not working.\n` +
         `If title bar visible → decorations=false not working.\n\n` +
+        `This window is now the BG color target — click a Set BG button below to change its background.\n\n` +
         `Close with Ctrl+W or Cmd+W.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualCreateDecoratedWindow() {
+    await wrapManual('createDecoratedWindow', async () => {
+      const windowId = 'decorated-' + Date.now();
+      await invoke('create_decorated_window', { windowId });
+      const win = await WebviewWindow.getByLabel(windowId);
+      if (!win) throw new Error('decorated window not created');
+      lastCreatedWindowLabel = windowId;
+      // Set a title (setWindowTitle → LocalStorage 'title' → FloatPage title bar)
+      try { await win.setTitle('🪟 Decorated Test Window'); } catch (e) { /* may fail on main window, ignore */ }
+      manualResult = `Decorated window created (id: "${windowId}").\n\n` +
+        `Expected: Window WITH title bar + minimize/maximize/close buttons.\n` +
+        `Title bar should show "🪟 Decorated Test Window".\n\n` +
+        `Test decoration flags below:\n` +
+        `- Toggle Closable → close button appears/disappears\n` +
+        `- Toggle Maximizable → maximize button appears/disappears\n` +
+        `- Toggle Minimizable → minimize button appears/disappears\n` +
+        `- setFocusable(false) → window won't accept focus\n\n` +
+        `This window is now the decoration flags target.\n\n` +
+        `Close with the title bar close button or Ctrl+W.`;
       onMessage(manualResult);
     });
   }
@@ -908,20 +946,34 @@ Expected behavior:
     });
   }
 
+  // Set the background color on the most-recently-created Float sub-window
+  // (click "Create Borderless Window" or "Create Transparent+Borderless" first).
+  //
+  // Why not win.setBackgroundColor(): @tauri-apps/api Window.setBackgroundColor
+  // (window.ts) does NOT pass `label` in the invoke payload (unlike setDecorations
+  // etc.), so the Rust command `get_window(window, label=None)` always resolves to
+  // the main window (windowId=0), whose background is masked by the XComponent
+  // content layer. We invoke the command directly with the sub-window's label so
+  // it targets the correct Float sub-window. Upstream bug — should be fixed in
+  // @tauri-apps/api. See ohos-window-test-mapping.md row "窗口背景色".
   async function manualSetBackgroundColor(color, label) {
     await wrapManual(`setBackgroundColor(${label})`, async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) {
+        manualResult = `No sub-window target. Click "Create Borderless Window" or "Create Transparent+Borderless" first, then click a Set BG button.`;
+        onMessage(manualResult);
+        return;
+      }
       if (color === null) {
-        // Use webview-level API which supports null to truly reset to default
-        await webview.setBackgroundColor(null);
-        manualResult = `Background color reset to default (null via Webview API).\n\nExpected: Window background returns to its original default color.`;
+        // Reset: restore the sub-window background to default (opaque white)
+        await invoke('plugin:window|set_background_color', { label: lastCreatedWindowLabel, value: null });
+        manualResult = `Background color reset to default on sub-window "${lastCreatedWindowLabel}".`;
       } else {
-        await win.setBackgroundColor(color);
+        await invoke('plugin:window|set_background_color', { label: lastCreatedWindowLabel, value: color });
         const [r, g, b, a] = color;
-        manualResult = `Background color set to [${r},${g},${b},${a}] (${label}).\n\n` +
-          `Expected: Window background should change to ${label}.\n` +
-          `Alpha=${a} (${a === 255 ? 'fully opaque' : a === 0 ? 'fully transparent' : 'semi-transparent'}).\n\n` +
-          `If visual matches → PASS.`;
+        manualResult = `Background color set to [${r},${g},${b},${a}] (${label}) on sub-window "${lastCreatedWindowLabel}".\n\n` +
+          `Expected: The sub-window background should be ${label}.\n` +
+          `Alpha=${a} (${a === 255 ? 'fully opaque' : a === 0 ? 'fully transparent (invisible)' : 'semi-transparent'}).\n\n` +
+          `If visual matches → PASS.\nIf no change → FAIL.`;
       }
       onMessage(manualResult);
     });
@@ -1003,29 +1055,33 @@ Expected behavior:
 
   async function manualSetOuterPosition() {
     await wrapManual('setOuterPosition', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Decorated first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const orig = await win.outerPosition();
       const tx = orig.x < 200 ? 400 : 100, ty = orig.y < 200 ? 400 : 100;
       await win.setPosition(new PhysicalPosition(tx, ty));
       await delay(600);
       const after = await win.outerPosition();
-      ohosWinState = `outerPosition (${orig.x},${orig.y}) → (${after.x},${after.y}) target (${tx},${ty})`;
-      manualResult = `setOuterPosition(${tx},${ty}) dispatched.\n\nExpected: 窗口左上角移动到 (${tx},${ty})。\n实际: (${after.x},${after.y})。\n若位置变化 → PASS。`;
+      ohosWinState = `outerPosition (${orig.x},${orig.y}) → (${after.x},${after.y}) target (${tx},${ty}) [on ${lastCreatedWindowLabel}]`;
+      manualResult = `setOuterPosition(${tx},${ty}) on sub-window "${lastCreatedWindowLabel}"。\n\nExpected: 子窗口左上角移动到 (${tx},${ty})。\n实际: (${after.x},${after.y})。\n若位置变化 → PASS。`;
       onMessage(manualResult);
     });
   }
 
   async function manualSetInnerSize() {
     await wrapManual('setInnerSize', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Decorated first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const orig = await win.innerSize();
       const tw = Math.max(400, Math.floor(orig.width / 2));
       const th = Math.max(300, Math.floor(orig.height / 2));
       await win.setSize(new PhysicalSize(tw, th));
       await delay(700);
       const after = await win.innerSize();
-      ohosWinState = `innerSize ${orig.width}×${orig.height} → ${after.width}×${after.height} target ${tw}×${th}`;
-      manualResult = `setInnerSize(${tw}×${th}) dispatched.\n\nExpected: 窗口内容区变为 ${tw}×${th}。\n实际: ${after.width}×${after.height}。\n若尺寸变化 → PASS。`;
+      ohosWinState = `innerSize ${orig.width}×${orig.height} → ${after.width}×${after.height} target ${tw}×${th} [on ${lastCreatedWindowLabel}]`;
+      manualResult = `setInnerSize(${tw}×${th}) on sub-window "${lastCreatedWindowLabel}"。\n\nExpected: 子窗口内容区变为 ${tw}×${th}。\n实际: ${after.width}×${after.height}。\n若尺寸变化 → PASS。`;
       onMessage(manualResult);
       await win.setSize(new PhysicalSize(orig.width, orig.height)); // 还原
       await delay(400);
@@ -1067,12 +1123,13 @@ Expected behavior:
     });
   }
 
+  // 主窗口 Hide/Show — hide=hideAbility,show=startAbility(instanceKey='main' 复用)
   async function manualShowHide() {
     await wrapManual('showHide', async () => {
       const win = getCurrentWindow();
       await win.hide();
-      ohosWinState = `hide dispatched; 2s 后 show`;
-      manualResult = `hide() dispatched。\n\nExpected: 窗口隐藏（主窗口 hideAbility 后台，子窗口 minimize）。2 秒后 show() 恢复。\n若先消失再恢复 → PASS。`;
+      ohosWinState = `main hide dispatched; 2s 后 show(startAbility)`;
+      manualResult = `hide() on main window (hideAbility → app 后台)。\n2 秒后 show() (startAbility instanceKey='main' → onAcceptWant 复用实例)。\n若主窗口先消失再恢复 → PASS。`;
       onMessage(manualResult);
       setTimeout(() => getCurrentWindow().show(), 2000);
     });
@@ -1096,67 +1153,82 @@ Expected behavior:
       await win.setAlwaysOnTop(!before);
       const after = await win.isAlwaysOnTop();
       ohosWinState = `isAlwaysOnTop: ${before} → ${after}`;
-      manualResult = `setAlwaysOnTop(${!before}) dispatched。\n\nOHOS 无 z-order API：仅记录意图标志，isAlwaysOnTop()=${after}。\nFloat 子窗口天然浮于主窗口；主窗口置顶不强制生效。属 partial 实现。`;
+      manualResult = `setAlwaysOnTop(${!before}) dispatched。\n\n已调用 OHOS setWindowTopmost(API 14+,需 WINDOW_TOPMOST 权限)。\nisAlwaysOnTop()=${after}。\n主窗口已置顶(跨应用常驻最前)。\n验证:切到其他 app,主窗口应仍可见(不被遮挡) → PASS。`;
       onMessage(manualResult);
     });
   }
 
+  // 装饰按钮组:作用在最后创建的 Float 子窗口(主窗口 no-op)
   async function manualSetClosable() {
     await wrapManual('setClosable', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Transparent+Borderless first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const before = await win.isClosable();
       await win.setClosable(!before);
       const after = await win.isClosable();
-      ohosWinState = `isClosable: ${before} → ${after}`;
-      manualResult = `setClosable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 FloatPage 关闭按钮显隐）。\n主窗口装饰由系统管理，no-op，但 isClosable()=${after} 已翻转。\n在「Create Borderless Window」创建的子窗口上测试可见效果。`;
+      ohosWinState = `isClosable: ${before} → ${after} (on ${lastCreatedWindowLabel})`;
+      manualResult = `setClosable(${!before}) on sub-window "${lastCreatedWindowLabel}"。\n\nExpected(decorations=true 时):关闭按钮 ${after ? '显示' : '隐藏'}。\nclosable 是唯一被 FloatPage 消费的 flag(line 155 控制关闭按钮显隐)。`;
       onMessage(manualResult);
     });
   }
 
   async function manualSetMaximizable() {
     await wrapManual('setMaximizable', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Transparent+Borderless first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const before = await win.isMaximizable();
       await win.setMaximizable(!before);
       const after = await win.isMaximizable();
-      ohosWinState = `isMaximizable: ${before} → ${after}`;
-      manualResult = `setMaximizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 maximize 按钮显隐）。\n主窗口 no-op，isMaximizable()=${after} 已翻转。`;
+      ohosWinState = `isMaximizable: ${before} → ${after} (on ${lastCreatedWindowLabel})`;
+      manualResult = `setMaximizable(${!before}) on sub-window "${lastCreatedWindowLabel}"。\n\n⚠️ FloatPage 声明了 @LocalStorageProp('maximizable') 但没消费(无最大化按钮)。\nflag 写入 LocalStorage 但无 UI 效果。`;
       onMessage(manualResult);
     });
   }
 
   async function manualSetMinimizable() {
     await wrapManual('setMinimizable', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Transparent+Borderless first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const before = await win.isMinimizable();
       await win.setMinimizable(!before);
       const after = await win.isMinimizable();
-      ohosWinState = `isMinimizable: ${before} → ${after}`;
-      manualResult = `setMinimizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 minimize 按钮显隐）。\n主窗口 no-op，isMinimizable()=${after} 已翻转。`;
+      ohosWinState = `isMinimizable: ${before} → ${after} (on ${lastCreatedWindowLabel})`;
+      manualResult = `setMinimizable(${!before}) on sub-window "${lastCreatedWindowLabel}"。\n\n⚠️ FloatPage 声明了 @LocalStorageProp('minimizable') 但没消费(无最小化按钮)。\nflag 写入 LocalStorage 但无 UI 效果。`;
       onMessage(manualResult);
     });
   }
 
   async function manualSetResizable() {
     await wrapManual('setResizable', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) { manualResult = 'No sub-window. Click Create Borderless/Transparent+Borderless first.'; onMessage(manualResult); return; }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       const before = await win.isResizable();
       await win.setResizable(!before);
       const after = await win.isResizable();
-      ohosWinState = `isResizable: ${before} → ${after}`;
-      manualResult = `setResizable(${!before}) dispatched。\n\nExpected: 仅 Float 子窗口生效（控制 resize 手柄显隐）。\n主窗口 no-op，isResizable()=${after} 已翻转。`;
+      ohosWinState = `isResizable: ${before} → ${after} (on ${lastCreatedWindowLabel})`;
+      manualResult = `setResizable(${!before}) on sub-window "${lastCreatedWindowLabel}"。\n\n⚠️ FloatPage 声明了 @LocalStorageProp('resizable') 但没消费(无 resize 手柄)。\nflag 写入 LocalStorage 但无 UI 效果。要真正禁用 resize 需走 enableDrag(false) API。`;
       onMessage(manualResult);
     });
   }
 
   async function manualSetFocusable() {
     await wrapManual('setFocusable', async () => {
-      const win = getCurrentWindow();
+      if (!lastCreatedWindowLabel) {
+        manualResult = `No sub-window target. Click "Create Borderless Window" or "Create Transparent+Borderless" first.`;
+        onMessage(manualResult);
+        return;
+      }
+      const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
+      if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
       await win.setFocusable(false);
-      ohosWinState = `setFocusable(false) → 3s 后恢复`;
-      manualResult = `setFocusable(false) dispatched。\n\nExpected: 窗口 3s 内不可聚焦（setWindowFocusable），点击不获取焦点。\n3 秒后自动恢复可聚焦。`;
+      ohosWinState = `setFocusable(false) on "${lastCreatedWindowLabel}" → 3s 后恢复`;
+      manualResult = `setFocusable(false) dispatched on sub-window "${lastCreatedWindowLabel}"。\n\nExpected: 子窗口 3s 内不可聚焦（setWindowFocusable），点击不获取焦点。\n3 秒后自动恢复。`;
       onMessage(manualResult);
-      setTimeout(() => getCurrentWindow().setFocusable(true), 3000);
+      setTimeout(() => win.setFocusable(true), 3000);
     });
   }
 
@@ -1197,6 +1269,254 @@ Expected behavior:
       if (ignoreCursorState) {
         setTimeout(() => { getCurrentWindow().setIgnoreCursorEvents(false); ignoreCursorState = false; }, 3000);
       }
+    });
+  }
+
+  // ─── 补充手动测试:自动测试覆盖但无按钮的窗口能力 ───
+
+  // 1. 窗口 ID — getCurrentWindow().label
+  async function manualWindowId() {
+    await wrapManual('windowId', async () => {
+      const win = getCurrentWindow();
+      const label = win.label;
+      const ok = typeof label === 'string' && label.length > 0;
+      manualResult = `getCurrentWindow() → label="${label}"\n${ok ? '✓ 非空字符串 → PASS' : '✗ 空 → FAIL'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 2. 窗口销毁 — 建临时子窗口 → onCloseRequested → 关闭 → 看是否收到
+  async function manualCloseRequested() {
+    await wrapManual('closeRequested', async () => {
+      const id = 'close-test-' + Date.now();
+      await invoke('create_transparent_window', { windowId: id });
+      const win = await WebviewWindow.getByLabel(id);
+      if (!win) throw new Error('close-test sub-window not created');
+      let got = false;
+      const un = await win.onCloseRequested(() => { got = true; });
+      await new Promise((r) => setTimeout(r, 300));
+      try { await win.close(); } catch {}
+      await new Promise((r) => setTimeout(r, 600));
+      try { un?.(); } catch {}
+      manualResult = `onCloseRequested ${got ? 'fired ✓ → PASS' : 'NOT fired → FAIL'}\n(临时子窗口 "${id}" 已关闭)`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 3. 多窗口 — window.open (Allow 模式)
+  async function manualOnNewWindow() {
+    await wrapManual('on_new_window:Allow', async () => {
+      await invoke('set_deny_new_window', { deny: false });
+      await invoke('set_create_new_window', { create: true });
+      window.open('https://example.com/manual-newwin', '_blank');
+      await new Promise((r) => setTimeout(r, 1500));
+      manualResult = `window.open dispatched (Allow mode).\n若弹出子窗口 → PASS;若无 → FAIL\n(on_new_window: Allow 触发新建 OS 窗口)`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 4. Cursor grab — OH_WindowManager_LockCursor/UnlockCursor (NDK C API 22+,
+  //    ohos.permission.LOCK_WINDOW_CURSOR normal permission, declared in entry_desktop module.json5).
+  //    Confined mode (isCursorFollowMovement=true): cursor stays inside the window but keeps
+  //    moving; auto-released on focus loss.
+  async function manualCursorGrab() {
+    await wrapManual('setCursorGrab', async () => {
+      try {
+        await getCurrentWindow().setCursorGrab(true);
+        manualResult = `setCursorGrab(true) → no throw ✓ 已锁定(5 秒后自动解锁)\n\nExpected: 移动鼠标 — 光标被限制在窗口内无法移出(窗口内仍可移动)。\n锁定期间点击其他窗口可验证失焦自动解锁(光标立即恢复自由)。`;
+        onMessage(manualResult);
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          await getCurrentWindow().setCursorGrab(false);
+          manualResult = `setCursorGrab(false) → 已解锁\n\nExpected: 鼠标光标恢复自由移动,可移出窗口。`;
+        } catch (e) {
+          // unlock-after-auto-release (1300002) is idempotent on the Rust side and
+          // should not surface here; if another window was clicked during the lock,
+          // the cursor is already free via focus-loss auto-unlock.
+          manualResult = `setCursorGrab(false) threw: ${e}\n光标应已恢复自由(失焦自动解锁兜底)。若仍被锁定请上报。`;
+        }
+      } catch (e) {
+        manualResult = `setCursorGrab threw: ${e}\n预期:锁定/解锁成功不抛错(权限已声明)。抛错常见原因:权限缺失(hilog 201)/ API < 22 设备(NotSupported)`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  // 5. 窗口事件 — toggle 监听 Resized/Moved/FocusChanged
+  async function toggleWinEventWatch() {
+    if (winEventWatchActive) {
+      winEventUnlistens?.forEach((un) => { try { un?.(); } catch {} });
+      winEventUnlistens = null;
+      winEventWatchActive = false;
+      manualResult = `Stopped watching. Total events: ${winEventCount}\nTypes: ${winEventTypes.join(', ') || '(none)'}\n${winEventCount > 0 ? '✓ PASS' : '✗ FAIL (no events)'}`;
+      onMessage(manualResult);
+    } else {
+      winEventCount = 0;
+      winEventTypes = [];
+      const win = getCurrentWindow();
+      const unR = await win.onResized(() => { winEventCount++; winEventTypes = [...winEventTypes, 'Resized']; });
+      const unM = await win.onMoved(() => { winEventCount++; winEventTypes = [...winEventTypes, 'Moved']; });
+      const unF = await win.onFocusChanged(({ payload }) => { winEventCount++; winEventTypes = [...winEventTypes, `Focus=${payload}`]; });
+      winEventUnlistens = [unR, unM, unF];
+      winEventWatchActive = true;
+      manualResult = `Watching Resized/Moved/FocusChanged (n=${winEventCount}).\n切后台再回来触发 FocusChanged(推荐,不触发 sizeChange 风暴)。\n⚠️ 避免拖拽/缩放主窗口 — 会触发 OnSizeChange 风暴导致 appfreeze(OHOS 既有问题)。\n再点 "Stop Watch" 看事件数。`;
+      onMessage(manualResult);
+    }
+  }
+
+  // 6. 窗口状态持久化 — window-state save+restore
+  // NOTE: 不调 setSize 改尺寸 — 主窗口尺寸变化会触发 OnSizeChange 事件风暴导致
+  // appfreeze(THREAD_BLOCK_6S,OHOS 既有适配问题)。只验证 filename + save + restore
+  // 不报错(插件层功能),尺寸 round-trip 由自动测试(子进程/CI)覆盖。
+  async function manualWindowState() {
+    await wrapManual('window-state', async () => {
+      const fname = await windowStateFilename();
+      const win = getCurrentWindow();
+      const size = await win.innerSize();
+      // save 当前尺寸(不改尺寸)→ restore → 验证不报错
+      await saveWindowState(StateFlags.SIZE);
+      await restoreStateCurrent(StateFlags.SIZE);
+      await new Promise((r) => setTimeout(r, 200));
+      const ok = typeof fname === 'string' && fname.length > 0;
+      manualResult = `filename="${fname}"\n当前尺寸: ${size.width}×${size.height}\nsaveWindowState+restoreStateCurrent OK(未改尺寸,避免 sizeChange 风暴)\n${ok ? '✓ → PASS' : '✗ filename 空 → FAIL'}`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 7. set_bounds — webview 层 set position+size round-trip
+  async function manualSetBounds() {
+    await wrapManual('set_bounds', async () => {
+      const report = await invoke('set_bounds_test');
+      const ok = report?.set_ok === true;
+      manualResult = `set_bounds_test → set_ok=${report?.set_ok}\n${ok ? '✓ PASS' : '✗ FAIL'}\n(webview 层 set position+size round-trip)`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 8. 窗口标题 — 直接在主窗口设(主窗口标题栏可见,Float 子窗口 setDecorations 无效)
+  async function manualSetTitle() {
+    await wrapManual('setTitle', async () => {
+      const win = getCurrentWindow();
+      const titles = ['🪟 Tauri OHOS 测试标题', 'Hello 华为账号', 'Tauri OpenHarmony'];
+      const idx = (manualTitleIdx ?? -1) + 1;
+      manualTitleIdx = idx % titles.length;
+      const title = titles[manualTitleIdx];
+      await win.setTitle(title);
+      manualResult = `setTitle("${title}") dispatched on main window.\n\nExpected: 主窗口标题栏文字变为 "${title}"。\n(图标不可改;set_title 走 setWindowTitle API15+)\nIf title bar shows new text → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+  let manualTitleIdx = $state(0);
+
+  // 9. 窗口大小限制 — 主窗口设最小 1600×1200
+  async function manualSetMinSize() {
+    await wrapManual('setMinSize', async () => {
+      const win = getCurrentWindow();
+      // setMinSize → tao set_min_inner_size → setWindowLimits(min, 0, 0, 0)
+      // ⚠️ LogicalSize 会乘 scale_factor 转 px;设备 scale≈2.0 → 1600×1200 logical = 3200×2400 px > 屏幕 3120×2080
+      // 超屏幕会触发 resize → sizeChange 风暴 → appfreeze。改用 PhysicalSize 直接传 px 避免转换。
+      await win.setMinSize(new LogicalSize(1600, 1200));
+      manualResult = `setMinSize(LogicalSize 1600×1200) dispatched on main window.\n\n⚠️ scale≈2.0 → 实际 px ≈ 3200×2400 > 屏幕 3120×2080,可能卡死。\n若未卡死:拖拽窗口不能小于 1600×1200 logical → PASS。\n卡死 → force-stop 重启,点 Reset Min Size 清除。`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 取消最小尺寸限制 — setWindowLimits 传 0 = "不改变",不是清除(无 reset 接口)
+  // 要恢复自由缩放,设 min=1(让系统下限 760×570 接管)
+  async function manualResetMinSize() {
+    await wrapManual('resetMinSize', async () => {
+      const win = getCurrentWindow();
+      // setMinSize(1,1) → tao set_min_inner_size(Some(1,1)) → setWindowLimits(1,1,0,0)
+      // min=1 让系统下限接管(760×570),比 1600×1200 小,恢复自由缩放
+      await win.setMinSize(new LogicalSize(1, 1));
+      manualResult = `Reset: setMinSize(1×1) dispatched — min 设为 1×1 logical。\n系统下限 760×570 接管,窗口可缩到 760×570(比 1600×1200 小)。\n拖拽窗口边缘缩小验证 → 若能缩到 < 1600×1200 → PASS。`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 同时设 min + max — 验证 tao set_min/max_inner_size "四值同下" 修复。
+  // 修复前: setMaxSize 会把之前 setMinSize 的 min 清零(max 那次写 min=0);修复后 min 保留。
+  async function manualSetMinAndMaxSize() {
+    await wrapManual('setMinAndMaxSize', async () => {
+      const win = getCurrentWindow();
+      // PhysicalSize 直接传 px,避免 LogicalSize × scale(≈2.0) 超屏幕卡死。
+      // 屏幕 3120×2080 px;min 1600×1200 < max 2400×1800 < 屏幕,安全。
+      await win.setMinSize(new PhysicalSize(1600, 1200));
+      // setMinSize → tao set_min_inner_size: 缓存 min, 读 max=0 → setWindowLimits(1600,1200,0,0)
+      await win.setMaxSize(new PhysicalSize(2400, 1800));
+      // setMaxSize → tao set_max_inner_size: 缓存 max, 读 min
+      //   修复前: setWindowLimits(0,0,2400,1800) ← min 丢!
+      //   修复后: setWindowLimits(1600,1200,2400,1800) ← min 保留 ✓
+      manualResult = `setMinSize(1600×1200 px) + setMaxSize(2400×1800 px) dispatched.\n\n验证(看 hilog tag WindowManager):\n  setWindowLimits ... OK: min=1600×1200 max=0×0      ← setMinSize\n  setWindowLimits ... OK: min=1600×1200 max=2400×1800 ← setMaxSize(min 保留=修复生效)\n修复前第二次会 min=0×0(min 丢)。\n\n拖拽验证:窗口不能缩到 < 1600×1200,不能放到 > 2400×1800。`;
+      onMessage(manualResult);
+    });
+  }
+
+  // 10. 窗口主题 — toggle Dark/Light/System
+  let themeState = $state(0); // 0=Light, 1=Dark, 2=System
+  async function manualSetTheme() {
+    await wrapManual('setTheme', async () => {
+      const win = getCurrentWindow();
+      const themes = ['light', 'dark', null]; // null = system follow
+      const labels = ['Light', 'Dark', 'System (follow)'];
+      const next = (themeState + 1) % 3;
+      themeState = next;
+      const t = themes[next];
+      await win.setTheme(t);
+      manualResult = `setTheme(${labels[next]}) dispatched.\n\nExpected: 窗口深浅色切换。\n- Light: 浅色背景\n- Dark: 深色背景\n- System: 跟随系统设置\n(底层 setColorMode: LIGHT/DARK/NOT_SET)\nIf visual matches → PASS.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualRequestUserAttention() {
+    await wrapManual('requestUserAttention', async () => {
+      const win = getCurrentWindow();
+      // tauri 内置 window API → tao → openharmony-ability → notificationManager
+      // UserAttentionType.Critical=1, Informational=2(OHOS 不区分,统一发通知)
+      await win.requestUserAttention(UserAttentionType.Informational);
+      manualResult = 'requestUserAttention dispatched.\n\nExpected: 系统通知中心弹出 "Tauri App / 请查看应用窗口" 通知。\n首次点击会弹"是否允许发送通知"授权框,允许后再点一次。\n底层: tao → openharmony-ability → notificationManager.publish (1600004 时 requestEnableNotification)。\nIf notification appears → PASS.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualSetImePosition() {
+    await wrapManual('setImePosition', async () => {
+      // 聚焦 HTML input → updateCursor 上报光标位置 → 回读 ArkTS 侧真实结果
+      // 链路: invoke → tao set_ime_position → openharmony-ability →
+      //   inputMethod.getController().updateCursor(CursorInfo{left,top,width,height})
+      // 前置条件:窗口内有聚焦的编辑框(HTML input 即可,ArkWeb 走系统输入法框架)
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = 'IME test input (auto-focused)';
+      inp.style.cssText = 'position:fixed;bottom:60px;left:24px;width:320px;height:36px;font-size:16px;background:#fff;color:#111;border:1px solid #888;padding:0 8px;z-index:9999;';
+      document.body.appendChild(inp);
+      const startTs = Date.now();
+      try {
+        inp.focus();
+        await delay(600);
+        await invoke('set_ime_position_test', { x: 200, y: 400 });
+        await delay(800); // updateCursor promise 异步结算,等结果落盘再回读
+        const raw = await invoke('get_ime_position_result');
+        const r = JSON.parse(raw);
+        if (r.code === -1 && String(r.message).includes('not supported')) {
+          manualResult = '⏭️ 非 OHOS 平台(stub 返回 not supported)→ SKIP';
+        } else if (r.ts < startTs) {
+          // 回读到陈旧记录:本次 promise 未在等待窗口内结算(或同步抛出)
+          manualResult = `已聚焦输入框并上报光标位置 (200,400)。\n` +
+            `结果未就绪:回读到陈旧记录(ts=${r.ts} 早于本次按压,code=${r.code} ${r.message})→ 重试一次;持续出现则 FAIL`;
+        } else {
+          manualResult = `已聚焦输入框并上报光标位置 (200,400)。\n` +
+            `updateCursor 返回: ${r.ok ? 'OK ✅ → PASS' : `失败 code=${r.code} ${r.message} → FAIL`}\n` +
+            `上报 CursorInfo: left=${r.x} top=${r.y}(物理像素,tao 透传)`;
+        }
+      } catch (e) {
+        manualResult = `invoke/解析失败: ${e}\n(链路未走完,不能作为能力判定依据)`;
+      } finally {
+        // 无论成败都移除注入的输入框(否则聚焦 input 残留 DOM 影响后续 IME 行为)
+        inp.blur();
+        inp.remove();
+      }
+      onMessage(manualResult);
     });
   }
 
@@ -2309,8 +2629,9 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualToggleDecorations}>Toggle Decorations (main window)</button>
         <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
         <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
+        <button class="btn" onclick={manualCreateDecoratedWindow}>Create Decorated Window (title bar)</button>
       </div>
-      <h5 class="my-1 mt-2 text-xs text-gray-500">Window Background Color (Phase 3)</h5>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">Window Background Color (Phase 3) — first create a sub-window above, then click a BG button</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={() => manualSetBackgroundColor([255, 0, 0, 255], 'Red opaque')}>Set BG Red (opaque)</button>
         <button class="btn" onclick={() => manualSetBackgroundColor([0, 0, 255, 128], 'Blue semi-transparent')}>Set BG Blue (alpha=128)</button>
@@ -2362,6 +2683,33 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       {#if ohosWinState}
         <div class="mt-1 text-xs font-mono text-gray-600 dark:text-gray-400">{ohosWinState}</div>
       {/if}
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">OHOS Window Ops — 自动测试补充(无按钮能力)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualWindowId}>Window ID (getCurrentWindow)</button>
+        <button class="btn" onclick={manualCloseRequested}>CloseRequested (close sub-window)</button>
+        <button class="btn" onclick={manualOnNewWindow}>on_new_window: Allow (window.open)</button>
+        <button class="btn" onclick={manualCursorGrab}>setCursorGrab(true) 5s (Lock to window)</button>
+        <button class="btn" onclick={toggleWinEventWatch}>
+          {winEventWatchActive ? 'Stop Watch Window Events' : 'Watch Window Events'}
+        </button>
+        <button class="btn" onclick={manualWindowState}>window-state save+restore</button>
+        <button class="btn" onclick={manualSetBounds}>set_bounds round-trip (webview)</button>
+        <button class="btn" onclick={manualSetTitle}>Set Title (main window)</button>
+        <button class="btn" onclick={manualSetMinSize}>Set Min Size 1600×1200 (main window)</button>
+        <button class="btn" onclick={manualSetMinAndMaxSize}>Set Min+Max (1600×1200 / 2400×1800 px)</button>
+        <button class="btn" onclick={manualResetMinSize}>Reset Min Size (null)</button>
+        <button class="btn" onclick={manualSetTheme}>Set Theme (toggle Light/Dark/System)</button>
+        <button class="btn" onclick={manualRequestUserAttention}>Request User Attention (notification)</button>
+        <button class="btn" onclick={manualSetImePosition}>Set IME Position (200,400)</button>
+      </div>
+      <h5 class="my-1 mt-2 text-xs text-gray-500">IME 测试输入框 — 点击聚焦(弹软键盘),保持焦点后点 Set IME Position</h5>
+      <input
+        type="text"
+        placeholder="点击此处聚焦输入框,然后点 Set IME Position..."
+        class="w-full p-2 border border-gray-300 rounded text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+      />
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Process & Updater Manual Tests</h5>

@@ -833,6 +833,53 @@ pub fn create_borderless_window<R: tauri::Runtime>(
   Ok(())
 }
 
+/// Test command: create a Float sub-window WITH decorations (title bar + close button).
+/// Used to test setClosable/Maximizable/Minimizable decoration flags (FloatPage reads
+/// LocalStorage to control button visibility — only visible when decorations=true).
+#[cfg(desktop)]
+#[command]
+pub fn create_decorated_window<R: tauri::Runtime>(
+  app: tauri::AppHandle<R>,
+  window_id: String,
+) -> tauri::Result<()> {
+  log::info!("Creating decorated window: {}", window_id);
+
+  let close_link = CLOSE_LINK_HTML;
+  let status_script = if window_id.starts_with("test-") { "" } else { STATUS_SCRIPT };
+  let init_script = format!(
+    r#"
+    document.addEventListener('DOMContentLoaded', function() {{
+      document.documentElement.style.background = '#ffffff';
+      document.body.style.cssText = 'background:#ffffff;margin:0;padding:0;'
+        + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;color:#333;';
+      document.body.innerHTML = '';
+      var div = document.createElement('div');
+      div.style.cssText = 'text-align:center;padding:30px;';
+      div.innerHTML = '<h2>\u{{1F5BC}}️ Decorated Window</h2>'
+        + '<p>This window has <code>decorations: true</code>.</p>'
+        + '<p>Title bar + close button visible (FloatPage decoration buttons).</p>'
+        + '<p>Test setClosable/Maximizable below — close button visibility changes.</p>'
+        + '{close_link}';
+      document.body.appendChild(div);
+      {status_script}
+    }});
+  "#
+  );
+
+  let builder =
+    tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
+      .title("Decorated Window")
+      .decorations(true)
+      .inner_size(600.0, 400.0)
+      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
+      .initialization_script(&init_script);
+
+  let _window = builder.build()?;
+
+  Ok(())
+}
+
 /// Test command: create a window in a new UIAbility instance via `startAbility`.
 ///
 /// Requires `launchType: "standard"` in module.json5. The new instance's main
@@ -1657,4 +1704,44 @@ pub fn clear_window_state<R: tauri::Runtime>(
     "state_file": state_file.to_string_lossy(),
     "note": "文件已删除。重启 app 后窗口不会恢复到保存的位置（无文件可读），将出现在默认位置（居中）。"
   }))
+}
+
+/// Test command: set IME (input method) cursor position on a window.
+/// On OHOS this calls inputMethod.getController().updateCursor(CursorInfo) via
+/// openharmony-ability bridge (same path tao uses).
+/// Requires a focused edit box in the webview (HTML input works), else
+/// ArkTS logs 12800009 (input method client detached).
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
+  use openharmony_ability::window::set_ime_position;
+  // Main window id = 0 (matches tao's ohos_win_id() for the primary window).
+  log::info!("[cmd] set_ime_position_test x={} y={} (window_id=0)", x, y);
+  if let Err(e) = set_ime_position(0, x as i64, y as i64) {
+    log::warn!("[cmd] set_ime_position bridge failed: {}", e);
+  }
+  Ok(())
+}
+
+/// Test command: read back the real updateCursor result recorded by ArkTS.
+/// Poll pattern — call ~500ms after set_ime_position_test (the promise settles async).
+/// Returns JSON: {"ok":bool,"code":number,"message":string,"x":number,"y":number,"ts":number}
+#[cfg(target_env = "ohos")]
+#[command]
+pub fn get_ime_position_result() -> Result<String, String> {
+  use openharmony_ability::window::get_ime_position_result;
+  get_ime_position_result().map_err(|e| e.to_string())
+}
+
+/// Non-ohos stub.
+#[cfg(not(target_env = "ohos"))]
+#[command]
+pub fn set_ime_position_test(_x: i32, _y: i32) -> tauri::Result<()> {
+  Ok(())
+}
+
+#[cfg(not(target_env = "ohos"))]
+#[command]
+pub fn get_ime_position_result() -> Result<String, String> {
+  Ok(r#"{"ok":false,"code":-1,"message":"not supported on this platform","x":0,"y":0,"ts":0}"#.into())
 }

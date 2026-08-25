@@ -4505,6 +4505,43 @@ fn handle_event_loop<T: UserEvent>(
         );
       }
     }
+
+    // 回灌系统窗口状态到 tao 镜像位(问题五 5.3)。
+    // windowStatusChange 事件经 notify_window_status NAPI 入队,这里 drain 后用
+    // 真实 OHOS windowId 路由到对应 tao Window,调 apply_window_status 更新
+    // visible/fullscreen 镜像。路由模式与上方 drain_pending_window_closes 一致
+    // (不依赖 tao ZST WindowId,多窗口正确)。详见 doc/OHOS窗口遗留问题.md(问题五 5.3)。
+    let pending_status = tao::platform::ohos::ability::drain_pending_window_status();
+    for (ohos_win_id, status) in pending_status {
+      let applied = windows.0.borrow().iter().find_map(|(_id, wrapper)| {
+        let w = wrapper.inner.as_ref()?;
+        if w.window_id() == Some(ohos_win_id as i64) {
+          w.apply_window_status(status);
+          Some(())
+        } else {
+          None
+        }
+      });
+      if applied.is_none() {
+        // G6/跨切面(tao#20):创建失败的 Float 窗口 window_id=None(ohos_win_id()==0),
+        // 既不匹配任何 drain 出的状态,也不会产生状态事件(无真实 OHOS 窗口),其镜像位静默陈旧。
+        // 故 drain 出却未匹配 = 真实窗口(id!=0)在入队与 drain 之间被销毁(陈旧 id)或路由不匹配。
+        // 非零 id 属可排查的陈旧 id → warn;id=0(主窗口/失败 Float 哨兵)保持 debug,避免噪音。
+        if ohos_win_id != 0 {
+          log::warn!(
+            "[wry] OHOS pending status drained but no matching window for id {} (status={}); \
+             stale id (window destroyed between queue and drain) or routing mismatch \
+             (failed Float windows never match: window_id=None)",
+            ohos_win_id, status
+          );
+        } else {
+          log::debug!(
+            "[wry] OHOS pending status: no match for id 0 (main window / failed-Float sentinel), status={}",
+            status
+          );
+        }
+      }
+    }
   }
 
   match event {
@@ -5422,7 +5459,7 @@ You may have it installed on another user account, but it is not available for t
       None
     }
   } else {
-    #[cfg(feature = "unstable")]
+    #[cfg(all(feature = "unstable", not(target_env = "ohos")))]
     {
       webview_builder = webview_builder.with_bounds(wry::Rect {
         position: LogicalPosition::new(0, 0).into(),
@@ -5435,7 +5472,16 @@ You may have it installed on another user account, but it is not available for t
         height_rate: 1.,
       })
     }
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(all(not(feature = "unstable"), not(target_env = "ohos")))]
+    {
+      None
+    }
+    // On OHOS, a webview created without explicit bounds must stay bounds-less:
+    // wry marks it natural-layout in WebViewStyle (no width/height → ArkTS
+    // "100%"), so it follows window resizes. Passing full-window pixel bounds
+    // here would make it explicit-size and desync its page layout on resize
+    // (BuilderNode.update does not notify ArkWeb to relayout).
+    #[cfg(target_env = "ohos")]
     None
   };
 

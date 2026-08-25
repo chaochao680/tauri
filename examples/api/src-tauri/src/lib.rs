@@ -703,6 +703,10 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(desktop)]
       cmd::create_borderless_window,
       #[cfg(desktop)]
+      cmd::create_decorated_window,
+      cmd::set_ime_position_test,
+      cmd::get_ime_position_result,
+      #[cfg(desktop)]
       cmd::create_transparent_borderless_window,
       #[cfg(target_env = "ohos")]
       cmd::create_ui_ability_window,
