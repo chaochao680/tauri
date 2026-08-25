@@ -266,9 +266,9 @@ pub struct WindowIdStore(Arc<Mutex<HashMap<TaoWindowId, WindowId>>>);
 
 impl WindowIdStore {
   pub fn insert(&self, w: TaoWindowId, id: WindowId) {
-    // On OHOS, WindowId is a ZST - all windows share the same key.
-    // Use or_insert to keep the first (main) window mapping and prevent
-    // child window creation from overwriting it.
+    // On OHOS, WindowId carries the real OHOS window id (0=main, >0=Float
+    // sub-window), so keys are distinct per window. or_insert only guards
+    // against an accidental double-insert of the same window.
     #[cfg(target_env = "ohos")]
     {
       self.0.lock().unwrap().entry(w).or_insert(id);
@@ -4539,8 +4539,10 @@ fn handle_event_loop<T: UserEvent>(
   // stored Rust values before the async destruction completes. See defensive guard
   // on wrapper.inner below.
   //
-  // TODO(遗留问题一): 此 drain 是 OHOS 关窗旁路通道,补 tao ZST WindowId + MainEvent::WindowDestroy
-  //   不带身份的缺陷。根因、影响范围(不止关窗)、根治路径见 doc/OHOS窗口遗留问题.md(问题一)
+  // NOTE(遗留问题一, 部分根治): tao WindowId 已携带真实 OHOS window id（ZST 缺陷已修,
+  //   见 openspec change p1-window-state-per-window-rect Phase 3）。但此 drain 旁路仍需
+  //   保留：Float 子窗口关闭走 ArkTS destroyWindow → 本队列，不产生 MainEvent::WindowDestroy
+  //   （该事件仅在主窗口 stage 拆除时触发）。根因分析见 doc/OHOS窗口遗留问题.md(问题一)
   #[cfg(target_env = "ohos")]
   {
     use tao::platform::ohos::WindowExtOpenHarmony;

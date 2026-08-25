@@ -438,7 +438,7 @@ export const pluginTests: TestCase[] = [
   {
     name: '@tauri-apps/plugin-window-state.filename+save+restore',
     category: 'side-effect',
-    timeout: 15000,
+    timeout: 25000,
     async fn() {
       const { filename, saveWindowState, restoreStateCurrent, StateFlags } = await import('@tauri-apps/plugin-window-state');
       const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
@@ -453,7 +453,23 @@ export const pluginTests: TestCase[] = [
         if (originalSize && originalSize.width > 0 && originalSize.height > 0) {
           try {
             await getCurrentWindow().setSize(originalSize);
-            await saveWindowState(StateFlags.SIZE);
+            // OHOS: saveWindowState reads the plugin's in-memory cache, which is
+            // refreshed asynchronously by the Resized event (onAreaChange dispatch).
+            // Saving immediately after setSize races that dispatch and persists the
+            // shrunken 400x300 — the next app launch then restores it. Poll innerSize
+            // until the restore has actually landed before saving back.
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+              const cur = await getCurrentWindow().innerSize();
+              if (Math.abs(cur.width - originalSize.width) <= 2 && Math.abs(cur.height - originalSize.height) <= 2) break;
+              await new Promise((r) => setTimeout(r, 100));
+            }
+            // Save with ALL (not SIZE) so the OHOS save-time position refresh
+            // (outer_position) writes the real position back — a SIZE-only save
+            // leaves the cache's creation-time (0,0) in the file, and the next
+            // launch's startup restore (StateFlags::all) yanks the window to
+            // the top-left corner.
+            await saveWindowState(StateFlags.ALL);
           } catch { /* ignore */ }
         }
       } catch (e) {
