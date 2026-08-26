@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 mod cmd;
+mod probe_apis;
 #[cfg(desktop)]
 mod menu_plugin;
 #[cfg(desktop)]
@@ -191,6 +192,54 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
     ohos_log::init();
     log::info!("OHOS log initialized via hilog + tauri_plugin_log(skip_logger)");
   };
+
+  // LLVM coverage: set profraw output path early (before any coverage data
+  // flush). Only active when built with `-Cinstrument-coverage` + cov-dump
+  // feature. The app process is spawned by the Ability Manager and does not
+  // inherit hdc shell env vars, so LLVM_PROFILE_FILE must be set in-process.
+  #[cfg(all(target_env = "ohos", feature = "cov-dump"))]
+  {
+    // IMMEDIATE marker + log to verify this cfg block is reached.
+    log::info!("[cov-dump] cfg block entered");
+    let _ = std::fs::write("/data/storage/el2/base/cache/cov-immediate.txt", "reached\n");
+
+    extern "C" {
+      fn __llvm_profile_set_filename(path: *const std::os::raw::c_char);
+      fn __llvm_profile_write_file() -> std::os::raw::c_int;
+      fn __llvm_profile_initialize(instrumented: std::os::raw::c_int, sync: std::os::raw::c_int);
+    }
+    // Spawn a delayed thread to avoid hilog congestion during startup.
+    // Also tries marker writes at increasing delays to ensure the cache
+    // directory exists.
+    std::thread::spawn(|| {
+      // Wait 3s for hilog to settle and cache dir to be created.
+      std::thread::sleep(std::time::Duration::from_secs(3));
+
+      // Write marker files to verify this code path is reached.
+      let r1 = std::fs::write("/data/storage/el2/base/cache/cov-marker.txt", "cov-dump reached\n");
+      log::info!("[cov-dump] marker write r1={:?}", r1);
+
+      let r2 = std::fs::write("/data/app/el2/100/base/com.tauri.api/cache/cov-marker.txt", "cov-dump reached\n");
+      log::info!("[cov-dump] marker write r2={:?}", r2);
+
+      let path = b"/data/storage/el2/base/cache/cov-app-%m-%p.profraw\0";
+      unsafe {
+        __llvm_profile_initialize(1, 0);
+        __llvm_profile_set_filename(path.as_ptr() as *const std::os::raw::c_char);
+        let rc = __llvm_profile_write_file();
+        log::info!("[cov-dump] initial flush rc={}", rc);
+      }
+
+      // Periodic flush every 20s.
+      loop {
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        unsafe {
+          let rc = __llvm_profile_write_file();
+          log::info!("[cov-dump] periodic flush rc={}", rc);
+        }
+      }
+    });
+  }
 
   builder = builder
     // Test append_invoke_initialization_script
@@ -723,10 +772,15 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::perform_request,
       cmd::echo,
       cmd::spam,
-      cmd::write_test_report,
       cmd::clear_test_report,
       cmd::append_test_result,
       cmd::console_log,
+      probe_apis::probe_app_monitors,
+      #[cfg(desktop)]
+      probe_apis::probe_app_menu_set_remove,
+      #[cfg(desktop)]
+      probe_apis::probe_window_menu_set_remove,
+      probe_apis::probe_webview_reparent,
       cmd::flush_console_log,
       cmd::clear_console_log,
       cmd::test_eval,
@@ -769,7 +823,6 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::create_transparent_ui_ability_window,
       #[cfg(target_env = "ohos")]
       cmd::transparent_test_start,
-      cmd::close_test_window,
       cmd::close_all_test_windows,
       cmd::count_webview_windows,
       cmd::create_counter,
@@ -801,6 +854,12 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       #[cfg(debug_assertions)]
       cmd::sentry_test_panic,
       cmd::sentry_test_breadcrumb,
+      #[cfg(all(target_env = "ohos", feature = "cov-dump"))]
+      cmd::dump_coverage,
+      #[cfg(all(target_env = "ohos", feature = "fault-injection"))]
+      cmd::fault_injection_set_rule,
+      #[cfg(all(target_env = "ohos", feature = "fault-injection"))]
+      cmd::fault_injection_clear,
     ])
     .build(tauri::tauri_build_context!())
     .expect("error while building tauri application");

@@ -180,25 +180,6 @@ pub fn spam(channel: Channel<i32>) -> tauri::Result<()> {
   Ok(())
 }
 
-#[command]
-pub fn write_test_report<R: Runtime>(
-  #[allow(unused_variables)] app: tauri::AppHandle<R>,
-  report: String,
-) -> Result<(), String> {
-  #[cfg(target_env = "ohos")]
-  let dir = std::path::PathBuf::from("/data/storage/el2/base/cache");
-  #[cfg(not(target_env = "ohos"))]
-  let dir = {
-    use tauri::Manager;
-    app.path().app_cache_dir().map_err(|e| e.to_string())?
-  };
-
-  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-  let path = dir.join("test-report.json");
-  std::fs::write(&path, &report).map_err(|e| e.to_string())?;
-  Ok(())
-}
-
 /// Clear the test report file before starting a new test run.
 #[command]
 pub fn clear_test_report<R: Runtime>(
@@ -1173,16 +1154,6 @@ pub fn count_webview_windows<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tau
   Ok(app.webview_windows().len())
 }
 
-/// Close the calling webview window. Used by test windows' close buttons
-/// since __TAURI_INTERNALS__.invoke('plugin:window|close') may not work
-/// in initialization_script context on OHOS.
-#[command]
-pub fn close_test_window<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) -> tauri::Result<()> {
-  log::info!("close_test_window called for label: {}", window.label());
-  window.close()?;
-  Ok(())
-}
-
 /// Close all webview windows except the main window. Used by the TestRunner
 /// "Close All Test Windows" button to clean up windows opened during a test
 /// run (Float sub-windows, UIAbility instances, isolated/UA/custom-ua/no-throttle
@@ -1914,5 +1885,68 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
   }
 
   builder.build()?;
+  Ok(())
+}
+
+/// Dump LLVM profiling data (.profraw) to the app sandbox cache dir.
+///
+/// Instrumented builds (`-Cinstrument-coverage`) collect coverage counters in
+/// memory; this command flushes them to disk via `__llvm_profile_write_file`.
+/// The output path is set early at app startup (see `lib.rs`) to
+/// `/data/storage/el2/base/cache/cov-app-%m-%p.profraw`.
+///
+/// Gated behind `feature = "cov-dump"` + `target_env = "ohos"` so it is inert
+/// on every other platform / build config.
+#[cfg(all(target_env = "ohos", feature = "cov-dump"))]
+#[command]
+pub fn dump_coverage() {
+  extern "C" {
+    fn __llvm_profile_write_file() -> std::os::raw::c_int;
+  }
+  let rc = unsafe { __llvm_profile_write_file() };
+  log::info!("[cov-dump] __llvm_profile_write_file() returned {}", rc);
+}
+
+/// Set a fault injection rule on the OHOS bridge.
+///
+/// Injects a failure (error / exception / delay / timeout) into the next
+/// matching ArkTS bridge call. Auto-enables the registry on first call.
+///
+/// Gated behind `feature = "fault-injection"` + `target_env = "ohos"`.
+#[cfg(all(target_env = "ohos", feature = "fault-injection"))]
+#[command]
+pub async fn fault_injection_set_rule(
+  rule: serde_json::Value,
+) -> tauri::Result<()> {
+  let oha_app = tauri::ohos::APP
+    .lock()
+    .map_err(|e| anyhow::anyhow!("APP mutex poisoned: {e}"))?
+    .as_ref()
+    .ok_or_else(|| anyhow::anyhow!("OpenHarmonyApp not initialized"))?
+    .clone();
+  let wire: openharmony_ability::FaultRuleWire = serde_json::from_value(rule)?;
+  oha_app
+    .set_fault_rule(wire)
+    .await
+    .map_err(|e| anyhow::anyhow!("set_fault_rule: {e}"))?;
+  Ok(())
+}
+
+/// Clear all fault injection rules on the OHOS bridge.
+///
+/// Gated behind `feature = "fault-injection"` + `target_env = "ohos"`.
+#[cfg(all(target_env = "ohos", feature = "fault-injection"))]
+#[command]
+pub async fn fault_injection_clear() -> tauri::Result<()> {
+  let oha_app = tauri::ohos::APP
+    .lock()
+    .map_err(|e| anyhow::anyhow!("APP mutex poisoned: {e}"))?
+    .as_ref()
+    .ok_or_else(|| anyhow::anyhow!("OpenHarmonyApp not initialized"))?
+    .clone();
+  oha_app
+    .clear_fault_rules()
+    .await
+    .map_err(|e| anyhow::anyhow!("clear_fault_rules: {e}"))?;
   Ok(())
 }

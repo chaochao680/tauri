@@ -12,6 +12,11 @@
   import { ohosInitTests } from '../lib/tests/ohos-init';
   import { ohosGapTests } from '../lib/tests/ohos-gap';
   import { ohosMobilePluginTests } from '../lib/tests/ohos-mobile-plugins';
+  import { windowOpsTests } from '../lib/tests/window-ops';
+  import { windowOpsExtraTests } from '../lib/tests/window-ops-extra';
+  import { driverTests, sideReplayTests, badInputTests } from '../lib/tests/driver-generated';
+  import { faultInjectionTests } from '../lib/tests/fault-injection-generated';
+  import { apiGapTests } from '../lib/tests/api-gap';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow, currentMonitor, cursorPosition, Effect, LogicalSize, PhysicalPosition, PhysicalSize, UserAttentionType } from '@tauri-apps/api/window';
@@ -73,7 +78,12 @@
     pressedKeys.clear();
   }
 
-  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests, ...ohosAdapterTests, ...ohosInitTests, ...ohosGapTests, ...ohosMobilePluginTests];
+  // driver 盲调用 + side-effect 复放按 design 放最后（S2 覆盖率套件）。
+  // 门控：仅覆盖率验证构建（cov-build.sh VITE_COVERAGE_TESTS=true）注入覆盖率批次；
+  // VITE_AUTOTEST（自动跑测试）不注入，普通 demo 保持 283 用例标准集。
+  // api-gap 批（S10）压轴：含 app 隐显 / 设置页跳转等破坏性操作，必须在所有批次之后。
+  const coverageTests = import.meta.env.VITE_COVERAGE_TESTS ? [...driverTests, ...sideReplayTests, ...badInputTests, ...faultInjectionTests, ...windowOpsExtraTests, ...apiGapTests] : [];
+  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests, ...ohosAdapterTests, ...ohosInitTests, ...ohosGapTests, ...ohosMobilePluginTests, ...windowOpsTests, ...coverageTests];
   const webview = getCurrentWebview();
 
   async function runAll() {
@@ -102,9 +112,20 @@
     report = r;
     onMessage(`--- Done: ${r.passed} passed, ${r.failed} failed, ${r.skipped} skipped ---`);
     running = false;
+
+    // Flush LLVM coverage data on OHOS instrumented builds. No-op / rejected
+    // silently on non-cov-dump builds (command not registered).
+    try {
+      await invoke('dump_coverage');
+      onMessage('[cov-dump] coverage flushed');
+    } catch (e) {
+      // command absent on non-cov-dump builds — ignore
+    }
   }
 
-  // Auto-run on first mount — ONLY in the main window.
+  // Auto-run on first mount — ONLY in the main window, and only in autotest
+  // builds (VITE_AUTOTEST / VITE_COVERAGE_TESTS，由 run-tests.sh / cov-build.sh
+  // 设置)。普通 demo 构建（cargo tauri ohos run）不自动跑，手动点 Run All。
   // Test sub-windows (clipboard/zoom/https-scheme tests created via
   // create_ohos_test_webview) load the same index.html, so their onMount
   // would also fire runAll() and spawn a flood of auto-test sub-windows,
@@ -113,8 +134,11 @@
   let listenId = 0;
   onMount(async () => {
     const isMainWindow = getCurrentWindow().label === 'main';
-    if (isMainWindow) {
+    const isAutotest = Boolean(import.meta.env.VITE_AUTOTEST || import.meta.env.VITE_COVERAGE_TESTS);
+    if (isMainWindow && isAutotest) {
       runAll();
+    } else if (isMainWindow) {
+      onMessage('[TestRunner] autotest disabled (no VITE_AUTOTEST/VITE_COVERAGE_TESTS) — click Run All to test');
     } else {
       onMessage(`[TestRunner] sub-window "${getCurrentWindow().label}" — auto-test skipped (static test window)`);
     }

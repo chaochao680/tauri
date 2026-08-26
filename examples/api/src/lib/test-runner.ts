@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type TestStatus = 'pass' | 'fail' | 'skip';
-export type TestCategory = 'auto' | 'side-effect' | 'manual';
+export type TestCategory = 'auto' | 'side-effect' | 'manual' | 'driver';
 
 export interface TestCase {
   name: string;
