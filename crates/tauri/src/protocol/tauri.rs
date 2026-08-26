@@ -164,24 +164,35 @@ fn get_response<R: Runtime>(
     proxy_builder = proxy_builder.body(request.body().clone());
     match crate::async_runtime::safe_block_on(proxy_builder.send()) {
       Ok(r) => {
-        let mut response_cache_ = response_cache.lock().unwrap();
-        let mut response = None;
-        if r.status() == http::StatusCode::NOT_MODIFIED {
-          response = response_cache_.get(&url);
-        }
-        let response = if let Some(r) = response {
-          r
-        } else {
-          let status = r.status();
-          let headers = r.headers().clone();
-          let body = crate::async_runtime::safe_block_on(r.bytes())?;
-          let response = CachedResponse {
-            status,
-            headers,
-            body,
+        // Lock hygiene (design.md D1 修法2): NOT_MODIFIED cache lookup stays in the
+        // first lock scope; the network read (safe_block_on(r.bytes())) is moved
+        // outside the lock to avoid holding the Mutex across a potentially slow I/O.
+        // After the read completes, re-acquire the lock to insert + get back.
+        // Concurrent inserts are last-writer-wins (cache semantics allow this).
+        let response = {
+          let cached: Option<CachedResponse> = {
+            let response_cache_ = response_cache.lock().unwrap();
+            if r.status() == http::StatusCode::NOT_MODIFIED {
+              response_cache_.get(&url).cloned()
+            } else {
+              None
+            }
           };
-          response_cache_.insert(url.clone(), response);
-          response_cache_.get(&url).unwrap()
+          if let Some(cached) = cached {
+            cached
+          } else {
+            let status = r.status();
+            let headers = r.headers().clone();
+            let body = crate::async_runtime::safe_block_on(r.bytes())?;
+            let new_response = CachedResponse {
+              status,
+              headers,
+              body,
+            };
+            let mut response_cache_ = response_cache.lock().unwrap();
+            response_cache_.insert(url.clone(), new_response.clone());
+            response_cache_.get(&url).unwrap().clone()
+          }
         };
         for (name, value) in &response.headers {
           builder = builder.header(name, value);

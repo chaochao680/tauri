@@ -1922,12 +1922,25 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
   }
 
   fn reparent(&self, window_id: WindowId) -> Result<()> {
-    let mut current_window_id = self.window_id.lock().unwrap();
+    // Lock hygiene (design.md D1 修法3): read the current window_id and release the
+    // guard before rx.recv() — the original code held the Mutex across a blocking
+    // channel receive, preventing other ops (set_position/set_focus/set_cookie) on
+    // the same webview from reading window_id during reparent. After recv() returns,
+    // re-acquire the lock to write the new window_id.
+    //
+    // Desktop behavior change: releasing the guard means concurrent ops on the same
+    // webview can read the OLD window_id while reparent is in progress. User code
+    // should not concurrently operate the same webview during reparent.
+    // On OHOS, reparent returns Err immediately (L4060-4063), so impact is minimal.
+    let old_window_id = {
+      let guard = self.window_id.lock().unwrap();
+      *guard
+    };
     let (tx, rx) = channel();
     send_user_message(
       &self.context,
       Message::Webview(
-        *current_window_id,
+        old_window_id,
         self.webview_id,
         WebviewMessage::Reparent(window_id, tx),
       ),
@@ -1935,17 +1948,23 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
 
     rx.recv().unwrap()?;
 
+    let mut current_window_id = self.window_id.lock().unwrap();
     *current_window_id = window_id;
     Ok(())
   }
 
   fn cookies_for_url(&self, url: Url) -> Result<Vec<Cookie<'static>>> {
-    let current_window_id = self.window_id.lock().unwrap();
+    // Lock hygiene (design.md D1 修法3): release the window_id guard before rx.recv()
+    // — the original code held the Mutex across a blocking channel receive.
+    let current_window_id = {
+      let guard = self.window_id.lock().unwrap();
+      *guard
+    };
     let (tx, rx) = channel();
     send_user_message(
       &self.context,
       Message::Webview(
-        *current_window_id,
+        current_window_id,
         self.webview_id,
         WebviewMessage::CookiesForUrl(url, tx),
       ),
@@ -4894,12 +4913,19 @@ fn on_close_requested<'a, T: UserEvent>(
 
     drop(windows_ref);
 
-    let listeners = window_event_listeners.lock().unwrap();
-    let handlers = listeners.values();
-    for handler in handlers {
-      handler(&WindowEvent::CloseRequested {
-        signal_tx: tx.clone(),
-      });
+    // Lock hygiene (design.md D1 修法1): drop the MutexGuard before invoking the
+    // callback, aligning with the main event path (L4701-4709, callback before
+    // lock). The standard tauri API registers handlers via proxy.send_event
+    // (async), so no synchronous re-entry into window_event_listeners exists —
+    // this is purely defensive lock-scope narrowing. Handler iteration order
+    // and callback ordering are preserved (handlers first, then callback).
+    {
+      let listeners = window_event_listeners.lock().unwrap();
+      for handler in listeners.values() {
+        handler(&WindowEvent::CloseRequested {
+          signal_tx: tx.clone(),
+        });
+      }
     }
     callback(RunEvent::WindowEvent {
       label,
