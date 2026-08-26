@@ -411,21 +411,6 @@ impl AppHandle<crate::Wry> {
   ) -> crate::Result<std::sync::Weak<tauri_runtime_wry::Window>> {
     self.runtime_handle.create_tao_window(f).map_err(Into::into)
   }
-
-  /// Sends a window message to the event loop.
-  pub fn send_tao_window_event(
-    &self,
-    window_id: tauri_runtime_wry::TaoWindowId,
-    message: tauri_runtime_wry::WindowMessage,
-  ) -> crate::Result<()> {
-    self
-      .runtime_handle
-      .send_event(tauri_runtime_wry::Message::Window(
-        self.runtime_handle.window_id(window_id),
-        message,
-      ))
-      .map_err(Into::into)
-  }
 }
 
 #[cfg(target_vendor = "apple")]
@@ -752,25 +737,6 @@ impl<R: Runtime> fmt::Debug for App<R> {
       .field("manager", &self.manager)
       .field("handle", &self.handle)
       .finish()
-  }
-}
-
-#[cfg(target_env = "ohos")]
-impl<R: Runtime> App<R> {
-  pub fn ohos_plugin_register(
-    &self,
-    name: &str,
-    identifier: &str,
-    class_name: &str,
-    config: serde_json::Value,
-  ) {
-    let mut plugins = crate::ohos::PLUGINS_TO_REGISTER.lock().unwrap();
-    plugins.push(crate::ohos::PluginRegistration {
-      name: name.to_string(),
-      identifier: identifier.to_string(),
-      class_name: class_name.to_string(),
-      config,
-    });
   }
 }
 
@@ -2718,5 +2684,65 @@ mod tests {
       crate::test_utils::assert_send::<super::AssetResolver<crate::Wry>>();
       crate::test_utils::assert_sync::<super::AssetResolver<crate::Wry>>();
     }
+  }
+
+  /// S7 纯变换批：runtime 窗口事件 → 对外 WindowEvent 的映射。
+  /// CloseRequested/Moved/ScaleFactorChanged/ThemeChanged 在 OHOS 上不会自然发生。
+  #[test]
+  fn runtime_window_event_maps_all_variants() {
+    use super::{RuntimeWebviewEvent, RuntimeWindowEvent, WebviewEvent, WindowEvent};
+    use tauri_runtime::dpi::{PhysicalPosition, PhysicalSize};
+    use tauri_runtime::window::DragDropEvent;
+
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::Resized(PhysicalSize::new(640u32, 480u32))),
+      WindowEvent::Resized(_)
+    ));
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::Moved(PhysicalPosition::new(10i32, 20i32))),
+      WindowEvent::Moved(_)
+    ));
+    {
+      let (tx, _rx) = std::sync::mpsc::channel();
+      assert!(matches!(
+        WindowEvent::from(RuntimeWindowEvent::CloseRequested { signal_tx: tx }),
+        WindowEvent::CloseRequested { .. }
+      ));
+    }
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::Destroyed),
+      WindowEvent::Destroyed
+    ));
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::Focused(true)),
+      WindowEvent::Focused(true)
+    ));
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::ScaleFactorChanged {
+        scale_factor: 2.0,
+        new_inner_size: PhysicalSize::new(800u32, 600u32),
+      }),
+      WindowEvent::ScaleFactorChanged { .. }
+    ));
+    {
+      let drop_event = DragDropEvent::Enter {
+        paths: vec![std::path::PathBuf::from("/tmp/a.txt")],
+        position: PhysicalPosition::new(1.0, 2.0),
+      };
+      assert!(matches!(
+        WindowEvent::from(RuntimeWindowEvent::DragDrop(drop_event)),
+        WindowEvent::DragDrop(_)
+      ));
+      assert!(matches!(
+        WebviewEvent::from(RuntimeWebviewEvent::DragDrop(
+          DragDropEvent::Over { position: PhysicalPosition::new(3.0, 4.0) }
+        )),
+        WebviewEvent::DragDrop(_)
+      ));
+    }
+    assert!(matches!(
+      WindowEvent::from(RuntimeWindowEvent::ThemeChanged(tauri_utils::Theme::Dark)),
+      WindowEvent::ThemeChanged(tauri_utils::Theme::Dark)
+    ));
   }
 }
