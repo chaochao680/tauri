@@ -110,6 +110,14 @@
       验证：两轮后 inner_size 不变）
 - [x] 4.4 faultlog 零新增（2026-08-26 两轮全量跑后 faultlogger 目录无新
       appfreeze/jscrash，最新条目停留在 2026-08-25 20:16）
+- [x] 4.5 主窗口逐轮缩小根因修复（用户报告，D2-r）：WM rect 与 surface rect
+      异步更新 → 实时差垃圾 decor（824/770/292 vs 真值 146）→ save/restore 复利
+      缩小。两层修复：层1 surface 事件锁存 decor（oha 7f48f07）；层2 事件驱动
+      per-window watcher 自校正（tao 88f3509e，替代 15s 轮询版）。审计子agent
+      复核无 P0，P1×2（no-op resize 哨兵 + 有界 Recheck）已修；真机 4 轮重启
+      （含清缓存冷启动）幂等 2090×1394/inner 1248，套件基线持平；残余：罕见
+      冷启动竞态的校正触发日志未取得（restore 时 decor 均已先收敛），触发条件
+      与派发数学已由轮询版 16:22 轮实证等价
 
 ## 5. 收尾
 
