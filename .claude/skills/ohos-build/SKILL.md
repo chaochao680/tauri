@@ -23,11 +23,22 @@ cargo tauri ohos run --device-type desktop
 
 一条龙完成：前端构建 → Rust 交叉编译 → HAP 打包签名 → 安装 → 启动。
 
+> **注意**：`run` 是 **attach 模式**——部署启动成功后不退出，持续转发设备日志（适合现场看输出）。后台/脚本调用会一直挂着：要么接受其常驻，要么用 `cargo tauri ohos build` + `install.sh` 分离部署。构建成功与否以 HAP 产物 mtime / 设备 app 启动时间为准，别等命令退出。
+
 `--device-type` 参数：
 - `desktop` — PC/桌面设备（cfg(desktop)，Tray/Menu 功能需要）
 - `mobile` — 手机/平板（cfg(mobile)）
 
-> **注意**：此命令不包含自动测试（VITE_AUTOTEST）和 test-report 拉取。如需自动测试，使用方式二。
+> **注意**：此命令不包含自动测试（不设 `VITE_AUTOTEST`，app 启动后不自动跑套件，需手动点 Run All，为 283 例标准集）。如需自动测试，使用方式二。
+
+### 前端门控双变量（TestRunner.svelte）
+
+| 变量 | 语义 | 谁设置 |
+|---|---|---|
+| `VITE_AUTOTEST` | 自动跑测试（主窗口 mount 即跑，**283 例标准集**） | run-tests.sh、cov-build.sh |
+| `VITE_COVERAGE_TESTS` | 注入覆盖率批次（driver/side-replay/bad-input/fault，共 312 例，合计 595） | 仅 cov-build.sh 插桩形态 |
+
+两变量都不设（方式一/方式三）→ 普通交互 demo，不自动跑测试。
 
 ### 方式二：run-tests.sh（含自动测试）
 
@@ -45,7 +56,7 @@ OHOS_DEVICE_TYPE=desktop bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/sc
    - Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
    - .so 拷贝 + hvigorw assembleHap（TAURI_OHOS_SKIP_DEVECO_SCRIPT 禁用 tauriPlugin，build-profile.json5 证书签名）
    - 安装已签名 HAP（带 hdc false-success 检测）→ 启动
-4. 等待 30s → 拉取 test-report → 分析结果
+4. 轮询 test-report footer（`*Report generated at end of test run.*`，5s 间隔，最长 `WAIT_SECONDS`=180s）→ 拉取报告 → 分析结果
 
 ### 方式三：cargo tauri ohos build --app（多形态打包）
 
@@ -95,7 +106,7 @@ PR #59 将 app 拆分为 mobile 和 desktop 两个 entry 模块：
 |------|------|
 | `env.sh` | 环境配置：DevEco Studio 路径解析（`DEV_ECO_STUDIO_INSTALL_PATH` 优先 → `DEVECO_HOME` → 自动检测，不落盘）、CC/linker/JAVA_HOME/PATH，必须在其他脚本前 source |
 | `prerequisites.sh` | CLI 不做的开发期前置：pnpm install / build:api / 插件 dist-js / ACL 检查。被 build-ohos.sh 和 run-tests.sh source，不直接执行 |
-| `run-tests.sh` | 一键全流程：HAR 重建 → prerequisites → `cargo tauri ohos run`（build+install+launch，带 hdc false-success 检测）→ 等待 → 拉取报告 → 分析 |
+| `run-tests.sh` | 一键全流程：HAR 重建 → prerequisites → `cargo tauri ohos run`（build+install+launch，带 hdc false-success 检测）→ 轮询报告 footer → 拉取报告 → 分析 |
 | `build-ohos.sh` | prerequisites + `cargo tauri ohos build`（Rust 编译/.so/hvigorw/签名由 CLI 处理）。项目专属 feature 经 `TAURI_BUILD_FEATURES` 传入 |
 | `install.sh` | 仅安装启动（使用已签名 HAP），不构建不签名。日常流程已被 `cargo tauri ohos run` 替代；保留供单独安装场景 |
 

@@ -31,7 +31,9 @@ BUNDLE_NAME=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' "$APP_JSON"
 REPORT_DEVICE_PATH="/data/app/el2/100/base/$BUNDLE_NAME/cache/test-report.md"
 REPORT_LOCAL="$PROJECT_ROOT/examples/api/test-report.md"
 REPORT_LOCAL_WIN=$(echo "$REPORT_LOCAL" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
-WAIT_SECONDS="${WAIT_SECONDS:-60}"
+# 轮询总时长（秒）。套件跑完的标志是报告 footer "*Report generated at end of
+# test run.*"，283 例约 45-60s、595 例 >90s，180s 兜底足够；按 5s 间隔轮询。
+WAIT_SECONDS="${WAIT_SECONDS:-180}"
 
 # HAP 产物路径（cargo tauri ohos build 输出，见 build-ohos.sh）
 ENTRY_MODULE="entry_${OHOS_DEVICE_TYPE:-desktop}"
@@ -135,6 +137,8 @@ fi
 # Step 4: aa start (启动 EntryAbility)
 echo ""
 echo ">>> Step 4: aa start (launch EntryAbility)..."
+# 启动前清掉设备旧报告——防陈旧 footer 让 Step 5 轮询误判"套件已跑完"
+"${HDC_T[@]}" shell "rm -f $REPORT_DEVICE_PATH" 2>&1 | tr -d '\r' || true
 START_OUT=$("${HDC_T[@]}" shell aa start -b "$BUNDLE_NAME" -a EntryAbility 2>&1 | tr -d '\r')
 echo "$START_OUT"
 if echo "$START_OUT" | grep -qiE 'error|fail|not.*found'; then
@@ -142,10 +146,24 @@ if echo "$START_OUT" | grep -qiE 'error|fail|not.*found'; then
     exit 1
 fi
 
-# Step 5: Wait for tests to complete (autotest 前端跑完需时间)
+# Step 5: Poll for test completion (轮询报告 footer，取代固定 sleep)
+#   footer "*Report generated at end of test run.*" 由 TestRunner 在 runAll
+#   末尾写入——出现即套件真正跑完；轮询避免固定等待截断尾部用例。
 echo ""
-echo ">>> Step 5: Waiting ${WAIT_SECONDS}s for tests to complete..."
-sleep "$WAIT_SECONDS"
+echo ">>> Step 5: Polling for test completion (up to ${WAIT_SECONDS}s, every 5s)..."
+REPORT_DONE=false
+for ((i=5; i<=WAIT_SECONDS; i+=5)); do
+    sleep 5
+    FOOTER=$("${HDC_T[@]}" shell "tail -3 $REPORT_DEVICE_PATH" 2>/dev/null | tr -d '\r' || true)
+    if echo "$FOOTER" | grep -q "Report generated at end of test run"; then
+        echo "    Suite finished (footer detected after ${i}s)."
+        REPORT_DONE=true
+        break
+    fi
+done
+if [ "$REPORT_DONE" != true ]; then
+    echo "    WARNING: footer not seen within ${WAIT_SECONDS}s — suite may still be running or app failed to start. Pulling whatever exists..."
+fi
 
 # Step 6: Pull report (MSYS_NO_PATHCONV=1 prevents Git Bash mangling device paths
 # like /data/app/.../com.tauri.api/... into Windows paths)
