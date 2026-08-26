@@ -6059,3 +6059,271 @@ fn to_tao_theme(theme: Option<Theme>) -> Option<TaoTheme> {
     _ => None,
   }
 }
+
+#[cfg(test)]
+mod with_config_tests {
+  use super::*;
+  use tauri_utils::config::{Color, PreventOverflowConfig, PreventOverflowMargin, WindowConfig};
+
+  #[test]
+  fn with_config_default_applies_shared_flags() {
+    let cfg = WindowConfig::default();
+    let wb = WindowBuilderWrapper::with_config(&cfg);
+    assert!(!wb.center);
+    assert!(wb.prevent_overflow.is_none());
+    assert_eq!(wb.inner.window.title, cfg.title);
+    // Default config carries 800x600, so the size is always applied on OHOS.
+    assert!(wb.inner.window.inner_size.is_some());
+  }
+
+  #[test]
+  fn with_config_explicit_position_and_center() {
+    let mut cfg = WindowConfig::default();
+    cfg.label = "main".into();
+    cfg.x = Some(10.0);
+    cfg.y = Some(20.0);
+    let wb = WindowBuilderWrapper::with_config(&cfg);
+    assert!(!wb.center);
+    assert!(wb.inner.window.position.is_some());
+    // On OHOS the label is applied via the platform builder extension.
+    assert!(!cfg.label.is_empty());
+
+    let mut centered = WindowConfig::default();
+    centered.center = true;
+    let wb = WindowBuilderWrapper::with_config(&centered);
+    assert!(wb.center);
+  }
+
+  #[test]
+  fn with_config_size_constraints_and_background() {
+    let mut cfg = WindowConfig::default();
+    cfg.width = 800.0;
+    cfg.height = 600.0;
+    cfg.min_width = Some(200.0);
+    cfg.min_height = Some(100.0);
+    cfg.max_width = Some(1000.0);
+    cfg.max_height = Some(900.0);
+    cfg.background_color = Some(Color(1, 2, 3, 4));
+    let wb = WindowBuilderWrapper::with_config(&cfg);
+    assert!(wb.inner.window.inner_size.is_some());
+    let c = &wb.inner.window.inner_size_constraints;
+    assert!(c.min_width.is_some());
+    assert!(c.min_height.is_some());
+    assert!(c.max_width.is_some());
+    assert!(c.max_height.is_some());
+  }
+
+  #[test]
+  fn with_config_prevent_overflow_variants() {
+    let mut margin = WindowConfig::default();
+    margin.prevent_overflow = Some(PreventOverflowConfig::Margin(PreventOverflowMargin {
+      width: 12,
+      height: 34,
+    }));
+    let wb = WindowBuilderWrapper::with_config(&margin);
+    assert!(wb.prevent_overflow.is_some());
+
+    let mut disabled = WindowConfig::default();
+    disabled.prevent_overflow = Some(PreventOverflowConfig::Enable(false));
+    let wb = WindowBuilderWrapper::with_config(&disabled);
+    assert!(wb.prevent_overflow.is_none());
+
+    let mut enabled = WindowConfig::default();
+    enabled.prevent_overflow = Some(PreventOverflowConfig::Enable(true));
+    let wb = WindowBuilderWrapper::with_config(&enabled);
+    assert!(wb.prevent_overflow.is_some());
+  }
+
+  // ─── S9 fmt 批：WindowBuilderWrapper Debug impl（L915，宿主可构造） ─────────────
+
+  #[test]
+  fn window_builder_wrapper_debug_formats_fields() {
+    let cfg = WindowConfig::default();
+    let wb = WindowBuilderWrapper::with_config(&cfg);
+    let dbg = format!("{wb:?}");
+    assert!(dbg.contains("WindowBuilderWrapper"), "struct name missing: {dbg}");
+    assert!(dbg.contains("center"), "center field missing: {dbg}");
+    assert!(dbg.contains("prevent_overflow"), "prevent_overflow field missing: {dbg}");
+    assert!(!dbg.trim().is_empty());
+
+    let centered = WindowConfig::default();
+    let wb2 = WindowBuilderWrapper::with_config(&centered);
+    let dbg2 = format!("{wb2:?}");
+    assert!(dbg2.contains("center"), "second format run missing center: {dbg2}");
+  }
+}
+
+/// S7 纯变换批：runtime 抽象 → tao 类型的枚举/结构映射。这些臂在 OHOS 上
+/// 不会自然发生（cursor 切换、进度条、DPI 变化等），用构造输入直接点亮。
+#[cfg(test)]
+mod mapping_tests {
+  use super::*;
+  use tauri_runtime::window::CursorIcon;
+  use tauri_runtime::{ProgressBarState, ProgressBarStatus, UserAttentionType};
+
+  #[test]
+  fn cursor_icon_wrapper_maps_all_variants() {
+    let cases: Vec<(CursorIcon, fn(TaoCursorIcon) -> bool)> = vec![
+      (CursorIcon::Default, |i| matches!(i, TaoCursorIcon::Default)),
+      (CursorIcon::Crosshair, |i| matches!(i, TaoCursorIcon::Crosshair)),
+      (CursorIcon::Hand, |i| matches!(i, TaoCursorIcon::Hand)),
+      (CursorIcon::Arrow, |i| matches!(i, TaoCursorIcon::Arrow)),
+      (CursorIcon::Move, |i| matches!(i, TaoCursorIcon::Move)),
+      (CursorIcon::Text, |i| matches!(i, TaoCursorIcon::Text)),
+      (CursorIcon::Wait, |i| matches!(i, TaoCursorIcon::Wait)),
+      (CursorIcon::Help, |i| matches!(i, TaoCursorIcon::Help)),
+      (CursorIcon::Progress, |i| matches!(i, TaoCursorIcon::Progress)),
+      (CursorIcon::NotAllowed, |i| matches!(i, TaoCursorIcon::NotAllowed)),
+      (CursorIcon::ContextMenu, |i| matches!(i, TaoCursorIcon::ContextMenu)),
+      (CursorIcon::Cell, |i| matches!(i, TaoCursorIcon::Cell)),
+      (CursorIcon::VerticalText, |i| matches!(i, TaoCursorIcon::VerticalText)),
+      (CursorIcon::Alias, |i| matches!(i, TaoCursorIcon::Alias)),
+      (CursorIcon::Copy, |i| matches!(i, TaoCursorIcon::Copy)),
+      (CursorIcon::NoDrop, |i| matches!(i, TaoCursorIcon::NoDrop)),
+      (CursorIcon::Grab, |i| matches!(i, TaoCursorIcon::Grab)),
+      (CursorIcon::Grabbing, |i| matches!(i, TaoCursorIcon::Grabbing)),
+      (CursorIcon::AllScroll, |i| matches!(i, TaoCursorIcon::AllScroll)),
+      (CursorIcon::ZoomIn, |i| matches!(i, TaoCursorIcon::ZoomIn)),
+      (CursorIcon::ZoomOut, |i| matches!(i, TaoCursorIcon::ZoomOut)),
+      (CursorIcon::EResize, |i| matches!(i, TaoCursorIcon::EResize)),
+      (CursorIcon::NResize, |i| matches!(i, TaoCursorIcon::NResize)),
+      (CursorIcon::NeResize, |i| matches!(i, TaoCursorIcon::NeResize)),
+      (CursorIcon::NwResize, |i| matches!(i, TaoCursorIcon::NwResize)),
+      (CursorIcon::SResize, |i| matches!(i, TaoCursorIcon::SResize)),
+      (CursorIcon::SeResize, |i| matches!(i, TaoCursorIcon::SeResize)),
+      (CursorIcon::SwResize, |i| matches!(i, TaoCursorIcon::SwResize)),
+      (CursorIcon::WResize, |i| matches!(i, TaoCursorIcon::WResize)),
+      (CursorIcon::EwResize, |i| matches!(i, TaoCursorIcon::EwResize)),
+      (CursorIcon::NsResize, |i| matches!(i, TaoCursorIcon::NsResize)),
+      (CursorIcon::NeswResize, |i| matches!(i, TaoCursorIcon::NeswResize)),
+      (CursorIcon::NwseResize, |i| matches!(i, TaoCursorIcon::NwseResize)),
+      (CursorIcon::ColResize, |i| matches!(i, TaoCursorIcon::ColResize)),
+      (CursorIcon::RowResize, |i| matches!(i, TaoCursorIcon::RowResize)),
+    ];
+    for (icon, check) in cases {
+      let mapped = CursorIconWrapper::from(icon).0;
+      assert!(check(mapped), "CursorIcon mapping mismatch for {icon:?}");
+    }
+  }
+
+  #[test]
+  fn map_theme_covers_light_dark_and_fallback() {
+    assert!(matches!(map_theme(&TaoTheme::Light), Theme::Light));
+    assert!(matches!(map_theme(&TaoTheme::Dark), Theme::Dark));
+  }
+
+  #[test]
+  fn progress_state_wrapper_maps_all_statuses() {
+    let cases: Vec<(ProgressBarStatus, fn(TaoProgressState) -> bool)> = vec![
+      (ProgressBarStatus::None, |s| matches!(s, TaoProgressState::None)),
+      (ProgressBarStatus::Normal, |s| matches!(s, TaoProgressState::Normal)),
+      (ProgressBarStatus::Indeterminate, |s| matches!(s, TaoProgressState::Indeterminate)),
+      (ProgressBarStatus::Paused, |s| matches!(s, TaoProgressState::Paused)),
+      (ProgressBarStatus::Error, |s| matches!(s, TaoProgressState::Error)),
+    ];
+    for (status, check) in cases {
+      let mapped = ProgressStateWrapper::from(status).0;
+      assert!(check(mapped), "ProgressState mapping mismatch for {status:?}");
+    }
+  }
+
+  #[test]
+  fn progress_bar_state_wrapper_maps_fields() {
+    let full = ProgressBarState {
+      status: Some(ProgressBarStatus::Paused),
+      progress: Some(42),
+      desktop_filename: Some("app.desktop".into()),
+    };
+    let mapped = ProgressBarStateWrapper::from(full).0;
+    assert_eq!(mapped.progress, Some(42));
+    assert_eq!(mapped.desktop_filename.as_deref(), Some("app.desktop"));
+    assert!(matches!(mapped.state, Some(TaoProgressState::Paused)));
+
+    let none_state = ProgressBarState {
+      status: None,
+      progress: None,
+      desktop_filename: None,
+    };
+    let mapped = ProgressBarStateWrapper::from(none_state).0;
+    assert!(mapped.state.is_none());
+    assert_eq!(mapped.progress, None);
+  }
+
+  #[test]
+  fn device_event_filter_wrapper_maps_all_variants() {
+    assert!(matches!(
+      DeviceEventFilterWrapper::from(DeviceEventFilter::Always).0,
+      TaoDeviceEventFilter::Always
+    ));
+    assert!(matches!(
+      DeviceEventFilterWrapper::from(DeviceEventFilter::Never).0,
+      TaoDeviceEventFilter::Never
+    ));
+    assert!(matches!(
+      DeviceEventFilterWrapper::from(DeviceEventFilter::Unfocused).0,
+      TaoDeviceEventFilter::Unfocused
+    ));
+  }
+
+  #[test]
+  fn size_and_position_wrappers_map_logical_and_physical() {
+    let logical_size = SizeWrapper::from(Size::Logical(LogicalSize::new(640.0, 480.0)));
+    assert!(matches!(logical_size.0, TaoSize::Logical(_)));
+    let physical_size = SizeWrapper::from(Size::Physical(PhysicalSize::new(800u32, 600u32)));
+    assert!(matches!(physical_size.0, TaoSize::Physical(_)));
+
+    let logical_pos = PositionWrapper::from(Position::Logical(LogicalPosition::new(1.0, 2.0)));
+    assert!(matches!(logical_pos.0, TaoPosition::Logical(_)));
+    let physical_pos = PositionWrapper::from(Position::Physical(PhysicalPosition::new(3i32, 4i32)));
+    assert!(matches!(physical_pos.0, TaoPosition::Physical(_)));
+  }
+
+  #[test]
+  fn user_attention_type_wrapper_maps_both_variants() {
+    assert!(matches!(
+      UserAttentionTypeWrapper::from(UserAttentionType::Critical).0,
+      TaoUserAttentionType::Critical
+    ));
+    assert!(matches!(
+      UserAttentionTypeWrapper::from(UserAttentionType::Informational).0,
+      TaoUserAttentionType::Informational
+    ));
+  }
+
+  #[test]
+  fn dpi_wrapper_roundtrips_fields() {
+    let pos = PhysicalPosition::new(10i32, 20i32);
+    let wrapped: PhysicalPositionWrapper<i32> = PhysicalPositionWrapper::from(pos);
+    let back: PhysicalPosition<i32> = wrapped.into();
+    assert_eq!((back.x, back.y), (10, 20));
+
+    let size = PhysicalSize::new(640u32, 480u32);
+    let wrapped: PhysicalSizeWrapper<u32> = PhysicalSizeWrapper::from(size);
+    let back: PhysicalSize<u32> = wrapped.into();
+    assert_eq!((back.width, back.height), (640, 480));
+  }
+
+  #[test]
+  fn rect_wrapper_maps_position_and_size() {
+    let rect = tauri_runtime::dpi::Rect {
+      position: Position::Physical(PhysicalPosition::new(1i32, 2i32)),
+      size: Size::Physical(PhysicalSize::new(3u32, 4u32)),
+    };
+    let mapped = RectWrapper::from(rect).0;
+    assert!(matches!(mapped.position, TaoPosition::Physical(_)));
+    assert!(matches!(mapped.size, TaoSize::Physical(_)));
+  }
+
+  #[test]
+  fn synthesized_window_event_maps_focused_and_drag_drop() {
+    let focused = WindowEventWrapper::from(SynthesizedWindowEvent::Focused(true));
+    assert!(matches!(focused.0, Some(WindowEvent::Focused(true))));
+
+    let drop_event = DragDropEvent::Enter {
+      paths: vec![std::path::PathBuf::from("/tmp/a.txt")],
+      position: PhysicalPosition::new(5.0, 6.0),
+    };
+    let dd = WindowEventWrapper::from(SynthesizedWindowEvent::DragDrop(drop_event));
+    assert!(matches!(dd.0, Some(WindowEvent::DragDrop(_))));
+  }
+}
