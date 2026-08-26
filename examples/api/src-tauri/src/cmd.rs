@@ -873,13 +873,19 @@ pub fn create_decorated_window<R: tauri::Runtime>(
   "#
   );
 
-  let builder =
+  #[allow(unused_mut)]
+  let mut builder =
     tauri::WebviewWindowBuilder::new(&app, &window_id, WebviewUrl::App("hello.html".into()))
       .title("Decorated Window")
       .decorations(true)
       .inner_size(600.0, 400.0)
-      .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float)
       .initialization_script(&init_script);
+  // OHOS-only: force Float so this stays a sub-window (multi-UIAbility is not
+  // supported locally — the second UIAbility request is rejected by tao).
+  #[cfg(target_env = "ohos")]
+  {
+    builder = builder.ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+  }
 
   let _window = builder.build()?;
 
@@ -1768,7 +1774,8 @@ pub async fn set_ime_position_test(x: i32, y: i32) -> tauri::Result<()> {
   use openharmony_ability_plugin_window::WindowClient;
   // Main window id = 0 (matches tao's placeholder for the primary window).
   log::info!("[cmd] set_ime_position_test x={} y={} (window_id=0)", x, y);
-  let result = match tauri::ohos::APP.lock().unwrap().clone() {
+  let ohos_app = tauri::ohos::APP.lock().unwrap().clone();
+  let result = match ohos_app {
     Some(app) => match WindowClient::new(&app) {
       Ok(client) => match client.set_ime_position(0, x as i64, y as i64).await {
         Ok(r) => serde_json::json!({
