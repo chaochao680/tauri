@@ -382,7 +382,7 @@
 ## 十九、Vibrancy（窗口模糊）手动用例
 
 > 自动用例 2 个（side-effect）：
-> 1. `window.setEffects(Blur/Acrylic/Mica/TabbedDark/TabbedLight) + clearEffects` 不抛错（运行时 setEffects，AttributeUpdater 刷新 backdropBlur/backgroundColor）
+> 1. `window.setEffects(Blur/Acrylic) + clearEffects` 不抛错（运行时 setEffects，AttributeUpdater 刷新 backdropBlur/backgroundColor；Mica/Tabbed 系列在 OHOS 上为 no-op 跳过）
 > 2. `create_transparent_window(effect=Blur)` build 时 effects 不抛错（WindowBuilder::effects，registerController inject）
 >
 > 以下为手动用例，通过 Tests 视图的手动按钮触发。vibrancy 窗口用 create_transparent_window（Float 子窗口，避开 UIAbility singleton 冲突）。
@@ -391,7 +391,6 @@
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
 | core | vibrancy | Blur | Blur effect visible | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: Blur effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈磨砂模糊（backdropBlur(25)），能透出背后内容且带模糊 | 窗口加载 vibrancy.html 透明页，Effect::Blur radius=25 |
 | core | vibrancy | Acrylic | Acrylic effect visible | T1 | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: Acrylic effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈模糊 + 半透明深色 tint（blur + color） | Effect::Acrylic radius=25, color=[0,0,0,128] |
-| core | vibrancy | TabbedDark | TabbedDark effect visible | T1 | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: TabbedDark effect visible" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口背景呈模糊 + 深色 tint | Effect::TabbedDark radius=20（OHOS 下等价于 MicaDark 的深色 tint 实现） |
 | core | vibrancy | clearEffects | clearEffects removes blur | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: clearEffects removes blur" 手动测试按钮 2. 观察：先模糊 1s，然后 clearEffects 后模糊消失 | ① 初始窗口背景呈磨砂模糊 ② clearEffects 后窗口背景变清晰，且无半透明颜色遮罩（完全透出背后内容，不发暗/无色调） | 验证 clearEffects 同时移除 backdropBlur 和 backgroundColor tint |
 | core | vibrancy | build-time effects | build-time Blur effect visible | **T0** | 应用已启动，进入 Tests 视图 | 1. 点击 "vibrancy: build-time Blur (WindowBuilder::effects)" 手动测试按钮 2. 观察弹出的透明窗口 | 窗口出现时即呈磨砂模糊（build 时 effects，非运行时 setEffects） | create_transparent_window(effect=Blur, radius=25)，WindowBuilder::effects 在窗口创建时 apply |
 
@@ -486,7 +485,7 @@
 | Unstable Feature（窗口与 Webview 解耦） | 2 | 1 | **3** |
 | Global Shortcut（全局快捷键） | 2 | 0 | **2** |
 | 窗口聚焦与热键缩放 | 1 | 1 | **2** |
-| Vibrancy（窗口模糊） | 3 | 2 | **5** |
+| Vibrancy（窗口模糊） | 3 | 1 | **4** |
 | Deep-Link（深度链接） | 3 | 0 | **3** |
 | Window Operations（窗口操作） | 3 | 0 | **3** |
 | Persisted Scope（fs scope 持久化） | 2 | 0 | **2** |

@@ -1427,7 +1427,7 @@ export const coreTests: TestCase[] = [
   // NOTE: WebviewWindow.new defaults to OHOS UIAbility (singleton) which conflicts
   // with the main window. Use create_transparent_window (Float sub-window) instead.
   {
-    name: 'window.setEffects (Blur/Acrylic/Mica) — no throw',
+    name: 'window.setEffects (Blur/Acrylic) — no throw',
     category: 'side-effect',
     async fn() {
       await invoke('create_transparent_window', { windowId: 'test-vibrancy-auto' });
@@ -1435,9 +1435,6 @@ export const coreTests: TestCase[] = [
       if (!win) throw new Error('vibrancy window not created');
       await win.setEffects({ effects: [Effect.Blur], radius: 25 });
       await win.setEffects({ effects: [Effect.Acrylic], radius: 25, color: [0, 0, 0, 128] });
-      await win.setEffects({ effects: [Effect.Mica], radius: 20 });
-      await win.setEffects({ effects: [Effect.TabbedDark], radius: 20 });
-      await win.setEffects({ effects: [Effect.TabbedLight], radius: 20 });
       await win.clearEffects();
       assert(true, 'setEffects + clearEffects did not throw for all effect types');
       // Intentionally NOT closing — leave for manual Close All cleanup.
@@ -1463,17 +1460,6 @@ export const coreTests: TestCase[] = [
       if (!win) throw new Error('vibrancy window not created');
       await win.setEffects({ effects: [Effect.Acrylic], radius: 25, color: [0, 0, 0, 128] });
       // Manual: window should show blur + semi-transparent tint
-    },
-  },
-  {
-    name: 'vibrancy: TabbedDark effect visible (manual)',
-    category: 'manual',
-    async fn() {
-      await invoke('create_transparent_window', { windowId: 'test-vibrancy-tabbed-dark' });
-      const win = await WebviewWindow.getByLabel('test-vibrancy-tabbed-dark');
-      if (!win) throw new Error('vibrancy window not created');
-      await win.setEffects({ effects: [Effect.TabbedDark], radius: 20 });
-      // Manual: window should show blur + dark tint
     },
   },
   {

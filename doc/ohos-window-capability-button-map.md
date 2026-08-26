@@ -36,7 +36,7 @@
 | 窗口透明度（运行期 alpha） | ✅ | ✅ | `Set BG Blue (alpha=128)` / `Set BG Green (alpha=0)`（背景色含 alpha 即运行期透明度） | Window Background Color | — | 整窗 alpha 无 API（见「三」） |
 | 窗口主题 | ✅ | ✅ 手动 | `Set Theme (toggle Light/Dark/System)` | 自动测试补充区 | 无 | None→COLOR_MODE_NOT_SET 系统跟随 |
 | 窗口标题 | ✅ | ✅ 手动 | `Set Title (main window)` | 自动测试补充区 | 无 | setWindowTitle API15+；tao getter 仍返回空串 |
-| 窗口效果 vibrancy | ✅ | ✅ | `vibrancy: Blur effect visible` / `vibrancy: Acrylic effect visible` / `vibrancy: TabbedDark effect visible` / `vibrancy: clearEffects removes blur` / `vibrancy: build-time Blur (WindowBuilder::effects)` | Vibrancy 区 | setEffects / build-time effects | |
+| 窗口效果 vibrancy | ✅ | ✅ | `vibrancy: Blur effect visible` / `vibrancy: Acrylic effect visible` / `vibrancy: clearEffects removes blur` / `vibrancy: build-time Blur (WindowBuilder::effects)` | Vibrancy 区 | setEffects / build-time effects | Mica/Tabbed 系列在 OHOS 上不支持（no-op 跳过，无模糊/底色） |
 | 窗口最大化 | ✅ | ✅ | `Toggle Maximize` | 几何/状态区 | maximize / unmaximize / maximize fills | |
 | 窗口最小化 | ✅ | ✅ | `Minimize (2s restore)` | 几何/状态区 | is_minimized / minimize smoke | 另有 `Minimize then is_minimized`（Persisted-Scope 区，buttons 文档未收录） |
 | 全屏模式 | ✅ | ✅ | `Toggle Fullscreen` | 几何/状态区 | setFullscreen smoke | 实际走 maximize(ENTER_IMMERSIVE) + setTitleAndDockHoverShown（mapping 文档该行 API 链已过时；setWindowLayoutFullScreen 直连路径曾实现验证后于 2026-08-21 回退移除） |
