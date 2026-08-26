@@ -422,3 +422,48 @@ impl JsImage {
     }
   }
 }
+
+/// S7 纯变换批：base64 手写解码器的全字符类路径（字母大小写/数字/+//=/空白/非法字符）。
+#[cfg(test)]
+mod decode_base64_tests {
+  use super::decode_base64;
+
+  #[test]
+  fn decodes_standard_base64() {
+    // "Man" / "022" 覆盖大写、小写、数字三个字符类
+    assert_eq!(decode_base64("TWFu").unwrap(), b"Man".to_vec());
+    assert_eq!(decode_base64("MDIy").unwrap(), b"022".to_vec());
+  }
+
+  #[test]
+  fn decodes_plus_and_slash_alphabet() {
+    // '+' = 62、'/' = 63 两个符号字符类
+    assert_eq!(decode_base64("++++").unwrap(), vec![0xFB, 0xEF, 0xBE]);
+    assert_eq!(decode_base64("////").unwrap(), vec![0xFF, 0xFF, 0xFF]);
+  }
+
+  #[test]
+  fn skips_padding_and_whitespace() {
+    // '=' 与 ASCII 空白都被跳过，不参与解码
+    assert_eq!(decode_base64("TWE=").unwrap(), b"Ma".to_vec());
+    assert_eq!(decode_base64("TW E= ").unwrap(), b"Ma".to_vec());
+  }
+
+  #[test]
+  fn empty_input_yields_empty_output() {
+    assert_eq!(decode_base64("").unwrap(), Vec::<u8>::new());
+  }
+
+  #[test]
+  fn invalid_character_returns_none() {
+    assert!(decode_base64("TW!u").is_none());
+    assert!(decode_base64("TW-u").is_none());
+  }
+
+  #[test]
+  fn trailing_partial_group_is_dropped() {
+    // 不足 8 位的余数位被丢弃：单字符 "+" 只贡献 6 位
+    assert_eq!(decode_base64("+").unwrap(), Vec::<u8>::new());
+    assert_eq!(decode_base64("TW").unwrap(), b"M".to_vec());
+  }
+}

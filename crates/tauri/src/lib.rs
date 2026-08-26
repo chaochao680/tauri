@@ -1285,3 +1285,16 @@ pub(crate) fn generate_invoke_key() -> Result<String> {
   getrandom::fill(&mut bytes)?;
   Ok(z85::encode(&bytes))
 }
+
+#[cfg(test)]
+mod debug_app_icon_tests {
+  use super::*;
+
+  #[test]
+  fn debug_app_icon_none_and_some() {
+    let none: Option<Vec<u8>> = None;
+    assert_eq!(format!("{:?}", DebugAppIcon(&none)), "None");
+    let some: Option<Vec<u8>> = Some(vec![1u8; 493]);
+    assert_eq!(format!("{:?}", DebugAppIcon(&some)), "Some([u8; 493])");
+  }
+}
