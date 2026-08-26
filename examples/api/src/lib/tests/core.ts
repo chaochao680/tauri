@@ -894,17 +894,22 @@ export const coreTests: TestCase[] = [
     },
   },
   {
-    name: 'window-state save_window_state + restore_state round-trip',
-    category: 'manual',
+    name: 'window-state save_window_state + restore_state round-trip (all flags)',
+    category: 'auto',
     async fn() {
-      // Manual: save/restore mid-autotest could interfere with other window state.
-      // Run in isolation. Verifies the window-state plugin's save/restore commands work.
+      // Auto (promoted from manual 2026-08-26): full-flags round-trip is the
+      // p3-restore-state-lock-hygiene regression guard — POSITION flag drives
+      // available_monitors() (window_getter! main-thread round-trip) from a
+      // tokio worker via cmd.rs, the exact deadlock path fixed in
+      // plugins-workspace/plugins/window-state/src/lib.rs. The previous test
+      // passed no flags (SIZE only) and left that path as a coverage blind
+      // spot. Verified on device: no appfreeze, position restored.
       const win = getCurrentWindow();
       // Save current state
       await invoke('plugin:window-state|save_window_state', { label: win.label });
-      // Restore (applies saved state)
-      await invoke('plugin:window-state|restore_state', { label: win.label });
-      // No assertion — verifying no error thrown is the pass criteria (commands succeed)
+      // Restore with all flags (63 = SIZE|POSITION|MAXIMIZED|VISIBLE|DECORATIONS|FULLSCREEN)
+      await invoke('plugin:window-state|restore_state', { label: win.label, flags: 63 });
+      // No assertion — verifying no error thrown and no deadlock/appfreeze is the pass criteria
     },
   },
 
