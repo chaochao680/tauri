@@ -2331,6 +2331,51 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     });
   }
 
+  // Notification action button (onAction emit/Channel, manual_tests.md §三十二 ③④).
+  // One button covers warm-start (background → tap action) and cold-start
+  // (kill app → tap action relaunches it). The listener stays registered so
+  // the callback survives backgrounding.
+  let notificationActionListener = null;
+  let notificationActionCount = 0;
+  async function manualNotificationAction() {
+    await wrapManual('notificationAction', async () => {
+      const { onAction, registerActionTypes, sendNotification, isPermissionGranted } = await import('@tauri-apps/plugin-notification');
+      const granted = await isPermissionGranted();
+      if (!granted) {
+        manualResult = '⚠️ 通知权限未授予。请先点击 "Request Permission" 按钮请求权限。';
+        onMessage(manualResult);
+        return;
+      }
+      await registerActionTypes([{
+        id: 'manual-action-type',
+        actions: [{ id: 'manual-action', title: 'Tap Me' }],
+      }]);
+      // Re-register: drop the previous listener and reset the counter.
+      notificationActionListener?.unregister();
+      notificationActionListener = null;
+      notificationActionCount = 0;
+      notificationActionListener = await onAction((n) => {
+        notificationActionCount += 1;
+        const payload = JSON.stringify(n);
+        onMessage(`[onAction] fired (${notificationActionCount}): ${payload}`);
+        const actionIdMatch = n.actionId === 'manual-action';
+        manualResult = `✅ onAction 回调触发（第 ${notificationActionCount} 次）：${payload}\n` +
+          `断言：id=${n.id}, actionId="${n.actionId}"` +
+          `${actionIdMatch ? ' === "manual-action" ✅' : ' ≠ "manual-action" ❌'}`;
+      });
+      sendNotification({
+        id: 9001,
+        title: 'Action 手动测试',
+        body: '展开通知点击 "Tap Me" 按钮',
+        actionTypeId: 'manual-action-type',
+      });
+      manualResult = '✅ 已发送带 actionTypeId 的通知（id=9001）。验证步骤：\n' +
+        '  热启动：切应用到后台 → 通知中心展开本通知 → 点 "Tap Me" → 应用回前台且回调触发（actionId=manual-action）\n' +
+        '  冷启动：任务管理器结束 com.tauri.api → 点通知 "Tap Me" → 应用被拉起（冷启动 emit 早于 webview 注册监听，回调预期不触发，以应用拉起+hilog 派发为准）';
+      onMessage('Action notification sent (id=9001, actionTypeId=manual-action-type)');
+    });
+  }
+
   // ─── Geolocation Manual Tests ───
   async function manualGeolocationPermission() {
     await wrapManual('geolocationPermission', async () => {
@@ -3165,6 +3210,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualNotificationSend}>Send Notification</button>
         <button class="btn" onclick={manualNotificationChannel}>Send With Channel</button>
         <button class="btn" onclick={manualNotificationPermission}>Request Permission</button>
+        <button class="btn" onclick={manualNotificationAction}>Send With Action Button (onAction)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
