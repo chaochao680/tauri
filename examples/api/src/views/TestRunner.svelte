@@ -1008,11 +1008,6 @@ Expected behavior:
     await manualVibrancyEffect('Acrylic', Effect.Acrylic, { radius: 25, color: [0, 0, 0, 128] },
       'Window background BLURRY + semi-transparent DARK tint (blur + color overlay).');
   }
-  async function manualVibrancyTabbedDark() {
-    await manualVibrancyEffect('TabbedDark', Effect.TabbedDark, { radius: 20 },
-      'Window background BLURRY + DARK tint (OHOS approximates MicaDark via blur + dark tint).');
-  }
-
   async function manualVibrancyClearEffects() {
     await wrapManual('vibrancy:clearEffects', async () => {
       const windowId = 'manual-vibrancy-clear';
@@ -2644,7 +2639,6 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualVibrancyBlur}>vibrancy: Blur effect visible</button>
         <button class="btn" onclick={manualVibrancyAcrylic}>vibrancy: Acrylic effect visible</button>
-        <button class="btn" onclick={manualVibrancyTabbedDark}>vibrancy: TabbedDark effect visible</button>
         <button class="btn" onclick={manualVibrancyClearEffects}>vibrancy: clearEffects removes blur</button>
         <button class="btn" onclick={manualVibrancyBuildTimeBlur}>vibrancy: build-time Blur (WindowBuilder::effects)</button>
       </div>

@@ -759,12 +759,6 @@ pub fn create_transparent_window<R: tauri::Runtime>(
     let effect = match effect_name.as_str() {
       "Blur" => tauri::window::Effect::Blur,
       "Acrylic" => tauri::window::Effect::Acrylic,
-      "Mica" => tauri::window::Effect::Mica,
-      "MicaDark" => tauri::window::Effect::MicaDark,
-      "MicaLight" => tauri::window::Effect::MicaLight,
-      "Tabbed" => tauri::window::Effect::Tabbed,
-      "TabbedDark" => tauri::window::Effect::TabbedDark,
-      "TabbedLight" => tauri::window::Effect::TabbedLight,
       other => return Err(tauri::Error::Anyhow(anyhow::anyhow!("unknown effect: {}", other))),
     };
     let effects = tauri::utils::config::WindowEffectsConfig {

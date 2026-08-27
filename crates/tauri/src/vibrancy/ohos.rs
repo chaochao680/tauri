@@ -29,8 +29,8 @@ pub fn apply_effects<R: Runtime>(window: &Window<R>, effects: WindowEffectsConfi
 
   let blur_radius = radius.unwrap_or(20.0);
 
-  // Pick the first effect; OHOS approximates every vibrancy effect via blur + tint,
-  // so there is no need to filter by supported variant.
+  // Pick the first effect; OHOS approximates Blur/Acrylic via blur + tint.
+  // Mica/Tabbed series is unsupported (skipped); macOS-specific effects fall back to blur.
   let Some(effect) = effects.into_iter().next() else {
     return;
   };
@@ -41,17 +41,16 @@ pub fn apply_effects<R: Runtime>(window: &Window<R>, effects: WindowEffectsConfi
       let c = color.map(|Color(r, g, b, a)| (r, g, b, a));
       window_vibrancy::apply_ohos_acrylic(window_id, blur_radius, c)
     }
-    Effect::Mica => window_vibrancy::apply_ohos_mica(window_id, blur_radius, None),
-    Effect::MicaDark => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(true)),
-    Effect::MicaLight => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(false)),
-    // TODO(known-limitation): Tabbed 系列与 Mica 系列在 OHOS 上完全等价 —— 复用同一
-    // `apply_ohos_mica` 调用，丢失 Win11 原生 "Tabbed Mica 比 Mica 略透明" 的差异。
-    // 这是 spec ohos-window-blur.md:93-96 明文规定的近似策略，非代码 bug。
-    // 未来若要还原差异，需在此分支用不同的 radius/底色参数区分 Tabbed 与 Mica，
-    // 并同步更新 spec 的 Tabbed scenario。
-    Effect::Tabbed => window_vibrancy::apply_ohos_mica(window_id, blur_radius, None),
-    Effect::TabbedDark => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(true)),
-    Effect::TabbedLight => window_vibrancy::apply_ohos_mica(window_id, blur_radius, Some(false)),
+    // Mica/Tabbed series intentionally unsupported on OHOS — no blur/tint applied.
+    Effect::Mica
+    | Effect::MicaDark
+    | Effect::MicaLight
+    | Effect::Tabbed
+    | Effect::TabbedDark
+    | Effect::TabbedLight => {
+      log::info!("[vibrancy] Mica/Tabbed effects are not supported on OHOS; skipping");
+      Ok(())
+    }
     // macOS-specific effects: best-effort approximation with basic blur
     _ => window_vibrancy::apply_ohos_blur(window_id, blur_radius),
   };

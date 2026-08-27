@@ -64,7 +64,6 @@
 |------|------|------|
 | 窗口效果 Blur | `vibrancy: Blur effect visible` | 新窗口背景模糊 |
 | 窗口效果 Acrylic | `vibrancy: Acrylic effect visible` | 模糊 + 半透明黑 |
-| 窗口效果 TabbedDark | `vibrancy: TabbedDark effect visible` | 模糊 + 深色 |
 | 清除效果 | `vibrancy: clearEffects removes blur` | 新窗口无模糊 |
 | 构建期效果 | `vibrancy: build-time Blur` | 验证不崩溃 |
 

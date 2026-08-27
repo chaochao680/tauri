@@ -38,15 +38,14 @@ OHOS_DEVICE_TYPE=desktop bash ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/sc
 **注意**：必须先设置 `OHOS_DEVICE_TYPE` 环境变量再调用脚本。不要先 `source env.sh`，因为 `env.sh` 会设置 `OHOS_DEVICE_TYPE` 默认值，可能覆盖你传入的参数。
 
 脚本自动完成全部流程：
-1. 检测 `openharmony-ability/` 源码变更，自动重建 HAR 包并 ohpm install
-2. 前端构建（pnpm + vite，VITE_AUTOTEST=true）
-   - Step 2: 构建 @tauri-apps/api（首次或缺失时）
-   - Step 2.5: 构建插件 dist-js（每次执行，防止 git pull 后插件产物过期）
-   - Step 3: 前端 vite 构建
-3. Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
-4. 拷贝 .so → hvigorw assembleHap（自动禁用/恢复 tauriPlugin，使用 build-profile.json5 中的证书签名）
-5. 卸载旧版 → 安装已签名 HAP → 启动
-6. 等待 30s → 拉取 test-report → 分析结果
+1. 检测 `openharmony-ability/` 源码变更，自动重建 HAR 包（ohpm 同步由第 3 步 `cargo tauri ohos run` 内部完成，不手动 ohpm）
+2. prerequisites（CLI 不做的前置）：pnpm install / build:api / 插件 dist-js / ACL 检查
+3. `cargo tauri ohos run` 一步完成：
+   - 前端构建（beforeBuildCommand，继承 VITE_AUTOTEST=true）
+   - Rust 交叉编译（aarch64-unknown-linux-ohos，release，--features prod）
+   - .so 拷贝 + hvigorw assembleHap（TAURI_OHOS_SKIP_DEVECO_SCRIPT 禁用 tauriPlugin，build-profile.json5 证书签名）
+   - 安装已签名 HAP（带 hdc false-success 检测）→ 启动
+4. 等待 30s → 拉取 test-report → 分析结果
 
 ### 方式三：cargo tauri ohos build --app（多形态打包）
 
@@ -94,10 +93,11 @@ PR #59 将 app 拆分为 mobile 和 desktop 两个 entry 模块：
 
 | 脚本 | 功能 |
 |------|------|
-| `env.sh` | 环境配置：CC/linker/JAVA_HOME/PATH，必须在其他脚本前 source |
-| `run-tests.sh` | 一键全流程（含模板检测、HAR 自动重建、tauriPlugin 自动禁用/恢复、自动测试） |
-| `build-ohos.sh` | 构建全流程（模板检测 → 前端 → Rust → .so → hvigorw 签名打包），自动处理 tauriPlugin |
-| `sign-and-install.sh` | 仅安装启动（使用 hvigorw 已签名的 HAP），不构建不签名 |
+| `env.sh` | 环境配置：DevEco Studio 路径解析（`DEV_ECO_STUDIO_INSTALL_PATH` 优先 → `DEVECO_HOME` → 自动检测，不落盘）、CC/linker/JAVA_HOME/PATH，必须在其他脚本前 source |
+| `prerequisites.sh` | CLI 不做的开发期前置：pnpm install / build:api / 插件 dist-js / ACL 检查。被 build-ohos.sh 和 run-tests.sh source，不直接执行 |
+| `run-tests.sh` | 一键全流程：HAR 重建 → prerequisites → `cargo tauri ohos run`（build+install+launch，带 hdc false-success 检测）→ 等待 → 拉取报告 → 分析 |
+| `build-ohos.sh` | prerequisites + `cargo tauri ohos build`（Rust 编译/.so/hvigorw/签名由 CLI 处理）。项目专属 feature 经 `TAURI_BUILD_FEATURES` 传入 |
+| `install.sh` | 仅安装启动（使用已签名 HAP），不构建不签名。日常流程已被 `cargo tauri ohos run` 替代；保留供单独安装场景 |
 
 ## 模板修改后的完整生效流程
 
@@ -113,15 +113,16 @@ cmd.exe /c "rmdir /s /q ${PROJECT_ROOT}\\tauri\\examples\\api\\src-tauri\\gen\\o
 
 # 3. 执行「init 后补充步骤」（见下方章节）
 
-# 4. 重建 HAR 并 ohpm install
+# 4. 重建 HAR（仅当改了 openharmony-ability 的 ArkTS 源码；改 Rust 源码跳过此步）
 cd ${PROJECT_ROOT}/openharmony-ability
 source ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/env.sh
-ohrs build --arch arm64 --skip-napi-check 2>&1 | tail -5 || true
-bash scripts/pack.sh
-tar -czf ability.har package
-cd ${PROJECT_ROOT}/tauri/examples/api/src-tauri/gen/ohos
-ohpm install --all
+./pack.bat            # Windows 批处理：同步 native_ability ETS → package/ + tar 打 ability.har
+# 5. 构建 HAP —— cargo tauri 内部会自动跑 ohpm install 同步依赖，严禁手动 ohpm
+cd ${PROJECT_ROOT}/tauri/examples/api/src-tauri
+cargo tauri ohos build --device-type desktop --features prod
 ```
+
+> **严禁手动 `ohpm install`**：`cargo tauri ohos build/run` 内部会跑 ohpm 同步依赖（受 `oh-package-lock.json5` 约束，安全）。手动 `ohpm install --all` 会删掉 lock 文件、清空 `oh_modules/@tauri/` junction、误删本地包目录，导致 hvigorw 00304056 / 00625003。详见 memory `ohos-arkts-rebuild-flow`。
 
 ## init 后补充步骤（每次 `tauri ohos init` 后必须执行）
 
@@ -241,13 +242,6 @@ cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/testtrayability/Tes
 8. **插件 dist-js 自动构建** — `build-ohos.sh` Step 2.5 每次执行 `pnpm build` 构建 `plugins-workspace/` 下所有插件的 `dist-js`，防止 git pull/rebase 后插件产物过期导致测试失败（如 notification 插件 `index.js` 过期）。
 9. **cargo-mobile2 仓库** — `tauri-cli` 依赖 `cargo-mobile2`（位于 `${PROJECT_ROOT}/cargo-mobile2`）。如果 tauri-cli 编译报 `unresolved import cargo_mobile2::open_harmony::app`，说明 cargo-mobile2 需要 rebase 到 upstream/ohdev。
 10. **PR #59 双 Entry 模块** — 项目结构从单一 `entry/` 拆分为 `entry_desktop/` + `entry_mobile/`。`OHOS_DEVICE_TYPE` 决定激活哪个模块（`active_entry_module()` 返回 `entry_{form}`）。`cargo tauri ohos build --app` 同时构建两个模块。
-11. **@tauri ohpm junctions** — `ohpm install` 会删除 `@tauri/*` 本地链接（`oh_modules/@tauri/`）。每次 `ohpm install` 后需要手动重建 junction：
-    ```bash
-    cd gen/ohos && mkdir -p oh_modules/@tauri && for pkg in app notification global-shortcut dialog; do
-      src=""; case $pkg in app) src="tauri" ;; *) src="$pkg" ;; esac
-      [ -d "$src" ] && cmd //c "mklink /J \"oh_modules\\@tauri\\$pkg\" \"$(pwd -W)\\$src\"" 2>/dev/null
-    done
-    ```
 
 ## 设备日志与故障诊断
 
@@ -281,16 +275,3 @@ hdc shell "cat /data/app/el2/100/base/com.tauri.api/cache/panic.log"
 |------|------|------|
 | App 内部（Rust 代码中） | `/data/storage/el2/base/cache/` | 应用沙箱路径 |
 | 外部（hdc 访问） | `/data/app/el2/100/base/com.tauri.api/cache/` | 实际物理路径 |
-
-## 手动 HAR 重建（仅在脚本自动检测失效时需要）
-
-```bash
-cd ${PROJECT_ROOT}/openharmony-ability
-source ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/scripts/env.sh
-ohrs build --arch arm64          # 末尾 panic 是已知问题，不影响
-bash scripts/pack.sh
-tar -czf ability.har package
-cd ${PROJECT_ROOT}/tauri/examples/api/src-tauri/gen/ohos
-ohpm install --all
-# 重建 @tauri junctions（见注意事项 #11）
-```
