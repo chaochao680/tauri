@@ -1307,11 +1307,40 @@ Expected behavior:
       }
       const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
       if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
+      // Self-verifying (2026-08-27): setWindowFocusable has NO visual effect — the
+      // observable criterion is whether the sub-window steals keyboard focus from
+      // the main window when clicked. is_focused reads the app-level HAS_FOCUS flag
+      // (main-window focus); normal sub-window click → false, focusable=false click
+      // → stays true (device-verified A/B). Programmatic setFocus() can't be used
+      // (raiseToAppTop only raises z-order, never transfers focus).
+      const main = getCurrentWindow();
+      const baseline = await main.isFocused();
+      if (!baseline) {
+        manualResult = `主窗口当前未持有焦点(创建子窗口会抢走焦点)。\n请先点击主窗口任意空白区域,再点本按钮。`;
+        onMessage(manualResult);
+        return;
+      }
       await win.setFocusable(false);
       ohosWinState = `setFocusable(false) on "${lastCreatedWindowLabel}" → 3s 后恢复`;
-      manualResult = `setFocusable(false) dispatched on sub-window "${lastCreatedWindowLabel}"。\n\nExpected: 子窗口 3s 内不可聚焦（setWindowFocusable），点击不获取焦点。\n3 秒后自动恢复。`;
+      manualResult = `setFocusable(false) dispatched on sub-window "${lastCreatedWindowLabel}"。\n\n👉 请在 3 秒内点击子窗口一次,等待自动判定...`;
       onMessage(manualResult);
-      setTimeout(() => win.setFocusable(true), 3000);
+      // Poll main-window focus during the 3s window; restore afterwards and judge.
+      let focusStolen = false;
+      const started = Date.now();
+      const poll = setInterval(async () => {
+        if (!(await main.isFocused())) focusStolen = true;
+      }, 250);
+      setTimeout(async () => {
+        clearInterval(poll);
+        try { await win.setFocusable(true); } catch { /* best-effort restore */ }
+        if (focusStolen) {
+          manualResult = `❌ FAIL: 3 秒内主窗口焦点丢失 — 子窗口仍抢走了焦点(setWindowFocusable 未生效)。`;
+        } else {
+          manualResult = `✅ PASS: 3 秒内主窗口焦点保持 — 子窗口拒绝了焦点点击(setWindowFocusable 生效,无视觉变化属正常语义)。\n（前提:期间确实点击过子窗口;点其他窗口/桌面也会导致 FAIL）`;
+        }
+        ohosWinState = `setFocusable(true) restored on "${lastCreatedWindowLabel}"`;
+        onMessage(manualResult);
+      }, 3000);
     });
   }
 

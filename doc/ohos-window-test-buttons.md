@@ -79,10 +79,16 @@
 |------|------|------|
 | 窗口位置设置 | `setOuterPosition (toggle 100/400)` | 子窗口移动到 (100,100) 或 (400,400) |
 | 窗口大小调整 | `setInnerSize (half size, restore)` | 子窗口缩到一半再还原 |
-| 窗口最大化 | `Toggle Maximize` | 最大化/还原 |
+| 窗口最大化 | `Toggle Maximize` | 最大化/还原（主窗口）；子窗口用 Create Decorated Window 后点其 ❐/□ 标题栏按钮 |
 | 窗口最小化 | `Minimize (2s restore)` | 最小化 2 秒后恢复 |
 | 全屏模式 | `Toggle Fullscreen` | 全屏/退出(隐藏系统标题栏/Dock+应用菜单栏,Esc 或再点按钮退出)。✅ 2026-08-27 修复:① WindowPlugin `set-fullscreen` action 迁移降级——pluginize 重构(ec27af6)把 action 迁到插件时写成 inline 纯手机路径(setWindowLayoutFullScreen),桌面 2in1 上视觉 no-op;已改委托 `WindowManager.setFullscreen`(双路径:桌面 maximize(ENTER_IMMERSIVE)+隐藏标题栏/Dock,手机沉浸式) ② tao `fullscreen()` rebase 时取了本地旧版硬编码返回 None→`isFullscreen` 恒 false→只能进不能退;已对齐 upstream 读镜像位(Borderless(None)) ③ 预定义菜单 fullscreen(托盘/菜单栏 Fullscreen 项)inline 实现与窗口 API 行为分裂(不隐藏系统标题栏/Dock)+菜单栏回调只在预定义路径——已统一:`menu.ets` 'fullscreen'/'recover' 委托 `WindowManager.setFullscreen`,MW-5 菜单栏回调收进 setFullscreen(macOS 语义:进全屏隐藏菜单栏,退出恢复),Esc 退出经 recoverFn→setFullscreen(0,false) 完整还原(openharmony-ability 8d59c75) |
 | 窗口可见性 | `Hide/Show (2s restore)` | ✅ 已修(主窗口:hide=minimize,show=startAbility instanceKey='main' 复用实例;2 秒后恢复) |
+
+> **子窗口最大化三连修复(2026-08-27,真机验证通过)**:`Create Decorated Window` → 点子窗口标题栏 □ → ❐,窗口应回到原位。
+> ① **Fix A(maximizeSupported)**:API19+ `createSubWindowWithOptions` 须传 `maximizeSupported:true`,否则 `win.maximize()` 报 1300004、□ 点击无效。
+> ② **Fix C(还原位置保持)**:WMS `recover()` 用 GetFullScreenToFloatingRect **按指针重算**浮动落点(为拖离标题栏还原设计)→ 程序化还原后窗口飞到指针附近(右上角)。修法:maximize 前 `preMaximizeRects` 快照 + recover 后 `moveTo` 回原位(FloatPage 按钮路径与 tao bridge 路径均覆盖)。
+> ③ **Fix D(startMoving 抢答)**:FloatPage 标题栏 `onTouch(Down)→startMoving()` 对子按钮触摸同样触发——最大化态按下 ❐ **瞬间**触发 WMS 拖离还原,窗口移走导致 touch-UP out of region、click 手势被拒、onClick 从未执行(hilog "MOVE/UP event is out of region, try to reject click gesture" 实锤)。修法:isMaximized 时跳过 startMoving(最大化态牺牲标题栏拖拽)。同机制曾连带最大化态下 —/✕ 按钮失效,一并修复。
+> ⚠️ 子窗口最小化后无法从任务栏恢复属系统设计(问题二,不修);`Toggle Maximize` 按钮作用于主窗口(getCurrentWindow),子窗口最大化须用其自身标题栏按钮。
 | 窗口聚焦 | `setFocus` | 子窗口 raiseToAppTop |
 | 窗口置顶 | `Toggle AlwaysOnTop` | ✅ 已实现(setWindowTopmost API14+,跨应用常驻最前) |
 
@@ -105,7 +111,7 @@
 | 窗口可最大化 | `Toggle Maximizable` | flag=false 时点最大化按钮无效(拦截) |
 | 窗口可最小化 | `Toggle Minimizable` | flag=false 时点最小化按钮无效(拦截) |
 | 窗口可调整大小 | `Toggle Resizable` | flag=false 时 setInnerSize 被拦截 |
-| 窗口可聚焦 | `setFocusable(false) (3s)` | 子窗口 3 秒内不可聚焦 |
+| 窗口可聚焦 | `setFocusable(false) (3s)` | ✅ 已生效但**无视觉变化**(2026-08-27 A/B 实测)。`setWindowFocusable` 语义=窗口不接受键盘焦点,不产生任何视觉现象。按钮已改**自验式**:① 先点击主窗口空白处获得焦点 ② 点本按钮 ③ 3 秒内点击子窗口一次 → 自动判定 PASS(主窗口焦点保持=子窗口拒绝焦点)/FAIL(焦点被抢)。底层判据:主窗口 `isFocused`(读 app 级 HAS_FOCUS 位,主窗口专属;子窗口无独立焦点读回 API);正常态点子窗口主窗口失焦(对照),focusable=false 时保持(实验组,真机 A/B 验证)。⚠️ 程序化 `setFocus()` 不能用于验证——raiseToAppTop 只抬 z-order 不转移焦点 |
 
 ### 🟦 OHOS Window Ops — 光标
 

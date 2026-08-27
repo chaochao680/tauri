@@ -311,3 +311,37 @@ UIAbility 架构无 readWindowId，rebase 带回的 windowStatusChange 注册块
 验证：runtime-wry 按 `w.window_id() == Some(ohos_win_id)` 匹配，tao 主窗口
 window_id=Some(0)；Float 子窗口两侧（tao create_os_window 返回值 ↔ FloatPage
 LocalStorage windowId）共用 NEXT_WINDOW_ID(从 1 起) 虚拟 id 命名空间，无碰撞。
+
+### 偏差 g：Float 子窗口 maximize/recover 三个平台行为缺陷（2026-08-27 修复+真机验证）
+
+用户报告「子窗口最大化后还原,窗口从创建时的屏幕左边跑到右边」,三层根因:
+
+1. **maximizeSupported 缺失（Fix A）**:API19+ `createSubWindowWithOptions(name,
+   {title:'', decorEnabled:false, maximizeSupported:true})` 才允许 Float 子窗口
+   `maximize()`;漏传 options 或 maximizeSupported 时报 1300004(□ 点击无反应)。
+   API<19 回退 createSubWindow,Float 子窗口不可最大化(系统限制)。
+2. **recover() 指针锚定落点(Fix C)**:WMS `recover()` 用 GetFullScreenToFloatingRect
+   重算浮动落点——该 API 为**拖离标题栏还原**设计,落点按指针位置锚定,不是
+   maximize 前位置(实测 [0,0] 创建 → maximize → recover → [1913,0];二次循环
+   [1908,0],每次重算)。修法:WindowManager `preMaximizeRects: Map<number, Rect>`
+   在 maximize 前 snapshot(has-guard 防二次最大化覆盖为全屏 rect),recover 后
+   `moveTo(saved.left, saved.top)` 回原位(best-effort),removeWindow 清理。两条
+   路径均覆盖:FloatPage ❐/□→maximizeWindow/recoverWindow;tao bridge(WindowPlugin
+   maximize/recover action)经共享 helper snapshotPreMaximizeRect/
+   restorePreMaximizeRect——bridge 路径不能委托 fire-and-forget 的 maximizeWindow
+   (调用方 recover 后立即查 is-maximized,须保 await 完成语义)。
+3. **startMoving 冒泡抢答(Fix D)**:FloatPage 标题栏 Row `onTouch(TouchType.Down)
+   → startMoving()` 对子按钮(❐/—/✕)触摸同样触发(ArkUI onTouch 冒泡)。最大化态
+   下按下 ❐ 的**瞬间**(9ms 后)WMS 即拖离还原(指针锚定),窗口移走 → touch-UP
+   out of region → click 手势被拒 → onClick 从未执行(hilog 实锤:"this MOVE/UP
+   event is out of region, try to reject click gesture")。即用户点 ❐ 实际执行的
+   是 WMS 拖离还原,recoverWindow 从未被调用——Fix C 无从生效。修法:isMaximized
+   时跳过 startMoving(最大化态牺牲标题栏拖拽,还原走 ❐ 按钮)。同机制曾连带
+   最大化态 —/✕ 失效,一并修复。浮动态下按钮点击不受影响(startMoving 无位移
+   不干扰 click)。
+
+已知边界(有意不覆盖):menu.ets 主窗口菜单 'maximize' 直调 win.maximize() 不经
+快照(主窗口无位置恢复需求,系统管理);tao `set_maximized` 主窗口路径同理。
+真机验证 2026-08-27:hilog `maximizeWindow 1 OK` → `recoverWindow 1 OK
+(restored pre-maximize rect)`,窗口回原位;tao bridge 路径此前已验证(WMS rect
+链 [0,0]→[0,0,3120,1955]→[0,0,1140,760] 位置尺寸均精确恢复)。
