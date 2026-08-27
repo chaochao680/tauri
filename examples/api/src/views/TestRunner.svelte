@@ -2905,6 +2905,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Window Decorations & Transparency (Phase 1+2+3)</h5>
       <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualToggleDecorations}>Toggle Decorations (main window)</button>
         <button class="btn" onclick={manualCreateBorderlessWindow}>Create Borderless Window (decorations=false)</button>
         <button class="btn" onclick={manualCreateTransparentBorderlessWindow}>Create Transparent+Borderless</button>
         <button class="btn" onclick={manualCreateDecoratedWindow}>Create Decorated Window (title bar)</button>

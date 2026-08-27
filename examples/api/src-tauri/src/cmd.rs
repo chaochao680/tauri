@@ -806,10 +806,15 @@ pub fn create_borderless_window<R: tauri::Runtime>(
   let init_script = format!(
     r#"
     document.addEventListener('DOMContentLoaded', function() {{
-      document.documentElement.style.background = '#1a1a2e';
-      document.body.style.cssText = 'background:#1a1a2e;margin:0;padding:0;'
+      // Transparent page background: the Set BG color buttons set BOTH the window
+      // background (setWindowBackgroundColor) and the webview background (ArkWeb
+      // component backgroundColor) — the color is only visible if the page itself
+      // doesn't paint an opaque layer on top.
+      document.documentElement.style.background = 'transparent';
+      document.body.style.cssText = 'background:transparent;margin:0;padding:0;'
         + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;color:#fff;';
+        + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;color:#fff;'
+        + 'text-shadow:0 1px 3px rgba(0,0,0,0.8);';
       document.body.innerHTML = '';
       var div = document.createElement('div');
       div.style.cssText = 'text-align:center;padding:30px;';
@@ -855,8 +860,9 @@ pub fn create_decorated_window<R: tauri::Runtime>(
   let init_script = format!(
     r#"
     document.addEventListener('DOMContentLoaded', function() {{
-      document.documentElement.style.background = '#ffffff';
-      document.body.style.cssText = 'background:#ffffff;margin:0;padding:0;'
+      // Transparent page background — see create_borderless_window for rationale.
+      document.documentElement.style.background = 'transparent';
+      document.body.style.cssText = 'background:transparent;margin:0;padding:0;'
         + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
         + 'min-height:100vh;box-sizing:border-box;font-family:system-ui,sans-serif;color:#333;';
       document.body.innerHTML = '';

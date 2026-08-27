@@ -108,6 +108,16 @@
 - [ ] 4.3 手动用例：cursor grab（API22+ 真机）、Set Min+Max、Set Title、always on
       top、IME position（聚焦 input）、window state save→restore **两轮**（D2 幂等
       验证：两轮后 inner_size 不变）
+      2026-08-27 已验证：cursorPosition() 非零（链路修复）、Toggle Decorations
+      (main window)（补按钮）、BG color 四按钮（双层分发+页面透明化修复）；剩余
+      cursor grab/Set Min+Max/Set Title/always on top/IME/window-state 两轮。
+      2026-08-27 定性+修复：Toggle Fullscreen 双层根因（① WindowPlugin
+      set-fullscreen 被 pluginize 迁移降级为纯手机路径，桌面视觉 no-op → 改委托
+      WindowManager.setFullscreen 双路径；② tao fullscreen() rebase 取本地旧版恒
+      None → isFullscreen 恒 false 只进不退 → 对齐 upstream 读镜像位），修复部署
+      待真机验证；多 UIAbility 两按钮 + setCursorVisible 确认为偏差 c deferred
+      gap 非回归。回归 282✅/1❌(#87 已知)/1⏭️(#272) 与基线持平（plugin-store
+      dist-js 0 字节截断重建修复）
 - [x] 4.4 faultlog 零新增（2026-08-26 两轮全量跑后 faultlogger 目录无新
       appfreeze/jscrash，最新条目停留在 2026-08-25 20:16）
 - [x] 4.5 主窗口逐轮缩小根因修复（用户报告，D2-r）：WM rect 与 surface rect

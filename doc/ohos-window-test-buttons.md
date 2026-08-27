@@ -50,6 +50,10 @@
 ### 🟦 Window Background Color (Phase 3)
 
 > 先创建子窗口(Create Borderless/Decorated),再点 BG 按钮改该子窗口背景色。
+> 2026-08-27 修复说明:按钮在 OHOS 上同时设置**窗口层**(setWindowBackgroundColor)与
+> **webview 层**(ArkWeb 组件 backgroundColor,对齐 Rust API `WebviewWindow::
+> set_background_color` 双层语义);测试子窗口页面背景已透明化(cmd.rs init script),
+> 否则不透明 CSS 会盖住背景色。真机验证 Set BG Red 变红通过。
 
 | 能力 | 按钮 | 预期 |
 |------|------|------|
@@ -77,17 +81,19 @@
 | 窗口大小调整 | `setInnerSize (half size, restore)` | 子窗口缩到一半再还原 |
 | 窗口最大化 | `Toggle Maximize` | 最大化/还原 |
 | 窗口最小化 | `Minimize (2s restore)` | 最小化 2 秒后恢复 |
-| 全屏模式 | `Toggle Fullscreen` | 全屏/退出(隐藏系统栏) |
+| 全屏模式 | `Toggle Fullscreen` | 全屏/退出(隐藏系统栏)。✅ 2026-08-27 修复:① WindowPlugin `set-fullscreen` action 迁移降级——pluginize 重构(ec27af6)把 action 迁到插件时写成 inline 纯手机路径(setWindowLayoutFullScreen),桌面 2in1 上视觉 no-op;已改委托 `WindowManager.setFullscreen`(双路径:桌面 maximize(ENTER_IMMERSIVE)+隐藏标题栏/Dock,手机沉浸式) ② tao `fullscreen()` rebase 时取了本地旧版硬编码返回 None→`isFullscreen` 恒 false→只能进不能退;已对齐 upstream 读镜像位(Borderless(None)) |
 | 窗口可见性 | `Hide/Show (2s restore)` | ✅ 已修(主窗口:hide=minimize,show=startAbility instanceKey='main' 复用实例;2 秒后恢复) |
 | 窗口聚焦 | `setFocus` | 子窗口 raiseToAppTop |
 | 窗口置顶 | `Toggle AlwaysOnTop` | ✅ 已实现(setWindowTopmost API14+,跨应用常驻最前) |
 
 ### 🟦 OHOS Window Ops — 多 UIAbility 实例 (startAbility)
 
+> ⚠️ 2026-08-27 定性:**两个按钮均为已知 deferred gap**(openspec upstream-ohdev-rebase-window-ops design.md 偏差 c),不是回归。upstream 的 `start_ui_ability` 多 UIAbility 建窗路径未移植,本地 tao 保留 single-UIAbility guard;当前 `launchType: singleton` 下 startAbility 只触发 onNewWant,不产生新实例窗口。点击表现为无新窗口(命令返回错误诊断)。留作后续专项移植。
+
 | 能力 | 按钮 | 预期 |
 |------|------|------|
-| 窗口创建(多实例) | `Create UIAbility Instance Window` | 拉起新 UIAbility 实例窗口 |
-| 窗口透明度(UIAbility) | `Create Transparent UIAbility` | 主窗口变透明 |
+| 窗口创建(多实例) | `Create UIAbility Instance Window` | ⏸️ deferred:多 UIAbility 建窗未移植,无新窗口为预期行为 |
+| 窗口透明度(UIAbility) | `Create Transparent UIAbility` | ⏸️ deferred:同上(依赖多 UIAbility 路径) |
 
 ### 🟦 OHOS Window Ops — 装饰按钮 (子窗口生效)
 
@@ -105,7 +111,7 @@
 
 | 能力 | 按钮 | 预期 |
 |------|------|------|
-| 光标可见性 | `setCursorVisible(false) (3s)` | 光标隐藏 3 秒后恢复 |
+| 光标可见性 | `setCursorVisible(false) (3s)` | ⏸️ deferred:upstream 自身 TODO-untested,本地维持 no-op(design.md 偏差 c),点击无效果为预期行为 |
 | 光标图标 | `Cycle CursorIcon` | 循环切换光标样式(已修:用真实 windowId) |
 | 忽略光标事件 | `Toggle IgnoreCursor (3s)` | 3 秒内鼠标穿透 |
 
