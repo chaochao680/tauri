@@ -111,7 +111,7 @@
 
 | 能力 | 按钮 | 预期 |
 |------|------|------|
-| 光标可见性 | `setCursorVisible(false) (3s)` | ⏸️ deferred:upstream 自身 TODO-untested,本地维持 no-op(design.md 偏差 c),点击无效果为预期行为 |
+| 光标可见性 | `setCursorVisible(false) (3s)` | ✅ 已修复(2026-08-27,真机验证)。原"⏸️ deferred/upstream TODO-untested no-op"结论有误:tao `set_cursor_visible` 在 bridge facade 迁移(73212e1e)前是可用的(直调 `set_pointer_visible` NAPI),迁移时被删成 no-op——丢的是 Rust 调用,ArkTS `WindowManager.setPointerVisible` 实现一直都在。修法:plugin-window 新增 `set-cursor-visible` action(无 windowId,`pointer.setPointerVisible` 是全局 API)→ tao 恢复 facade fire-and-forget dispatch(openharmony-ability f052aab + tao 94d740d3)。点击:光标**全局**隐藏 3 秒后恢复(全局 vs 窗口级语义=遗留问题六) |
 | 光标图标 | `Cycle CursorIcon` | 循环切换光标样式(已修:用真实 windowId) |
 | 忽略光标事件 | `Toggle IgnoreCursor (3s)` | 3 秒内鼠标穿透 |
 
