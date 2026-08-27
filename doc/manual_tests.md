@@ -26,6 +26,16 @@
 | core | tray | icon_as_template | Icon as Template — template 模式下深色/浅色壁纸适配 | **T0** | 应用已启动，进入 Manual Tests 区域 | 1. 点击 "Icon as Template (check wallpaper)" 按钮 2. 确认状态栏出现托盘图标 3. 切换系统深色/浅色壁纸 4. 观察状态栏图标颜色变化 | ① 托盘图标创建成功（iconAsTemplate=true） ② 深色壁纸下图标为白色版本（保持可见） ③ 浅色壁纸下图标为黑色版本（保持可见） ④ 切换后图标颜色自动适配，无需重建托盘 | **仅 OHOS 平台**；验证 `to_monochrome()` 生成的白/黑双色 PixelMap 正确工作 |
 | core | tray | icon_as_template | White Icon NO Template — 非 template 模式对比验证 | **T1** | 应用已启动，进入 Manual Tests 区域 | 1. 点击 "White Icon NO Template (compare)" 按钮 2. 确认状态栏出现纯白托盘图标 3. 切换系统深色/浅色壁纸 4. 观察图标是否有变化 | ① 托盘图标创建成功（32×32 纯白 PNG，iconAsTemplate=false） ② 切换壁纸后图标**不变**，始终保持纯白色 ③ 与 "Icon as Template" 对比：template 模式图标会变，非 template 不变 | 验证系统**不会**自动对非 template 图标做色反；确认 `icon_as_template` 功能的必要性 |
 
+> **⚠️ 平台坑：托盘菜单/图标点击全部无反应（2026-08-27 定论）**
+>
+> **症状**: 右键菜单能正常弹出、显示完全正常，但点击任何菜单项或图标都无反应；app 侧日志无任何报错（onNewWant 触发但参数为空）。
+>
+> **根因**: SCB（com.ohos.sceneboard）`AppClientNotifier.handleClientRegistration` 的 `clientProxyMap` 容量为 50，进程死后条目不自动清理。开发期反复 deploy/force-stop 会用僵尸 pid 把 50 个坑占满，新 app 的 receiver 代理注册被拒 → 点击降级为无载荷 startAbility。**属平台缺陷，app 侧无法自救。**
+>
+> **识别**: SCB 日志出现 `Register client pid fail: out of range`（hilog 默认 INFO 级即可看到；正常应为 `Register client pid success: <pid>`）。
+>
+> **恢复**: `hdc shell "kill <sceneboard_pid>"` 杀掉 SCB（约 30 秒后自动重生，clientProxyMap 清空）或重启设备，然后重启 app。正常 force-stop / install -r 不泄漏，日常开发不会复现。
+
 ---
 
 ## 二、Menu（菜单）手动用例
