@@ -108,8 +108,22 @@ tray-icon `platform_impl/ohos/mod.rs`、openharmony-ability `event.rs`/`app.rs`�
 
 ## OHOS API 关键未知项
 
-- **DisplayManager 多屏**：当前 NDK 仅暴露 default display。若未来 OHOS NDK 新增
-  `GetAllDisplays`，`available_monitors` / `monitor_from_point` 可升级为真实多屏。
+- **DisplayManager 多屏（2026-08-28 勘误）**：早前"NDK 仅暴露 default display"的结论
+  已过时。`ohos-display-sys 0.1.3` 已声明：
+  - `OH_NativeDisplayManager_CreateAllDisplays`（@since API 14，输出
+    `NativeDisplayManager_AllDisplays`）—— 多屏枚举
+  - `OH_NativeDisplayManager_GetDisplayPosition`（@since API 20，返回相对主屏原点的
+    px 坐标）—— 虚拟坐标系布局
+  - `CreateDisplayById` / `CreatePrimaryDisplay`，`RegisterDisplayAddListener` /
+    `RegisterDisplayRemoveListener`（热插拔）
+  真机（API 23）满足版本要求；demo 的 compatibleSdkVersion=API 12，接入需按
+  ohos-version-isolation 加版本守卫或提升 SDK 版本。`ohos-display-binding` 尚未包装
+  这些函数（只包了 GetDefaultDisplay* + FoldDisplayMode）。
+  升级路径（三层）：binding 包装多屏函数 → openharmony-ability 暴露 → tao
+  `MonitorHandle` 携带 displayId、`available_monitors()` 真枚举、`monitor_from_point`
+  对全部屏做矩形包含判定、`position()` 返回真实偏移。需配新 openspec change。
+  当前 `ohos-monitor-real-values` 的单显示器边界判定在多屏接入前继续有效；
+  多屏下副屏坐标会误判为 None（已确认的语义缺口，非 bug）。
 - **DisplayCutoutInfo**：`default_display_cutout_info()` 已可用但 tao 未消费，
   若需刘海屏安全区可后续引入。
 - **DisplayChangeListener**：`OH_NativeDisplayManager_RegisterDisplayChangeListener`

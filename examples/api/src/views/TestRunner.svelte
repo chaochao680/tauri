@@ -1937,16 +1937,35 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
 
   async function manualOhosMonitorFromPoint() {
     await wrapManual('monitor_from_point', async () => {
-      const { currentMonitor } = await import('@tauri-apps/api/window');
+      const { currentMonitor, monitorFromPoint } = await import('@tauri-apps/api/window');
       const m = await currentMonitor();
       if (!m) { manualResult = 'No monitor'; onMessage(manualResult); return; }
-      const cx = Math.floor(m.size.width / 2);
-      const cy = Math.floor(m.size.height / 2);
-      manualResult = `monitor size: ${m.size.width}x${m.size.height}\n` +
-        `test point (cx,cy)=(${cx},${cy}) should be Some(primary)\n` +
-        `test point (-1,0) should be None\n` +
-        `Note: monitor_from_point is tao-level, not exposed in JS API.\n` +
-        `Verify via hilog or Rust test.`;
+      const w = m.size.width, h = m.size.height;
+      // OHOS single-display boundary check (spec ohos-monitor-real-values):
+      // points inside the half-open rect [0,w) x [0,h) return Some(monitor), else null.
+      const cases = [
+        ['(100,200) 屏内', 100, 200, true],
+        [`(${w - 1},${h - 1}) 右下角内`, w - 1, h - 1, true],
+        [`(${w},${h}) 刚好越界`, w, h, false],
+        ['(-1,0) 负坐标', -1, 0, false],
+        ['(99999,0) 超远', 99999, 0, false]
+      ];
+      const lines = [`monitor size: ${w}x${h} (DisplayManager 物理像素)`, ''];
+      let allPass = true;
+      for (const [label, x, y, expectSome] of cases) {
+        let got = '', pass = false;
+        try {
+          const r = await monitorFromPoint(x, y);
+          got = r ? 'Some(monitor)' : 'null';
+          pass = expectSome ? !!r : !r;
+        } catch (e) {
+          got = `err: ${e}`;
+        }
+        if (!pass) allPass = false;
+        lines.push(`${pass ? '✅' : '❌'} ${label} → ${got}（预期 ${expectSome ? 'Some' : 'None'}）`);
+      }
+      lines.push('', allPass ? 'ALL PASS ✅' : 'SOME FAILED ❌');
+      manualResult = lines.join('\n');
       onMessage(manualResult);
     });
   }
@@ -3167,7 +3186,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <h5 class="my-1 text-xs text-gray-500">OHOS Adapter Manual Tests</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualOhosPrint}>WebView Print</button>
-        <button class="btn" onclick={manualOhosMonitorFromPoint}>Monitor Info</button>
+        <button class="btn" onclick={manualOhosMonitorFromPoint}>monitorFromPoint (边界测试)</button>
         <button class="btn" onclick={manualOhosDialogError}>Dialog Error (degrade)</button>
         <button class="btn" onclick={manualEventResumed}>RunEvent::Resumed (background→foreground)</button>
       </div>
