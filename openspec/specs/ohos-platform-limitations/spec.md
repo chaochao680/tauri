@@ -71,3 +71,22 @@ OHOS 全局托盘与菜单栏仅在 `OHOS_DEVICE_TYPE=desktop` 时通过 `cfg(al
 | R228 | 应用接续 | 未来工作 | 暂不实现，引导原生 API |
 | R229 | 截图取色 | 未来工作 | 暂不实现，部分仅系统应用 |
 | R230 | 无障碍 | 未来工作 | 暂不实现，依赖 ArkWeb/系统 |
+
+### Requirement: ArkWeb 物理键盘 keydown 退化为 IME 插入管线（已由 key-synthesis 修复主窗口）
+ArkWeb 将物理键盘文本录入路由到 IME 插入管线：原生 DOM keydown/keyup 为无身份空壳事件（`key`/`code` 为空、`e.repeat` 恒 false、auto-repeat 以"每周期一对假 keydown/keyup"形式出现、`preventDefault` 无法阻止文字插入）。此为 ArkWeb 系统组件行为，应用层无 API 可直接纠正。主窗口（首实例 id=0）已由 `ohos-webview-key-synthesis`（openharmony-ability，onKeyPreIme 合成注入 + shim 抑制）修复；合成与 shim 注入均**仅限主窗口**——sub-UIAbility 实例窗口（id>0，加载同一 MainPage）与 Float 子窗口 SHALL NOT 注入 shim（无 key-synthesis 接线，注入会丢失全部按键事件），其 DOM key 事件维持原生退化行为，修复为后续增量。
+
+#### Scenario: 主窗口前端读取按键身份与连发
+- **WHEN** 物理键盘在主窗口 WebView 长按键
+- **THEN** 前端 SHALL 收到带 `key`/`code` 的合成 keydown，第二个起 `repeat=true`
+- **AND** ArkWeb 原生空壳 keydown/keyup SHALL 被 shim 在 window 捕获阶段抑制
+- **AND** IME 文字插入 SHALL 不受影响（无双重插入）
+
+#### Scenario: Float 子窗口前端读取按键
+- **WHEN** 物理键盘在 Float 子窗口 WebView 按键
+- **THEN** DOM key 事件 SHALL 维持 ArkWeb 原生行为（空壳、无 repeat）
+- **AND** SHALL NOT 出现"事件被抑制但无合成替代"的丢失状态
+
+## 平台限制汇总（增补）
+| 行 | 功能 | 判定 | 处置 |
+|----|------|------|------|
+| R-arkweb-key | ArkWeb keydown 退化（IME 管线） | 系统组件行为，主窗口已合成修复 | 主窗口走 ohos-webview-key-synthesis；sub-UIAbility 实例与 Float 子窗口维持退化（后续增量） |

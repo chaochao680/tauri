@@ -631,7 +631,20 @@
 
 ---
 
-## 三十三、手动用例统计汇总
+## 三十三、Key Repeat Detection（键盘连发检测）手动用例
+
+> **背景**: ArkWeb 物理键盘走 IME 插入管线，原生 DOM keydown 为空壳事件（无 key/code、不连发、e.repeat 恒 false，且每个重复周期合成一对假 keydown/keyup）。`ohos-webview-key-synthesis` 在 MainPage.onKeyPreIme 检测连发并派发合成 KeyboardEvent（带按键身份与 repeat），shim 抑制原生退化事件。测试入口：Tests 页面 → Key Repeat Detection (OHOS desktop / 2in1)。
+
+| 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
+|---------|---------|---------|---------|---------|---------|---------|---------|------|
+| webview | key-synthesis | 长按连发 | Hold Key — 长按按键触发连发 repeat | **T0** | 应用已启动；设备连接物理键盘；进入 Tests 页面 Key Repeat Detection 区域 | 1. 点击 "Start" 2. 点击输入框获取焦点（光标闪烁） 3. **长按**字母键 j 约 3 秒（手指不松开） 4. 松开 | ① 首行 `D key="j" code=KeyJ repeat=false` ② 长按期间连续多行 `D ... repeat=true`（绿色高亮），中间**无 U 行、无灰色空壳 D/U 对** ③ 松开后单行 `U key="j" code=KeyJ` ④ 输入框正常连出 `jjjj`（无翻倍） | 关键判定：`code=KeyJ` 有值 + `repeat=true` 连发；灰色行=shim 失效（scriptRules 匹配问题） |
+| webview | key-synthesis | 点按对照 | Tap Key — 快速点按不触发 repeat | **T0** | 同上；已完成长按用例 | 1. 快速点按字母键 j 一次（按下立即松开） 2. 再快速点按一次 | ① 每次 `D ... repeat=false` ② 每次点按配对一行 `U` ③ 无 repeat=true 出现 | 验证 Up 正确清除按下集合，不误报 |
+| webview | key-synthesis | 快捷键拦截 | Accelerator Interception — 被消费按键不泄入页面 | **T1** | 应用配置了菜单快捷键（如 Ctrl+Shift+T 类 accelerator） | 1. 长按快捷键组合 2 秒 | ① 页面**不**收到该组合键的 keydown/keyup（被 onKeyPreIme 拦截链消费） ② 松开修饰键后页面收到修饰键事件正常 | 验证 fall-through 接线：拦截优先于合成 |
+| webview | key-synthesis | 告警检查 | No Warnings — hilog 无派发失败 | **T1** | 已完成长按用例 | 1. `hdc shell "hilog -x \| grep KeySynthesis"` | ① 无 `runJavaScript failed` 告警 | 派发失败仅 warn 不刷屏（20Hz 连发下静默成功） |
+
+---
+
+## 三十四、手动用例统计汇总
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
@@ -687,13 +700,14 @@
 | OHOS — Accessibility 插件（fontScale/屏幕阅读器） | 0 | 3 | **3** |
 | OHOS — Screenshot 插件（截图预览/色块取色） | 1 | 1 | **2** |
 | OHOS — Continuation 插件（接续边界/源端保存/双设备往返） | 0 | 3 | **3** |
-| **合计** | **91** | **81** | **172** |
+| Key Repeat Detection（key-synthesis 长按/点按） | 2 | 2 | **4** |
+| **合计** | **93** | **83** | **176** |
 
-> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正；当前合计 91 T0 / 81 T1 / 172（含 Phase 3c 新增 continuation 源端保存 + 双设备往返 2 T1）。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。
+> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正；当前合计 93 T0 / 83 T1 / 176（含 Phase 3c 新增 continuation 源端保存 + 双设备往返 2 T1，及 key-synthesis 新增 2 T0 + 2 T1）。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。
 
 ---
 
-## 三十四、OHOS P1/P2 新插件（无障碍/截图取色/应用接续）手动用例
+## 三十五、OHOS P1/P2 新插件（无障碍/截图取色/应用接续）手动用例
 
 > **背景**: 2026-08-27 交付的无障碍、截图取色与应用接续（被动恢复）插件。只收录自动测试**未覆盖**的维度（系统设置联动、事件端到端、人眼比对、接续边界）；已被自动用例覆盖的断言（getFontScale 正数、红块阈值、base64 前缀+宽高、接续普通启动 false/null）不再重复。splash/字体（P0）已有 hilog/静态验证结论，不设手动用例。
 >
