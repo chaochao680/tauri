@@ -13,6 +13,13 @@
 - 位深、显示器位置、显示器名称因 OHOS 无对应 API，由 `ohos-monitor-degradation`
   spec 显式降级，本 spec 不涉及。
 
+> **2026-08-28 勘误**：`ohos-display-sys 0.1.3` 已声明多屏 API
+> （`CreateAllDisplays` @since 14、`GetDisplayPosition` @since 20、DisplayAdd/Remove
+> 监听），"无多屏枚举"的前提在 sys 层已不成立；binding/openharmony-ability/tao
+> 尚未接入。本 spec 的单显示器语义在多屏接入前继续有效（多屏下副屏坐标返回
+> None 是已确认的语义缺口）。升级路径详见
+> `openspec/ohos-event-monitor-tray-plan.md` "OHOS API 关键未知项"。
+
 ## ADDED Requirements
 
 ### Requirement: 刷新率取自 OHOS DisplayManager 真实值
