@@ -36,6 +36,16 @@
 >
 > **恢复**: `hdc shell "kill <sceneboard_pid>"` 杀掉 SCB（约 30 秒后自动重生，clientProxyMap 清空）或重启设备，然后重启 app。正常 force-stop / install -r 不泄漏，日常开发不会复现。
 
+> **✅ 已修复（2026-08-29 真机验证 PASS）：已有托盘注册时替换图标需点两次才生效**
+>
+> **症状**: Remove All Trays → Tests 页创建 "Icon as Template" 托盘 → Tray 页点击 "Full Test Tray"，第一次点击图标无变化，第二次点击才变成新图标。
+>
+> **根因**: tray-icon OHOS 后端对 `new`/`set_title`/`set_quick_operation`/`set_icon_as_template` 都是 remove+add 连发；`StatusbarPlugin.ets` 的 remove/add 原先在**同步返回**时就向 Rust 应答，`block_on(client.remove())` 得到的只是"ArkTS 收到了"而非"SCB 做完了"，add 的 SCB 处理与 remove 的异步拆除交错 → 状态栏渲染损坏（每层日志都报成功）。注意官方文档明确 `addToStatusBar` **重复添加无效**（同 app 仅一个图标、静默空操作），所以必须保证 remove 真正完成后才 add，不能省掉 remove。
+>
+> **修复**: `StatusbarPlugin.ets` 的 `remove`/`add` action 改用 AsyncCallback 重载并 `await` 回调触发后才返回应答（错误也回传 Rust），Rust worker 的 remove→add 顺序即由系统完成回调保证，无任何时延猜测。
+>
+> **⚠️ 部署坑**: 改 `openharmony-ability` ArkTS 插件源码后必须先在仓库根跑 `pack.bat` 重打 `ability.har` 再 build——应用依赖的是预构建 HAR（file: 依赖 + ohpm 内容哈希缓存），不重打则改动不会进 HAP。
+
 ---
 
 ## 二、Menu（菜单）手动用例
@@ -59,12 +69,12 @@
 | core | menu | menubar/交互 | MenuBar Hover — 菜单项悬停效果 | **T1** | 应用已启动 | 1. 点击 "MenuBar Hover" 按钮 2. 鼠标悬停到 "HoverTest" | 悬停时背景色高亮变化；鼠标移开后恢复正常 | 验证 UI 交互反馈 |
 | core | menu | menubar/图标 | MenuBar Bar-Level Icon — 菜单栏级图标 | **T1** | 应用已启动 | 1. 点击 "MenuBar Bar-Level Icon" 按钮 | "IconMenu" 在菜单栏级别文字旁显示一个小图标 | MB_TEST_ICON 为 1×1 透明 PNG |
 | core | menu | menubar/状态 | MenuBar Disabled Item — 禁用菜单项 | **T1** | 应用已启动 | 1. 点击 "MenuBar Disabled Item" 按钮 2. 点击 "DisTest" 下拉 | "Disabled" 项灰显/半透明且不可点击；"Normal" 项全色可点击 | 验证 `enabled: false` 的视觉表现 |
-| core | menu | menubar/快捷键 | MenuBar Accelerator Ctrl+C — 预定义复制快捷键 | **T1** | 应用已启动；有可选择的文本 | 1. 点击 "MenuBar Accelerator Ctrl+C" 按钮 2. 在输入框输入文本并选中 3. 按 Ctrl+C | 选中文本被复制到剪贴板；粘贴可验证 | 使用 PredefinedMenuItem Copy |
+| core | menu | menubar/快捷键 | MenuBar Accelerator Ctrl+C — 预定义复制快捷键 ✅ | **T1** | 应用已启动；有可选择的文本 | 1. 点击 "MenuBar Accelerator Ctrl+C" 按钮 2. 在输入框输入文本并选中 3. 按 Ctrl+C | 选中文本被复制到剪贴板；粘贴可验证 | 使用 PredefinedMenuItem Copy。2026-08-29 PASS（默认值翻转修复后）。回归根因：ohos-webview-flag-clipboard 初版把 wry `clipboard` 默认 `false` 映射为键盘拦截（`MainPage.ets` onKeyPreIme 吞 Ctrl+C），所有默认配置窗口中招；修复：`tauri-runtime`/`wry` 的 `WebViewAttributes::default().clipboard` OHOS 下为 `true` + 新增 `disable_clipboard_access()` 显式关闭，见 spec `ohos-webview-flag-clipboard` 2026-08-28 修订 |
 | core | menu | menubar/自动刷新 | MenuBar Auto Refresh Text — 文本自动刷新 | **T1** | 应用已启动 | 1. 点击 "MenuBar Auto Refresh Text" 按钮 2. 展开 "Refresh" 下拉菜单 | 下拉菜单显示 "Updated!" 而非 "Original" | 先创建 text='Original'，500ms 后 setText('Updated!')；验证 auto_refresh 机制 |
 | core | menu | menubar/自动刷新 | MenuBar Auto Refresh Checked — 勾选状态自动刷新 | **T1** | 应用已启动 | 1. 点击 "MenuBar Auto Refresh Checked" 按钮 2. **不点击**，等待 500ms 3. 展开 "Refresh" 下拉菜单 | "Check Me" 项前自动出现勾选标记 ✓（无需手动点击） | 验证 auto_refresh 机制在 500ms 后自动推送 checked 状态变更到原生菜单栏 |
 | core | menu | menubar/预定义项 | MenuBar Predefined Hide — 预定义隐藏窗口 | **T1** | 应用已启动 | 1. 点击 "MenuBar Predefined Hide" 按钮 2. 点击 Window → Hide | 窗口最小化；从任务栏恢复后窗口重新出现 | PredefinedMenuItem 'Hide' |
 | core | menu | menubar/事件 | MenuBar Popup Regression — popup 回归测试 | **T1** | 应用已启动 | 1. 点击 "MenuBar Popup Regression" 按钮 | 光标位置弹出上下文菜单，显示 "Popup Test" | 验证 AppStorage key 重命名后 `menu.popup()` 仍正常工作 |
-| core | menu | menubar/NativeIcon | MenuBar NativeIcon Symbols — 原生图标映射 | **T1** | 应用已启动 | 1. 点击 "MenuBar NativeIcon Symbols" 按钮 2. 分别展开 "Mapped" 和 "Unmapped" 子菜单 | Mapped 组：Add→★、LockLocked→🔒、Network→📶 显示对应系统图标；Unmapped 组：Home/Folder/Share 等仅显示文字无图标 | **仅 OHOS 平台**有映射效果 |
+| core | menu | menubar/NativeIcon | MenuBar NativeIcon Symbols — 原生图标映射 | **T1** ✅ | 应用已启动 | 1. 点击 "MenuBar NativeIcon Symbols" 按钮 2. 分别展开 "Mapped" 和 "Unmapped" 子菜单 | Mapped 组：Add→★、LockLocked→🔒、Network→📶 显示对应系统图标；Unmapped 组：Home/Share 等仅显示文字无图标（**Folder 已映射为 sys.symbol.folder，2026-08-29 起显示文件夹图标**） | **仅 OHOS 平台**有映射效果；符号名以 SDK `sysResource.js` symbol 段为准（`folder` 无 `ohos_` 前缀） |
 | core | menu | menubar/预定义项 | Menu Edit→Paste — 预定义粘贴 | **T1** | 应用已启动；剪贴板有内容 | 1. 点击 "Menu Edit→Paste" 按钮 2. 在外部复制文本 3. 聚焦输入框 4. 点击 Edit → Paste | 剪贴板内容被粘贴到输入框中 | OHOS 剪贴板读权限限制，当前无法验证 |
 | core | menu | menubar/预定义项 | Menu Edit→Cut — 预定义剪切 | **T1** | 应用已启动；输入框有选中文本 | 1. 点击 "Menu Edit→Cut" 按钮 2. 选中输入框文本 3. 点击 Edit → Cut | 选中文本从输入框消失，同时被复制到剪贴板 | 验证 PredefinedMenuItem Cut 功能 |
 
@@ -75,7 +85,7 @@
 | core | menu | popupmenu/基础 | Menu Page — Popup 弹出菜单 | **T0** | 应用已启动，进入 Menu 页面 | 1. 在 MenuBuilder 中配置菜单项 2. 点击 "Popup" 按钮 | 光标位置弹出上下文菜单，显示配置的所有菜单项 | `menu.popup()` 弹出 |
 | core | menu | popupmenu/点击交互 | Popup Click Item — 弹出菜单点击菜单项 | **T0** | 应用已启动，进入 Menu 页面 | 1. 在 MenuBuilder 中添加一个 Normal 项（如 "Test Item"） 2. 点击 "Popup" 按钮 3. 在弹出菜单中点击 "Test Item" | ① 光标位置弹出上下文菜单 ② 点击后菜单消失 ③ UI 输出 `Item Test Item clicked` | 验证 MenuItem action 回调 |
 | core | menu | popupmenu/点击交互 | Popup Predefined Copy — 弹出菜单预定义复制 | **T0** | 应用已启动，进入 Menu 页面；输入框有文本 | 1. 在 MenuBuilder 中添加一个 Predefined Copy 项 2. 选中输入框文本 3. 点击 "Popup" 按钮 4. 在弹出菜单中点击 Copy | 选中文本被复制到剪贴板；UI 输出 `Item Copy clicked` | 验证弹出菜单中预定义项的原生操作 |
-| core | menu | popupmenu/图标 | Menu Page — Create menu with NativeIcon | **T1** | 应用已启动，进入 Menu 页面 | 1. 点击 "Create menu with NativeIcon" 按钮 | 菜单栏显示带 NativeIcon.Folder 图标的子菜单 | 验证 Submenu 级别的 NativeIcon |
+| core | menu | popupmenu/图标 | Menu Page — Create menu with NativeIcon | **T1** ✅ | 应用已启动，进入 Menu 页面 | 1. 点击 "Create menu with NativeIcon" 按钮 | 菜单栏显示带 NativeIcon.Folder 图标的子菜单 | 验证 Submenu 级别的 NativeIcon。2026-08-29 真机 PASS：补 `Folder → sys.symbol.folder` 映射（muda `native_icon_to_ohos`）+ ArkTS 符号表 case + MenuBarRow 顶层 SymbolGlyph 渲染（顶层此前只渲染位图）。注意 folder 符号无 `ohos_` 前缀，符号名以 SDK `sysResource.js` symbol 段为准 |
 | core | menu | popupmenu/图标 | Menu Page — Create menu with Image icon | **T1** | 应用已启动，进入 Menu 页面 | 1. 点击 "Create menu with Image icon" 按钮 | 菜单栏显示带 defaultWindowIcon 图标的子菜单 | 使用 `defaultWindowIcon()` 获取应用窗口图标 |
 | core | menu | popupmenu/基础 | Menu Page — Create menu 创建应用菜单 | **T1** | 应用已启动，进入 Menu 页面；MenuBuilder 已配置菜单项 | 1. 在 MenuBuilder 中选择菜单项类型并创建 2. 点击 "Create menu" 按钮 | 窗口菜单栏出现 "app" 子菜单，包含所有配置的菜单项 | macOS 设为 AppMenu，其他平台设为 WindowMenu |
 
@@ -524,6 +534,7 @@
 > - save-state 用例已移除（无法真机触发系统内存回收；代码路径保证 tao mod.rs:668-673 `debug!` drop，无 warn、不转发 Event，定性无验证价值）。
 > - dialog error-degrade **PASS**（按钮显示说明信息 ×2，无崩溃；该函数 Windows-only，OHOS 分支 log::error! 不 panic）。
 > - clipboard OFF/ON **PASS**：OFF 窗口选中文本 Ctrl+C 后粘贴，剪贴板内容不变（拦截生效）；ON 窗口复制粘贴正常（2026-08-27 用户确认）。
+> - clipboard 默认值翻转 **PASS**（2026-08-29）：主窗口（未显式设置 clipboard）启动日志 `setWebviewFlags windowId=0 clipboard=true`，真实键盘 Ctrl+C 复制正常（manual_tests T1 回归修复，用户确认）。§27 OFF 用例在翻转后**真机回归 PASS**（2026-08-29 用户确认）：显式 `false` 走新增的 `disable_clipboard_access()`，OFF 窗口拦截仍然生效。
 > - zoom OFF/ON **PASS**：OFF 窗口 Ctrl+=/-/0 页面缩放不变（拦截生效）；ON 窗口缩放/重置正常（2026-08-27 用户确认）。
 >
 > **§二十七 结论**：8 例全 PASS（save-state 已移除）。webview print 判据③临时 PDF 清理缺陷已修复并复验通过（`WebviewPlugin.ets:2347` printPdf cleanup 闭包：succeed 延 10s 命中主清理路径 + fail/cancel 即删 + 120s 无条件兜底双保险；实测 succeed 终态事件确投递，10s 延迟 cleanup 命中）；start-resumed 按钮监听 `tauri://resumed` 的判据设计缺陷已注明（事件在所有平台都不存在，Rust 转发本身正确）。

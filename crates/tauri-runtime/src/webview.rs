@@ -355,6 +355,16 @@ pub struct WebviewAttributes {
   /// drags to Web-level handlers; the overlay is the fallback). See ohos-webview-drag-drop-overlay.
   #[cfg(target_env = "ohos")]
   pub drag_drop_overlay: bool,
+  /// Whether clipboard access is enabled for the page.
+  ///
+  /// ## Platform-specific
+  ///
+  /// - **Linux / Windows**: gates the page's JS clipboard access only; keyboard
+  ///   Ctrl+C/X/V are engine-native and always work. Default `false`.
+  /// - **macOS**: always enabled (no toggle).
+  /// - **OHOS**: default `true` (ArkWeb native clipboard shortcuts, matching
+  ///   macOS/Windows keyboard behavior); `false` intercepts keyboard
+  ///   Ctrl+C/X/V/A/Z/Y via onKeyPreIme. See ohos-webview-flag-clipboard spec.
   pub clipboard: bool,
   pub accept_first_mouse: bool,
   pub additional_browser_args: Option<String>,
@@ -526,7 +536,11 @@ impl WebviewAttributes {
       drag_drop_handler_enabled: true,
       #[cfg(target_env = "ohos")]
       drag_drop_overlay: false,
-      clipboard: false,
+      // OHOS defaults to enabled (ArkWeb native clipboard shortcuts) so that
+      // default-configured windows keep working Ctrl+C like Windows/macOS.
+      // Other platforms keep the historical `false` default. See
+      // ohos-webview-flag-clipboard spec.
+      clipboard: cfg!(target_env = "ohos"),
       accept_first_mouse: false,
       additional_browser_args: None,
       window_effects: None,
@@ -646,9 +660,25 @@ impl WebviewAttributes {
   ///
   /// **macOS** doesn't provide such method and is always enabled by default,
   /// but you still need to add menu item accelerators to use shortcuts.
+  ///
+  /// **OHOS** is enabled by default (ArkWeb native clipboard shortcuts);
+  /// use [`Self::disable_clipboard_access`] to intercept keyboard
+  /// Ctrl+C/X/V/A/Z/Y.
   #[must_use]
   pub fn enable_clipboard_access(mut self) -> Self {
     self.clipboard = true;
+    self
+  }
+
+  /// Disables clipboard access for the page.
+  ///
+  /// This is the default on **Linux** and **Windows**. On **OHOS** the default
+  /// is enabled (ArkWeb native clipboard shortcuts); calling this intercepts
+  /// keyboard Ctrl+C/X/V/A/Z/Y via onKeyPreIme so they never reach ArkWeb.
+  /// See the ohos-webview-flag-clipboard spec.
+  #[must_use]
+  pub fn disable_clipboard_access(mut self) -> Self {
+    self.clipboard = false;
     self
   }
 

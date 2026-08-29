@@ -1868,6 +1868,10 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
 
   if clipboard == Some(true) {
     builder = builder.enable_clipboard_access();
+  } else if clipboard == Some(false) {
+    // Explicit opt-out: on OHOS the default is enabled (ArkWeb native
+    // clipboard shortcuts), so the OFF test must call disable explicitly.
+    builder = builder.disable_clipboard_access();
   }
   if let Some(z) = zoom_hotkeys {
     builder = builder.zoom_hotkeys_enabled(z);

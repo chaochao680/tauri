@@ -702,17 +702,17 @@ Expected behavior:
       const { Menu, Submenu, IconMenuItem } = await import('@tauri-apps/api/menu');
       const { NativeIcon } = await import('@tauri-apps/api/menu/iconMenuItem');
 
-      // 3 mapped variants (should show icons)
+      // 4 mapped variants (should show icons)
       const mapped = [
         { variant: NativeIcon.Add, label: 'Add (mapped: ohos_star)' },
         { variant: NativeIcon.LockLocked, label: 'LockLocked (mapped: ohos_lock)' },
         { variant: NativeIcon.Network, label: 'Network (mapped: ohos_wifi)' },
+        { variant: NativeIcon.Folder, label: 'Folder (mapped: folder)' },
       ];
 
       // unmapped variants (should show no icon)
       const unmapped = [
         { variant: NativeIcon.Home, label: 'Home (unmapped)' },
-        { variant: NativeIcon.Folder, label: 'Folder (unmapped)' },
         { variant: NativeIcon.Share, label: 'Share (unmapped)' },
         { variant: NativeIcon.User, label: 'User (unmapped)' },
         { variant: NativeIcon.Refresh, label: 'Refresh (unmapped)' },
@@ -744,8 +744,9 @@ Expected behavior:
         'Mapped → should show icons for:\n' +
         '  • Add → ★ (ohos_star)\n' +
         '  • LockLocked → 🔒 (ohos_lock)\n' +
-        '  • Network → 📶 (ohos_wifi)\n\n' +
-        'Unmapped → no icons (Home, Folder, Share, etc.)\n\n' +
+        '  • Network → 📶 (ohos_wifi)\n' +
+        '  • Folder → 📁 (folder, no ohos_ prefix)\n\n' +
+        'Unmapped → no icons (Home, Share, etc.)\n\n' +
         'If mapped items show system icons and unmapped show text only → PASS.';
       onMessage(manualResult);
     });
