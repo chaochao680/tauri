@@ -515,7 +515,7 @@
 
 ## 二十七、OHOS 适配 8 项功能 手动用例
 
-> **背景**: openspec 8 项适配（clipboard/zoom flag、dialog error 降级、event 转发、monitor 真实值、dialog folder-picker、webview print、drag-drop）的手动验证。**2026-08-27 起约定：已由自动测试覆盖并验证的用例不保留在本文档**——monitor 刷新率用例（其测试步骤本身即"等 auto 运行"）由 `ohos-adapter.monitor.real-size`（auto，报告 #254 PASS）覆盖后移除，断言已收紧（连续两次调用 size 一致）；注：refreshRate 是 Rust `video_modes()` 字段，JS Monitor API 未暴露（name/size/position/workArea/scaleFactor），无手动验证路径。测试入口：TestRunner「OHOS Adapter Manual Tests」区按钮。
+> **背景**: openspec 8 项适配（clipboard/zoom flag、dialog error 降级、event 转发、monitor 真实值、dialog folder-picker、webview print、drag-drop）的手动验证。**2026-08-27 起约定：已由自动测试覆盖并验证的用例不保留在本文档**——monitor 刷新率用例（其测试步骤本身即"等 auto 运行"）由 `ohos-adapter.monitor.real-size`（auto，报告 #254 PASS）覆盖后移除，断言已收紧（连续两次调用 size 一致）；注：refreshRate 是 Rust `video_modes()` 字段，JS Monitor API 未暴露（name/size/position/workArea/scaleFactor）——2026-08-29 起新增 `probe_display_refresh_rate` 探针命令（经 `tauri::ohos::APP` 核心特权模式读 DisplayManager，与 tao `video_modes()` 同源）+ TestRunner「Display Refresh Rate」按钮，手动验证路径已补齐（见下表）。测试入口：TestRunner「OHOS Adapter Manual Tests」区按钮。
 >
 > **验证记录**: 2026-08-27 真机（HUAWEI MateBook Pro HAD-W32）：
 > - monitor from-point **PASS**（3120×2080 物理像素，hilog 无 warn）
@@ -531,6 +531,7 @@
 | 一级场景 | 二级场景 | 三级场景 | 用例名称 | 用例级别 | 预置条件 | 测试步骤 | 预期结果 | 备注 |
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
 | ohos | monitor | from-point | monitor_from_point — 边界判定 | **T1** | 应用已启动，进入 Tests 页面 | 1. 点击 "monitorFromPoint (边界测试)" 按钮 2. 查看输出的五行边界判定结果 3. hilog 确认 `monitor_from_point` 无 warn 日志 | ① 显示 monitor size（DisplayManager 物理像素） ② 屏内坐标（含 w-1,h-1 右下角）返回 `Some(primary)` ③ 屏外坐标（-1/99999/w,h）返回 `None` ④ 按钮结果为 ALL PASS ⑤ 无 warn | OHOS 单显示器，边界判定 `0<=x<w && 0<=y<h`（半开区间）；JS API `monitorFromPoint` 经 `core:window:allow-monitor-from-point` 权限直接调用，desktop 形态命令已注册 |
+| ohos | monitor | refresh-rate | display_refresh_rate — 刷新率探针 | **T1** | 应用已启动（OHOS 设备） | 1. 点击 "Display Refresh Rate" 按钮 | ① 返回 `refresh_rate=<N> Hz`（MateBook Pro HAD-W32 预期 ~120） ② rAF 实测帧率与上报值同数量级 | 探针命令 `probe_display_refresh_rate` 走 NDK 直连（DisplayManager），非 bridge 插件；JS Monitor API 无 refreshRate 属上游全平台语义 |
 | ohos | webview | print | WebView 打印 — 系统打印对话框 | **T0** | 应用已启动；页面已加载（onPageEnd）；进入 Tests 页面 | 1. 点击 "WebView Print" 按钮 2. 观察系统打印对话框 3. 检查临时 PDF 清理（hilog 搜 `print`） | ① 弹出系统打印对话框 ② 打印任务提交后 `log.info('print: job submitted')` ③ 临时 PDF 文件清理（`fileIo.unlinkSync`） ④ 页面未加载时返回 Err | `@ohos.print` + `createPdf` 降级 |
 | ohos | event | start-resumed | MainEvent::Start → Event::Resumed 转发 | **T0** | 应用已启动 | 1. 点 `RunEvent::Resumed` 按钮（监听 tauri://resumed）2. 按 Home 键将应用切到后台 3. 从最近任务列表切回应用 4. 看按钮结果（30s 内 PASS/FAIL） | ① 切回时 `Resumed` 事件触发，按钮显示 PASS ② hilog 无 `warn: TODO: forward onStart` ③ 与 SurfaceCreate/Resume 的重复 Resumed 可接受（幂等） | tao `MainEvent::Start`（SHOWN）转发为 `Event::Resumed`；按钮自动监听 30s |
 | ohos | event | save-state | MainEvent::SaveState 降级 | **T1** | 应用已启动 | 1. 触发系统内存回收（打开多个应用占用内存后切回） 2. hilog 搜 `SaveState` | ① `debug: SaveState has no tao Event equivalent; dropped` ② 无 `warn` 噪音 ③ 不转发任何 Event | tao 无 SaveState 变体，降级为 debug log |

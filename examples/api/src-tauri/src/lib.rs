@@ -776,6 +776,8 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       cmd::append_test_result,
       cmd::console_log,
       probe_apis::probe_app_monitors,
+      #[cfg(target_env = "ohos")]
+      probe_apis::probe_display_refresh_rate,
       #[cfg(desktop)]
       probe_apis::probe_app_menu_set_remove,
       #[cfg(desktop)]

@@ -17,6 +17,10 @@ fn main() {
         "log_operation",
         "perform_request",
         "probe_app_monitors",
+        // cfg-gated to ohos in probe_apis.rs; registered unconditionally here —
+        // the permission list is host-compiled so cfg attrs can't gate entries
+        // (same as fault_injection_* above; inert on other targets).
+        "probe_display_refresh_rate",
         "probe_app_menu_set_remove",
         "probe_window_menu_set_remove",
         "probe_webview_reparent",
