@@ -85,7 +85,10 @@ fn main() {
         "create_ui_ability_windows_x3",
         "count_webview_windows",
         "close_all_test_windows",
-        #[cfg(debug_assertions)]
+        // sentry_test_panic is cfg-gated to debug_assertions in cmd.rs, but
+        // run-app.json references allow-sentry-test-panic unconditionally, so
+        // the permission must be registered in release builds too (the entry
+        // is inert when the command doesn't exist).
         "sentry_test_panic",
         "sentry_test_breadcrumb",
         // Fault-injection commands are cfg-gated to ohos+fault-injection in
