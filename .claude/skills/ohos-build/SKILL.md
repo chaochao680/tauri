@@ -236,7 +236,15 @@ cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/testtrayability/Tes
 
 ### ④ 扩展能力和权限（module.json5）
 
-`module.json5` 会被模板覆盖，需要手动补充 `TestTrayAbility` 扩展和 `SET_WINDOW_TRANSPARENT` 权限：
+`module.json5` 会被模板覆盖，需要手动补充 `TestTrayAbility` 扩展和**模板缺失的权限**。
+
+> **模板现状**（`crates/tauri-cli/templates/.../module.json5`）已内置：`INTERNET`、`SET_WINDOW_TRANSPARENT`、`WINDOW_TOPMOST`、`LOCK_WINDOW_CURSOR`、`PRINT`（desktop 带 reason/usedScene，mobile 不带）。模板**未内置**下列 5 个权限——它们只存在于本地 `gen/ohos` 生成产物中（被 gitignore，未提交、不会随 PR 上游）。重新 `tauri ohos init` 后这 5 个会被清掉，必须手动补回，否则对应功能静默失败：
+> - `VIBRATE` → §十三 haptics 失败
+> - `LOCATION` / `APPROXIMATELY_LOCATION` → §二十八 geolocation 失败（需 `reason` + `usedScene`，否则 ACL 校验拒绝）
+> - `CAMERA` → 相机功能失败（需 `reason` + `usedScene`）
+> - `ACCESS_BIOMETRIC` → §三十一 biometric 失败
+
+补充后的完整配置（`gen/ohos/entry_desktop/src/main/module.json5` 和 `gen/ohos/entry_mobile/src/main/module.json5` 都要补，mobile 的 PRINT 不带 reason/usedScene）：
 
 ```json5
 // gen/ohos/entry_desktop/src/main/module.json5
@@ -265,12 +273,34 @@ cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/testtrayability/Tes
       }
     ],
     "requestPermissions": [
+      // ── 模板已内置（init 后保留，无需补）──
+      { "name": "ohos.permission.INTERNET" },
+      { "name": "ohos.permission.SET_WINDOW_TRANSPARENT" },
+      { "name": "ohos.permission.WINDOW_TOPMOST" },
+      { "name": "ohos.permission.LOCK_WINDOW_CURSOR" },
       {
-        "name": "ohos.permission.INTERNET"
+        "name": "ohos.permission.PRINT",
+        "reason": "$string:reason_print",            // ← mobile 模板无此两行，desktop 模板有
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      // ── 模板缺失，init 后必须手动补回 ──
+      { "name": "ohos.permission.VIBRATE" },
+      {
+        "name": "ohos.permission.LOCATION",
+        "reason": "$string:reason_location",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
       },
       {
-        "name": "ohos.permission.SET_WINDOW_TRANSPARENT"
-      }
+        "name": "ohos.permission.APPROXIMATELY_LOCATION",
+        "reason": "$string:reason_location",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      {
+        "name": "ohos.permission.CAMERA",
+        "reason": "$string:reason_camera",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      { "name": "ohos.permission.ACCESS_BIOMETRIC" }
     ]
   }
 }
@@ -278,6 +308,8 @@ cp ${PROJECT_ROOT}/tauri/.claude/skills/ohos-build/templates/testtrayability/Tes
 
 - `TestTrayAbility` 是系统托盘 QuickOperation 面板的扩展能力，`type` 必须为 `statusBarView`
 - `ohos.permission.SET_WINDOW_TRANSPARENT` 是 2in1 设备上 `setWindowContainerColor` API 所需的权限，缺少会导致透明窗口功能失效（error 201）
+- `LOCATION`/`CAMERA` 等敏感权限的 `reason` 引用的字符串资源（`reason_print`/`reason_location`/`reason_camera`）需在 `entry_*/src/main/resources/base/element/string.json` 中定义，否则 ACL 校验报错
+- 长期方案：把这 5 个权限写进 `crates/tauri-cli/templates/mobile/open-harmony/entry_*/src/main/module.json5`，让它们随 PR 上游、init 后自动生成（当前它们只在本地 gen 产物，不会随 PR 提交）
 
 ## 关键注意事项
 

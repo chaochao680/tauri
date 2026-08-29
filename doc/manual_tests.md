@@ -226,12 +226,11 @@
 |---------|---------|---------|---------|---------|---------|---------|---------|------|
 | core | runevent | ExitRequested/LoopDestroyed | 系统关闭应用 — ExitRequested + prevent_exit | **T0** | 应用已启动，打开 DevEco Studio 观察日志，关键词runevent | 1. 关闭应用 2. 观察日志输出 | ① 日志依次出现 `LoopDestroyed received` → `ExitRequested, code=None` → `prevent_exit() called` → `Exit` ② 应用仍然退出（`LoopDestroyed` 时系统已开始销毁，`prevent_exit()` 无法阻止） | 验证：LoopDestroyed handler 先触发 ExitRequested 再触发 Exit；OHOS 平台限制：prevent_exit 仅通知清理，无法阻止退出 |
 | core | runevent | ExitRequested/防重复 | ExitRequested 防重复触发 | **T1** | 应用已启动，打开 DevEco Studio 观察日志，关键词runevent；已创建多个子窗口 | 1. 逐个关闭子窗口（每个观察日志） 2. 关闭最后一个窗口（主窗口） 3. 统计 `ExitRequested` 出现次数 | ① 每个子窗口关闭时：`CloseRequested` → `Destroyed` ② 最后一个窗口关闭时：`ExitRequested` **仅一次** ③ 随后 LoopDestroyed 时**不再重复** ExitRequested，直接发送 `Exit` | 验证 `ExitState(AtomicBool)` 防重复机制 |
-| core | runevent | Resumed/跨平台遗留 | Resumed 事件 — 不触发（预期行为） | **T1** | 自动测试报告已生成 | 1. 查看 Test #29 `RunEvent::Resumed fires on startup` 结果 | ① 状态为 ❌ ② 预期失败，跨平台遗留问题 | 不在本次修复范围内 |
 | core | runevent | Opened/深度链接 | Opened 事件 — 深度链接触发 | **T1** | 应用已启动，打开 DevEco Studio 观察日志 | 1. 执行 `hdc shell aa start -a EntryAbility -b com.tauri.api -U myapp://test/path` 2. 观察日志输出和 UI 响应 | ① 日志出现 `[RunEvent] Opened, urls=["myapp://test/path"]` ② UI 显示深度链接信息（如有处理逻辑） | 验证：OHOS 平台 Opened 事件已启用（代码 511-515 行），通过深度链接触发 |
 
 | 模块 | T0 | T1 | 合计 |
 |------|-----|-----|------|
-| RunEvent（生命周期事件） | 1 | 3 | **4** |
+| RunEvent（生命周期事件） | 1 | 2 | **3** |
 
 ---
 
@@ -708,7 +707,7 @@
 | Webview — DevTools | 0 | 1 | **1** |
 | Webview — Fullscreen | 1 | 0 | **1** |
 | WebView User-Agent | 1 | 2 | **3** |
-| RunEvent（生命周期事件） | 1 | 3 | **4** |
+| RunEvent（生命周期事件） | 1 | 2 | **3** |
 | Transparent（透明窗口） | 1 | 1 | **2** |
 | on_new_window（新窗口拦截） | 2 | 1 | **3** |
 | Single-Instance（单实例） | 3 | 1 | **4** |
@@ -748,7 +747,7 @@
 | OHOS — Screenshot 插件（截图预览/色块取色/canvas snapshot） | 2 | 1 | **3** |
 | OHOS — Continuation 插件（接续边界/源端保存/双设备往返） | 0 | 3 | **3** |
 | Key Repeat Detection（key-synthesis 长按/点按） | 2 | 2 | **4** |
-| **合计** | **94** | **82** | **176** |
+| **合计** | **94** | **81** | **175** |
 
-> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正。2026-08-28 复验期间移除 §二十七 save-state（无法触发的定性用例，1 T1）；同日补 §三十四 screenshot canvas-snapshot（Take Snapshot 接线 bug 修复，1 T0）→ 92 T0 / 79 T1 / 171；key-synthesis 新增 2 T0 + 2 T1。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。
+> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正。2026-08-28 复验期间移除 §二十七 save-state（无法触发的定性用例，1 T1）；同日补 §三十四 screenshot canvas-snapshot（Take Snapshot 接线 bug 修复，1 T0）→ 92 T0 / 79 T1 / 171；key-synthesis 新增 2 T0 + 2 T1。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。2026-08-29 移除 §九 Resumed T1（接续目标端白屏修复后由自动测试覆盖，判据 hilog `onWindowStageRestore` 双路径），合计 94 T0 / 81 T1 / 175。
 
