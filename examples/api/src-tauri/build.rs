@@ -17,6 +17,10 @@ fn main() {
         "log_operation",
         "perform_request",
         "probe_app_monitors",
+        // cfg-gated to ohos in probe_apis.rs; registered unconditionally here —
+        // the permission list is host-compiled so cfg attrs can't gate entries
+        // (same as fault_injection_* above; inert on other targets).
+        "probe_display_refresh_rate",
         "probe_app_menu_set_remove",
         "probe_window_menu_set_remove",
         "probe_webview_reparent",
@@ -81,7 +85,10 @@ fn main() {
         "create_ui_ability_windows_x3",
         "count_webview_windows",
         "close_all_test_windows",
-        #[cfg(debug_assertions)]
+        // sentry_test_panic is cfg-gated to debug_assertions in cmd.rs, but
+        // run-app.json references allow-sentry-test-panic unconditionally, so
+        // the permission must be registered in release builds too (the entry
+        // is inert when the command doesn't exist).
         "sentry_test_panic",
         "sentry_test_breadcrumb",
         // Fault-injection commands are cfg-gated to ohos+fault-injection in

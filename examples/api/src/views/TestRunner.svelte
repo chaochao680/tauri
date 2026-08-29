@@ -1970,6 +1970,37 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     });
   }
 
+  // OHOS: display refresh rate probe (Rust-only value; JS Monitor API has no
+  // refreshRate on any platform). Rust reads DisplayManager via NDK (same
+  // source as tao video_modes); rAF measurement is a webview-side cross-check.
+  async function manualOhosDisplayRefreshRate() {
+    await wrapManual('display.refresh_rate', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      let probe;
+      try {
+        probe = await invoke('probe_display_refresh_rate');
+      } catch (e) {
+        manualResult = `probe_display_refresh_rate error: ${e}`;
+        onMessage(manualResult);
+        return;
+      }
+      const frames = await new Promise((resolve) => {
+        let count = 0;
+        const start = performance.now();
+        const tick = () => {
+          count++;
+          if (performance.now() - start < 1000) requestAnimationFrame(tick);
+          else resolve(count);
+        };
+        requestAnimationFrame(tick);
+      });
+      manualResult = `${probe}\n` +
+        `webview rAF measured: ~${frames} fps (LTPO may throttle when idle)\n` +
+        `Note: refresh rate is Rust-only (tao video_modes source), not in JS Monitor API.`;
+      onMessage(manualResult);
+    });
+  }
+
   async function manualOhosDialogError() {
     await wrapManual('dialog.error degrade', async () => {
       manualResult = 'dialog::error() is an internal runtime function.\n' +
@@ -3187,6 +3218,7 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualOhosPrint}>WebView Print</button>
         <button class="btn" onclick={manualOhosMonitorFromPoint}>monitorFromPoint (边界测试)</button>
+        <button class="btn" onclick={manualOhosDisplayRefreshRate}>Display Refresh Rate</button>
         <button class="btn" onclick={manualOhosDialogError}>Dialog Error (degrade)</button>
         <button class="btn" onclick={manualEventResumed}>RunEvent::Resumed (background→foreground)</button>
       </div>

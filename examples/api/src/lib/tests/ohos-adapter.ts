@@ -6,6 +6,16 @@ function assert(condition: boolean, msg: string) {
   if (!condition) throw new Error(msg);
 }
 
+/** True when running on OHOS (any device form). Same gate as ohos-init.ts. */
+async function isOhos(): Promise<boolean> {
+  try {
+    const { platform } = await import('@tauri-apps/plugin-os');
+    return platform() === 'ohos';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Tests for the OHOS adapter features implemented via openspec changes
  * ohos-webview-flag-clipboard / flag-zoom-hotkeys / dialog-error /
@@ -31,6 +41,28 @@ export const ohosAdapterTests: TestCase[] = [
       );
       assert(m!.scaleFactor > 0, `scaleFactor should be > 0, got ${m!.scaleFactor}`);
       console.log(`[monitor] size=${m!.size.width}x${m!.size.height}, scaleFactor=${m!.scaleFactor}, name=${m!.name}`);
+    },
+  },
+
+  // refreshRate is a Rust-only value (tao video_modes field; tauri::Monitor
+  // doesn't carry it, JS Monitor API has no refreshRate on any platform).
+  // probe_display_refresh_rate reads DisplayManager via NDK (same source as
+  // video_modes) — this auto test is its device verification entry.
+  {
+    name: 'ohos-adapter.monitor.refresh-rate',
+    category: 'auto',
+    async fn() {
+      if (!(await isOhos())) {
+        console.log('[monitor.refresh-rate] skipped: not OHOS');
+        return;
+      }
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke<string>('probe_display_refresh_rate');
+      const m = result.match(/refresh_rate=(\d+) Hz/);
+      assert(m !== null, `unexpected probe result: ${result}`);
+      const hz = Number(m![1]);
+      assert(hz > 0, `refresh rate should be > 0, got ${result}`);
+      console.log(`[monitor] ${result}`);
     },
   },
 

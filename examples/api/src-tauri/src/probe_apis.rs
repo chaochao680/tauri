@@ -81,6 +81,26 @@ pub fn probe_window_menu_set_remove<R: tauri::Runtime>(
   Ok(out.join(" | "))
 }
 
+/// OHOS：默认显示器刷新率（Hz）。NDK 直连（OH_NativeDisplayManager_GetDefaultDisplayRefreshRate，
+/// 经 ohos-display-binding），非 bridge 插件——按核心特权模式从 tauri::ohos::APP 取
+/// OpenHarmonyApp::refresh_rate()，与 tao video_modes() 的 refresh_rate 同源。
+/// tauri::Monitor 不携带 refresh rate（上游全平台语义），JS Monitor API 无法到达，
+/// 故由此探针提供真机验证入口。MutexGuard 在作用域内显式 drop（ohos-bridge-arch 硬规则）。
+#[cfg(target_env = "ohos")]
+#[tauri::command]
+pub fn probe_display_refresh_rate() -> Result<String, String> {
+  let rate = {
+    let app = tauri::ohos::APP
+      .lock()
+      .unwrap_or_else(|e| e.into_inner());
+    let app = app
+      .as_ref()
+      .ok_or_else(|| "ohos APP not initialized".to_string())?;
+    app.refresh_rate()
+  };
+  Ok(format!("refresh_rate={rate} Hz"))
+}
+
 /// Webview::reparent —— OHOS 上预期走 "not supported" 警告分支（覆盖目的即在此）。
 #[tauri::command]
 pub fn probe_webview_reparent<R: tauri::Runtime>(

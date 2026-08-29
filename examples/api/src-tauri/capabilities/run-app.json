@@ -20,6 +20,7 @@
     },
     "allow-perform-request",
     "allow-probe-app-monitors",
+    "allow-probe-display-refresh-rate",
     "allow-probe-app-menu-set-remove",
     "allow-probe-window-menu-set-remove",
     "allow-probe-webview-reparent",
