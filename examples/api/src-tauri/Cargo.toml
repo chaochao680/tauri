@@ -83,6 +83,12 @@ tauri-plugin-biometric = { path = "../../../../plugins-workspace/plugins/biometr
 tauri-plugin-nfc = { path = "../../../../plugins-workspace/plugins/nfc" }
 tauri-plugin-barcode-scanner = { path = "../../../../plugins-workspace/plugins/barcode-scanner" }
 tauri-plugin-huawei-account = { path = "../../../../plugins-workspace/plugins/huawei-account" }
+# OHOS-only: minimal accessibility API (font scale / screen reader state + event)
+tauri-plugin-accessibility = { path = "../../../../plugins-workspace/plugins/accessibility" }
+# OHOS-only: in-app webview screenshot + color picking
+tauri-plugin-screenshot = { path = "../../../../plugins-workspace/plugins/screenshot" }
+# OHOS-only: passive app-continuation restore queries
+tauri-plugin-continuation = { path = "../../../../plugins-workspace/plugins/continuation" }
 muda = { path = "../../../../muda" }
 tray-icon = { path = "../../../../tray-icon" }
 

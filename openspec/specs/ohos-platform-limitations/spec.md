@@ -23,31 +23,42 @@ Tauri 无独立字体插件；OHOS `@ohos.graphics.font` 提供字体注册 API�
 - **AND** 不通过 Tauri API 注册系统字体
 - **AND** `font_dir()` 在 OHOS 不可用（见 ohos-path-desktop-dirs 规范）
 
-### Requirement: R228 应用接续在 OHOS 暂不实现
-OHOS `@ohos.app.ability.continuationManager` / `connect` 提供跨设备应用接续能力，但 Tauri 无对应跨平台概念，且实现需深度集成 ability 生命周期与 UI 状态序列化。本项 SHALL 标记为"未来工作"，当前 OHOS 适配 SHALL NOT 提供应用接续 API。
+### Requirement: R228 应用接续提供被动恢复与源端保存 API（主动迁移不可用）
+应用接续按最小 API 边界提供（由 `tauri-plugin-continuation` 插件实现，契约见 `ohos-continuation-plugin` / `ohos-continuation-source` spec）：被动恢复查询 `isContinuationRestoreLaunch`（peek）与接续数据回传 `getContinuationData`（draining take）——信号来自 ability 生命周期（`launchParam.launchReason === CONTINUATION`，经 NativeAbility 生命周期链转发至 Rust 存储）；源端保存 `setContinuationData`（预注册快照，NativeAbility `onContinue` 同步直读转发 `wantParam.continuationData`，空快照拒绝迁移）与构建期门控（`bundle.openHarmony.continuable` / `continueType` → module.json5），零系统权限。主动发起迁移由系统 UI 独占（用户点任务管理器接续图标），SHALL NOT 通过 Tauri API 暴露。原判定依据（`continuationManager` 独立 API + Tauri 无对应概念）已失效——该 API 已废弃，接续改由 UIAbility 生命周期驱动，三方可用。
 
-#### Scenario: 应用请求接续
-- **WHEN** 应用在 OHOS 期望使用跨设备接续
-- **THEN** Tauri SHALL NOT 暴露接续 API
-- **AND** 文档 SHALL 指引用户直接使用 OHOS 原生 `continuationManager` 在 ArkTS 层实现
-- **AND** 该能力暂不纳入 Tauri 跨平台契约
+#### Scenario: 应用查询接续恢复状态
+- **WHEN** 应用在 OHOS 期望被动接续恢复（被另一设备接续拉起）
+- **THEN** Tauri SHALL 经 `tauri-plugin-continuation` 提供恢复状态查询与 wantParam 数据回传
+- **AND** 应用 SHALL NOT 能主动发起迁移（系统 UI 独占，三方不可做）
+- **AND** 文档 SHALL 指引完整迁移流使用系统任务管理器接续入口
 
-### Requirement: R229 截图取色在 OHOS 暂不实现
-OHOS `@ohos.screenshot` 提供截图能力（系统应用权限），取色可通过 `@ohos.multimodalInput` 或图像像素读取。Tauri 无截图/取色插件。本项 SHALL 标记为"未来工作"，当前 SHALL NOT 提供截图取色 API。
+#### Scenario: 应用预注册源端接续数据
+- **WHEN** 应用在源设备运行时调用 `setContinuationData` 并经系统接续入口迁移
+- **THEN** NativeAbility `onContinue` SHALL 同步读快照返回 AGREE 并把 payload 写入 `wantParam.continuationData`
+- **AND** 空/未注册快照 SHALL 返回 MISMATCH（显式 opt-in）；快照读取 SHALL 为 peek（取消迁移可重试）
+
+#### Scenario: 非 OHOS 平台
+- **WHEN** 在非 OHOS 平台调用接续插件命令
+- **THEN** SHALL 返回 `unsupported` 错误
+
+### Requirement: R229 截图取色提供应用内 webview 最小 API（系统级截图不可用）
+应用内截图取色按最小 API 边界提供（由 `tauri-plugin-screenshot` 插件实现，契约见 `ohos-screenshot-plugin` spec）：`captureWebview`（ArkWeb `webPageSnapshot` → base64 PNG，零系统权限）与 `pickColorAt(x, y)`（快图像素读取，BGRA→RGBA）。系统级 `@ohos.screenshot` 仅系统应用可用，SHALL NOT 通过 Tauri API 暴露。
 
 #### Scenario: 应用请求截图
-- **WHEN** 应用在 OHOS 期望截图
-- **THEN** Tauri SHALL NOT 暴露截图 API
-- **AND** 文档 SHALL 指引：`@ohos.screenshot` 仅系统应用可用，第三方应用需通过 `window` 截图能力（属 `ohos-window-*` 范围，若有）
+- **WHEN** 应用在 OHOS 调用 `captureWebview` / `pickColorAt`
+- **THEN** Tauri SHALL 经 `tauri-plugin-screenshot` 返回调用来源 webview 的快照或像素颜色
+- **AND** 应用 SHALL NOT 能截取其他应用或整屏内容（`@ohos.screenshot` 仅系统应用）
+- **AND** 文档 SHALL 指引整屏/跨应用截图需求走系统截屏等原生路径
 
-### Requirement: R230 无障碍在 OHOS 暂不实现
-OHOS `@ohos.accessibility` 提供无障碍服务与辅助能力，但 Tauri 无跨平台无障碍 API。本项 SHALL 标记为"未来工作"，当前 SHALL NOT 提供无障碍 API。Web 内容无障碍由 ArkWeb 自身 ARIA 支持处理，不属本规范。
+### Requirement: R230 无障碍提供最小查询/事件 API（服务提供方不可用）
+OHOS 无障碍能力按最小 API 边界提供（由 `tauri-plugin-accessibility` 插件实现，契约见 `ohos-accessibility-plugin` spec）：`fontScale` 字号缩放查询（零权限）、屏幕阅读器/触摸浏览状态查询（`ohos.permission.ACCESSIBILITY` 系统级权限，三方被拒时返回结构化错误）、屏幕阅读器状态变化事件。Web 内容无障碍仍由 ArkWeb 内置 ARIA 处理；`AccessibilityExtensionAbility`（无障碍服务提供方）三方不可注册，SHALL NOT 提供。
 
-#### Scenario: 应用请求无障碍能力
-- **WHEN** 应用在 OHOS 期望使用无障碍 API
-- **THEN** Tauri SHALL NOT 暴露无障碍 API
+#### Scenario: 应用查询无障碍状态
+- **WHEN** 应用在 OHOS 调用 `getFontScale` / `isScreenReaderEnabled` / `isTouchExploreEnabled`
+- **THEN** Tauri SHALL 经 `tauri-plugin-accessibility` 返回查询结果或结构化错误
 - **AND** Web 内容无障碍 SHALL 依赖 ArkWeb 内置 ARIA 实现
 - **AND** 原生 UI 无障碍 SHALL 由 OHOS 系统辅助服务处理
+- **AND** 应用 SHALL NOT 能注册自定义无障碍服务（ExtensionAbility 三方不可注册）
 
 ### Requirement: R223/R224 全局托盘/菜单事件监听仅在 OHOS desktop 形态启用
 OHOS 全局托盘与菜单栏仅在 `OHOS_DEVICE_TYPE=desktop` 时通过 `cfg(all(target_env = "ohos", desktop))` 启用，归 `tray-*` / `menu-*` 规范范围（本规范只读引用）。在 mobile 形态下 SHALL 不存在。
@@ -68,9 +79,9 @@ OHOS 全局托盘与菜单栏仅在 `OHOS_DEVICE_TYPE=desktop` 时通过 `cfg(al
 | R195 | 多进程 | 平台限制降级 | 不支持，返回错误，引导 ExtensionAbility |
 | R223/224 | 全局托盘/菜单事件监听 | 桌面形态归 tray/menu 规范 | mobile 降级，desktop 归其他规范 |
 | R227 | 字体 | 平台限制降级 | 静态资源加载，无 Tauri API |
-| R228 | 应用接续 | 未来工作 | 暂不实现，引导原生 API |
-| R229 | 截图取色 | 未来工作 | 暂不实现，部分仅系统应用 |
-| R230 | 无障碍 | 未来工作 | 暂不实现，依赖 ArkWeb/系统 |
+| R228 | 应用接续 | 被动恢复 + 源端保存已提供 | 恢复查询/数据回传/源端快照保存归 continuation 插件规范；continuable 构建期门控（tauri-cli）；主动迁移系统 UI 独占不可用 |
+| R229 | 截图取色 | 最小 API 已提供 | 应用内 webview 截图/取色归 screenshot 插件规范；系统级 @ohos.screenshot 仅系统应用 |
+| R230 | 无障碍 | 最小 API 已提供 | 查询/事件归 accessibility 插件规范；服务提供方不可用，ARIA 归 ArkWeb |
 
 ### Requirement: ArkWeb 物理键盘 keydown 退化为 IME 插入管线（已由 key-synthesis 修复主窗口）
 ArkWeb 将物理键盘文本录入路由到 IME 插入管线：原生 DOM keydown/keyup 为无身份空壳事件（`key`/`code` 为空、`e.repeat` 恒 false、auto-repeat 以"每周期一对假 keydown/keyup"形式出现、`preventDefault` 无法阻止文字插入）。此为 ArkWeb 系统组件行为，应用层无 API 可直接纠正。主窗口（首实例 id=0）已由 `ohos-webview-key-synthesis`（openharmony-ability，onKeyPreIme 合成注入 + shim 抑制）修复；合成与 shim 注入均**仅限主窗口**——sub-UIAbility 实例窗口（id>0，加载同一 MainPage）与 Float 子窗口 SHALL NOT 注入 shim（无 key-synthesis 接线，注入会丢失全部按键事件），其 DOM key 事件维持原生退化行为，修复为后续增量。

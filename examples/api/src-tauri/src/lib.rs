@@ -179,7 +179,13 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
       .plugin(tauri_plugin_nfc::init())
       .plugin(tauri_plugin_barcode_scanner::init())
       // OHOS-only: Huawei one-tap account login
-      .plugin(tauri_plugin_huawei_account::init());
+      .plugin(tauri_plugin_huawei_account::init())
+      // OHOS-only: minimal accessibility API (font scale / screen reader state + event)
+      .plugin(tauri_plugin_accessibility::init())
+      // OHOS-only: in-app webview screenshot + color picking
+      .plugin(tauri_plugin_screenshot::init())
+      // OHOS-only: passive app-continuation restore queries
+      .plugin(tauri_plugin_continuation::init());
   }
 
   #[cfg(target_env = "ohos")]
@@ -565,48 +571,49 @@ pub fn run_app<R: Runtime, F: FnOnce(&App<R>) + Send + 'static>(
                 log::debug!("[OHOS] on_new_window: DENY for URL: {}", url);
                 tauri::webview::NewWindowResponse::Deny
               } else {
-                // #85: window.open produces a SEPARATE child window (Float OS
-                // sub-window) that loads the target URL — NOT an in-page dialog
-                // overlaying the main webview, and NOT a cancelled popup. We
-                // collapse the Allow path into Create so every window.open
-                // (unless explicitly denied) builds a real WebviewWindow with
-                // OHOSWindowKind::Float.
-                //
-                // build() is non-blocking on the UI thread (createOSWindow
-                // discards its returned Promise; webview create is
-                // runtime.spawn'd), so this ArkWeb onWindowNew callback
-                // returns synchronously — no deadlock. wry maps Create => false,
-                // so the bridge calls setWebController(null) (non-blocking
-                // cancel of ArkWeb's own popup) while the Float window is the
-                // actual popup. Verified at runtime: ARK_APP_SUBWINDOW_apiNN
-                // sub-window is created, shown, draggable, child of the main
-                // window; the Allow auto-test passes (event delivered, 2071ms).
-                log::info!("[OHOS DBG] on_new_window: CREATE real OS window for URL: {}", url);
-                let builder = WebviewWindowBuilder::new(
-                  &app_,
-                  format!("new-{number}"),
-                  tauri::WebviewUrl::External(url.clone()),
-                )
-                .title(url.as_str())
-                // Size + offset the Float sub-window so it appears as a distinct
-                // floating popup, not a full-screen window covering the main
-                // window (createOSWindow defaults to the display size when no
-                // inner_size is set). Logical px; at DPR=2 this yields ~900x700
-                // physical pixels — a medium popup. Position offset so the main
-                // window stays visible.
-                .inner_size(450.0, 350.0)
-                .position(60.0, 45.0)
-                .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
-                log::info!("[OHOS DBG] builder configured, calling build()...");
-                match builder.build() {
-                  Ok(window) => {
-                    log::info!("[OHOS DBG] build() succeeded, window created");
-                    tauri::webview::NewWindowResponse::Create { window }
+                let should_create = deny_state.create.load(std::sync::atomic::Ordering::SeqCst);
+                if should_create {
+                  // Create mode: build a SEPARATE Float OS sub-window that loads
+                  // the target URL. wry maps Create => false, so the bridge calls
+                  // setWebController(null) (non-blocking cancel of ArkWeb's own
+                  // popup) while the Float window is the actual popup. build() is
+                  // non-blocking on the UI thread (createOSWindow discards its
+                  // returned Promise; webview create is runtime.spawn'd), so this
+                  // ArkWeb onWindowNew callback returns synchronously — no deadlock.
+                  log::info!("[OHOS DBG] on_new_window: CREATE real OS window for URL: {}", url);
+                  let builder = WebviewWindowBuilder::new(
+                    &app_,
+                    format!("new-{number}"),
+                    tauri::WebviewUrl::External(url.clone()),
+                  )
+                  .title(url.as_str())
+                  // Size + offset the Float sub-window so it appears as a distinct
+                  // floating popup, not a full-screen window covering the main
+                  // window (createOSWindow defaults to the display size when no
+                  // inner_size is set). Logical px; at DPR=2 this yields ~900x700
+                  // physical pixels — a medium popup. Position offset so the main
+                  // window stays visible.
+                  .inner_size(450.0, 350.0)
+                  .position(60.0, 45.0)
+                  .ohos_window_kind(tauri::ohos::OHOSWindowKind::Float);
+                  log::info!("[OHOS DBG] builder configured, calling build()...");
+                  match builder.build() {
+                    Ok(window) => {
+                      log::info!("[OHOS DBG] build() succeeded, window created");
+                      tauri::webview::NewWindowResponse::Create { window }
+                    }
+                    Err(e) => {
+                      log::error!("[OHOS DBG] on_new_window: CREATE failed, falling back to Allow: {}", e);
+                      tauri::webview::NewWindowResponse::Allow
+                    }
                   }
-                  Err(e) => {
-                    log::error!("[OHOS DBG] on_new_window: CREATE failed, falling back to Allow: {}", e);
-                    tauri::webview::NewWindowResponse::Allow
-                  }
+                } else {
+                  // Allow mode: do NOT build a Float window. Return Allow so the
+                  // bridge layer (DefaultWebview.ets:handleWindowNew) opens an in-page
+                  // dialog (NewWindowDialog.ets) with the target URL, a ✕ close
+                  // button, and an embedded Web component. wry maps Allow => true.
+                  log::info!("[OHOS DBG] on_new_window: ALLOW (in-page dialog) for URL: {}", url);
+                  tauri::webview::NewWindowResponse::Allow
                 }
               }
             }

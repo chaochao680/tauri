@@ -34,6 +34,9 @@
     "biometric:default",
     "nfc:default",
     "barcode-scanner:default",
-    "huawei-account:default"
+    "huawei-account:default",
+    "accessibility:default",
+    "screenshot:default",
+    "continuation:default"
   ]
 }

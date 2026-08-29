@@ -102,17 +102,28 @@ pub fn probe_display_refresh_rate() -> Result<String, String> {
 }
 
 /// Webview::reparent —— OHOS 上预期走 "not supported" 警告分支（覆盖目的即在此）。
+/// `Webview::reparent` lives in the `#[cfg(desktop)]` impl block upstream, so it is
+/// only available on desktop targets. Mobile (phone/tablet) compiles without it;
+/// surface a not-supported result instead of a compile error.
 #[tauri::command]
 pub fn probe_webview_reparent<R: tauri::Runtime>(
   window: tauri::Window<R>,
 ) -> Result<String, String> {
-  let webview = window
-    .webviews()
-    .into_iter()
-    .next()
-    .ok_or_else(|| "no webview on window".to_string())?;
-  match webview.reparent(&window) {
-    Ok(()) => Ok("reparent=ok".to_string()),
-    Err(e) => Ok(format!("reparent=err({e})")),
+  #[cfg(desktop)]
+  {
+    let webview = window
+      .webviews()
+      .into_iter()
+      .next()
+      .ok_or_else(|| "no webview on window".to_string())?;
+    match webview.reparent(&window) {
+      Ok(()) => Ok("reparent=ok".to_string()),
+      Err(e) => Ok(format!("reparent=err({e})")),
+    }
+  }
+  #[cfg(not(desktop))]
+  {
+    let _ = window;
+    Ok("reparent=err(not supported on mobile)".to_string())
   }
 }

@@ -685,6 +685,60 @@ pub fn write_entry_device_types(
   Ok(())
 }
 
+/// Rewrite `entry_{form}/src/main/module.json5`'s `continuable`/`continueType`
+/// (app continuation gating) per the conf's `bundle.openHarmony` settings, so
+/// conf changes take effect on rebuild without re-running `ohos init` (same
+/// injection point as [`write_entry_device_types`]).
+///
+/// `continuable == Some(true)` writes `continuable: true` plus `continueType`
+/// (`continue_type` when provided, else falling back to `[identifier]` — the
+/// same app installed on both devices then matches automatically). Any other
+/// `continuable` value **removes** both keys, so toggling back to disabled also
+/// takes effect on rebuild.
+pub fn write_entry_continuation(
+  project_dir: &Path,
+  form: &str,
+  continuable: Option<bool>,
+  continue_type: Option<&[String]>,
+  identifier: &str,
+) -> Result<()> {
+  let module = format!("entry_{form}");
+  let module_json = project_dir.join(format!("{module}/src/main/module.json5"));
+  let content = fs::read_to_string(&module_json)
+    .with_context(|| format!("failed to read {module}/src/main/module.json5"))?;
+  let mut doc: Value =
+    parse_json5(&content).with_context(|| format!("failed to parse {module} module.json5"))?;
+  let ability = doc
+    .get_mut("module")
+    .and_then(|m| m.get_mut("abilities"))
+    .and_then(|a| a.as_array_mut())
+    .and_then(|a| a.get_mut(0))
+    .and_then(|a| a.as_object_mut())
+    .with_context(|| format!("{module}/src/main/module.json5 has no abilities[0] object"))?;
+
+  if continuable == Some(true) {
+    let types: Vec<String> = match continue_type {
+      Some(types) if !types.is_empty() => types.to_vec(),
+      // Same app on both devices matches automatically via the shared identifier.
+      _ => vec![identifier.to_string()],
+    };
+    ability.insert("continuable".to_string(), Value::Bool(true));
+    ability.insert(
+      "continueType".to_string(),
+      Value::Array(types.into_iter().map(Value::String).collect()),
+    );
+  } else {
+    // Removing a missing key is a no-op — safe toggle-back to disabled.
+    ability.remove("continuable");
+    ability.remove("continueType");
+  }
+
+  let updated = serialize_json5(&doc)?;
+  fs::write(&module_json, updated)
+    .with_context(|| format!("failed to write {module}/src/main/module.json5"))?;
+  Ok(())
+}
+
 pub fn update_entry_package(project_dir: &Path, plugins: &[PluginMeta]) -> Result<()> {
   let entry_module = super::active_entry_module();
   let oh_package_path = project_dir.join(format!("{entry_module}/oh-package.json5"));

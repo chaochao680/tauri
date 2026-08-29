@@ -23,6 +23,9 @@ importers:
       '@tauri-apps/api':
         specifier: ../../packages/api/dist
         version: link:../../packages/api/dist
+      '@tauri-apps/plugin-accessibility':
+        specifier: file:../../../plugins-workspace/plugins/accessibility
+        version: file:../plugins-workspace/plugins/accessibility
       '@tauri-apps/plugin-autostart':
         specifier: file:../../../plugins-workspace/plugins/autostart
         version: file:../plugins-workspace/plugins/autostart
@@ -32,6 +35,9 @@ importers:
       '@tauri-apps/plugin-clipboard-manager':
         specifier: file:../../../plugins-workspace/plugins/clipboard-manager
         version: file:../plugins-workspace/plugins/clipboard-manager
+      '@tauri-apps/plugin-continuation':
+        specifier: file:../../../plugins-workspace/plugins/continuation
+        version: file:../plugins-workspace/plugins/continuation
       '@tauri-apps/plugin-deep-link':
         specifier: file:../../../plugins-workspace/plugins/deep-link
         version: file:../plugins-workspace/plugins/deep-link
@@ -68,6 +74,9 @@ importers:
       '@tauri-apps/plugin-process':
         specifier: file:../../../plugins-workspace/plugins/process
         version: file:../plugins-workspace/plugins/process
+      '@tauri-apps/plugin-screenshot':
+        specifier: file:../../../plugins-workspace/plugins/screenshot
+        version: file:../plugins-workspace/plugins/screenshot
       '@tauri-apps/plugin-shell':
         specifier: file:../../../plugins-workspace/plugins/shell
         version: file:../plugins-workspace/plugins/shell
@@ -1648,6 +1657,9 @@ packages:
   '@tauri-apps/api@2.11.0':
     resolution: {integrity: sha512-7CinYODhky9lmO23xHnUFv0Xt43fbtWMyxZcLcRBlFkcgXKuEirBvHpmtJ89YMhyeGcq20Wuc47Fa4XjyniywA==}
 
+  '@tauri-apps/plugin-accessibility@file:../plugins-workspace/plugins/accessibility':
+    resolution: {directory: ../plugins-workspace/plugins/accessibility, type: directory}
+
   '@tauri-apps/plugin-autostart@file:../plugins-workspace/plugins/autostart':
     resolution: {directory: ../plugins-workspace/plugins/autostart, type: directory}
 
@@ -1656,6 +1668,9 @@ packages:
 
   '@tauri-apps/plugin-clipboard-manager@file:../plugins-workspace/plugins/clipboard-manager':
     resolution: {directory: ../plugins-workspace/plugins/clipboard-manager, type: directory}
+
+  '@tauri-apps/plugin-continuation@file:../plugins-workspace/plugins/continuation':
+    resolution: {directory: ../plugins-workspace/plugins/continuation, type: directory}
 
   '@tauri-apps/plugin-deep-link@file:../plugins-workspace/plugins/deep-link':
     resolution: {directory: ../plugins-workspace/plugins/deep-link, type: directory}
@@ -1695,6 +1710,9 @@ packages:
 
   '@tauri-apps/plugin-process@file:../plugins-workspace/plugins/process':
     resolution: {directory: ../plugins-workspace/plugins/process, type: directory}
+
+  '@tauri-apps/plugin-screenshot@file:../plugins-workspace/plugins/screenshot':
+    resolution: {directory: ../plugins-workspace/plugins/screenshot, type: directory}
 
   '@tauri-apps/plugin-shell@file:../plugins-workspace/plugins/shell':
     resolution: {directory: ../plugins-workspace/plugins/shell, type: directory}
@@ -3935,6 +3953,10 @@ snapshots:
 
   '@tauri-apps/api@2.11.0': {}
 
+  '@tauri-apps/plugin-accessibility@file:../plugins-workspace/plugins/accessibility':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@tauri-apps/plugin-autostart@file:../plugins-workspace/plugins/autostart':
     dependencies:
       '@tauri-apps/api': 2.11.0
@@ -3944,6 +3966,10 @@ snapshots:
       '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-clipboard-manager@file:../plugins-workspace/plugins/clipboard-manager':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-continuation@file:../plugins-workspace/plugins/continuation':
     dependencies:
       '@tauri-apps/api': 2.11.0
 
@@ -3996,6 +4022,10 @@ snapshots:
       '@tauri-apps/api': 2.11.0
 
   '@tauri-apps/plugin-process@file:../plugins-workspace/plugins/process':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
+  '@tauri-apps/plugin-screenshot@file:../plugins-workspace/plugins/screenshot':
     dependencies:
       '@tauri-apps/api': 2.11.0
 

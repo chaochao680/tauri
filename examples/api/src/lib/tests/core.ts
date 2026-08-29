@@ -935,16 +935,18 @@ export const coreTests: TestCase[] = [
     },
   },
   {
-    name: 'on_new_window: Allow triggers event with correct URL',
+    name: 'on_new_window: window.open triggers event with correct URL',
     category: 'auto',
     async fn() {
-      // #85 FIXED: onWindowNew Allow branch now calls setWebController(null)
-      // (non-blocking cancel) instead of setWebController(newController) on an
-      // unhosted controller (which deadlocked the UI thread). Rust emits the
-      // `new-window-requested` event unconditionally during the sync
-      // invokeNativeSync round-trip, so freeing the main thread lets it deliver.
-      // Set handler to Allow mode
+      // The `new-window-requested` event is emitted unconditionally in the
+      // OHOS handler (lib.rs) BEFORE the Allow/Create/Deny decision, so it fires
+      // regardless of mode. We use Create mode (create=true) here rather than
+      // Allow: Allow would open an in-page dialog overlay on the main window
+      // whose autoCancel would swallow the first click of a subsequent autotest.
+      // Create opens a separate Float OS window that does not overlay the main
+      // window, so the test-runner buttons stay clickable.
       await invoke('set_deny_new_window', { deny: false });
+      await invoke('set_create_new_window', { create: true });
       // Listen for the new-window-requested event
       let eventUrl: string | null = null;
       const unlisten = await listen<string>('new-window-requested', (event) => {
@@ -955,6 +957,8 @@ export const coreTests: TestCase[] = [
       // Wait for the event chain to complete
       await new Promise((r) => setTimeout(r, 2000));
       unlisten();
+      // Reset create flag so subsequent tests default to Allow (no stray windows)
+      await invoke('set_create_new_window', { create: false });
       // Verify event was received with correct URL
       assert(
         eventUrl !== null && eventUrl.includes('example.com/allow-test'),

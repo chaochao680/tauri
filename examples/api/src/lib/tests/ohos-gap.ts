@@ -40,51 +40,70 @@ export const ohosGapTests: TestCase[] = [
     name: '@tauri-apps/plugin-os.type',
     category: 'auto',
     async fn() {
-      const { type } = await import('@tauri-apps/plugin-os');
+      const { type, platform } = await import('@tauri-apps/plugin-os');
       const t = type();
       assert(typeof t === 'string' && t.length > 0, `type() should return non-empty string, got "${t}"`);
+      // Exact OHOS values (manual_tests.md §三十 expectations moved into auto).
+      // Guarded by platform() so the suite still runs on Windows dev builds.
+      if (platform() === 'ohos') {
+        assert(t === 'ohos', `on OHOS type() should be "ohos", got "${t}"`);
+      }
     },
   },
   {
     name: '@tauri-apps/plugin-os.family',
     category: 'auto',
     async fn() {
-      const { family } = await import('@tauri-apps/plugin-os');
+      const { family, platform } = await import('@tauri-apps/plugin-os');
       const f = family();
       assert(typeof f === 'string' && f.length > 0, `family() should return non-empty string, got "${f}"`);
-      // OHOS reports 'unix' (cfg(target_env="ohos") does not change family).
+      // OHOS deliberately reports 'ohos' (os plugin family() cfg(target_env="ohos")
+      // branch — OpenHarmony is not treated as a traditional Unix), even though
+      // target_os is "linux". Verified on device 2026-08-27 (OS Info button).
       assert(f === 'unix' || f === 'windows' || f === 'ohos', `family() should be unix|windows|ohos, got "${f}"`);
+      if (platform() === 'ohos') {
+        assert(f === 'ohos', `on OHOS family() should be "ohos" (intentional, not "unix"), got "${f}"`);
+      }
     },
   },
   {
     name: '@tauri-apps/plugin-os.arch',
     category: 'auto',
     async fn() {
-      const { arch } = await import('@tauri-apps/plugin-os');
+      const { arch, platform } = await import('@tauri-apps/plugin-os');
       const a = arch();
       assert(typeof a === 'string' && a.length > 0, `arch() should return non-empty string, got "${a}"`);
+      if (platform() === 'ohos') {
+        assert(a === 'aarch64', `on OHOS arch() should be "aarch64", got "${a}"`);
+      }
     },
   },
   {
     name: '@tauri-apps/plugin-os.eol',
     category: 'auto',
     async fn() {
-      const { eol } = await import('@tauri-apps/plugin-os');
+      const { eol, platform } = await import('@tauri-apps/plugin-os');
       const e = eol();
       assert(typeof e === 'string', `eol() should return string, got ${typeof e}`);
       // POSIX platforms (incl. OHOS) use "\n"; Windows uses "\r\n".
       assert(e === '\n' || e === '\r\n', `eol() should be \\n or \\r\\n, got ${JSON.stringify(e)}`);
+      if (platform() === 'ohos') {
+        assert(e === '\n', `on OHOS eol() should be "\\n", got ${JSON.stringify(e)}`);
+      }
     },
   },
   {
     name: '@tauri-apps/plugin-os.exeExtension',
     category: 'auto',
     async fn() {
-      const { exeExtension } = await import('@tauri-apps/plugin-os');
+      const { exeExtension, platform } = await import('@tauri-apps/plugin-os');
       const ext = exeExtension();
       assert(typeof ext === 'string', `exeExtension() should return string, got ${typeof ext}`);
       // OHOS / Linux / macOS → "" (empty); Windows → "exe".
       assert(ext === '' || ext === 'exe', `exeExtension() should be "" or "exe", got "${ext}"`);
+      if (platform() === 'ohos') {
+        assert(ext === '', `on OHOS exeExtension() should be "", got "${ext}"`);
+      }
     },
   },
 
@@ -98,7 +117,7 @@ export const ohosGapTests: TestCase[] = [
     name: '@tauri-apps/plugin-os.version',
     category: 'side-effect',
     async fn() {
-      const { version } = await import('@tauri-apps/plugin-os');
+      const { version, platform } = await import('@tauri-apps/plugin-os');
       const v = version();
       assert(typeof v === 'string' && v.length > 0, `version() should return non-empty string, got "${v}"`);
       if (v === '0.0.0') {
@@ -111,6 +130,11 @@ export const ohosGapTests: TestCase[] = [
       const parts = v.split('.');
       const major = parseInt(parts[0] ?? '0', 10);
       assert(!Number.isNaN(major) && major >= 0, `version major should be a non-negative integer, got "${v}"`);
+      // 任务1（version::init）已落地：OHOS 上应为真实版本号（major > 0），
+      // manual_tests.md §三十 的占位语义已过时，断言收紧为强校验。
+      if (platform() === 'ohos') {
+        assert(major > 0, `on OHOS version() should be a real version > 0.0.0, got "${v}"`);
+      }
     },
   },
   // locale() — async invoke. Task 1 contract: returns BCP-47 tag or null.

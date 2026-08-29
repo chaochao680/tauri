@@ -62,17 +62,22 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 /**
  * Append a test result to the report file on the device.
  * Called automatically by runTests after each test completes.
- * Fire-and-forget: does not block test execution if the invoke hangs.
+ * Timeouts after 5s so a hung IPC cannot stall the whole suite
+ * (2026-08-27: a killed app left the runner awaiting forever with
+ * a partial report and no footer — indistinguishable from a hang).
  */
 function appendResult(result: TestResult, index: number, total: number): void {
-  invoke('append_test_result', {
-    name: result.name,
-    status: result.status,
-    duration: result.duration,
-    error: result.error || null,
-    index,
-    total,
-  }).catch((e) => { console.error('append_test_result failed:', e, 'name:', result.name); });
+  withTimeout(
+    invoke('append_test_result', {
+      name: result.name,
+      status: result.status,
+      duration: result.duration,
+      error: result.error || null,
+      index,
+      total,
+    }),
+    5000
+  ).catch((e: unknown) => { console.error('append_test_result failed:', e, 'name:', result.name); });
 }
 
 export async function runTests(

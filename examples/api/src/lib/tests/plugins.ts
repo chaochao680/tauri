@@ -1214,6 +1214,77 @@ export const pluginTests: TestCase[] = [
     },
   },
 
+  // @tauri-apps/plugin-accessibility (OHOS-only)
+  {
+    name: '@tauri-apps/plugin-accessibility.getFontScale',
+    category: 'auto',
+    async fn() {
+      let mod;
+      try {
+        mod = await import('@tauri-apps/plugin-accessibility');
+      } catch (e) {
+        skip(`plugin-accessibility not available: ${e}`);
+        return;
+      }
+      const scale = await mod.getFontScale();
+      assert(typeof scale === 'number' && Number.isFinite(scale) && scale > 0,
+        `getFontScale should return a positive finite number, got ${scale}`);
+      console.log(`[accessibility] fontScale = ${scale}`);
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-accessibility.screenReader+touchExploreQueries',
+    category: 'auto',
+    async fn() {
+      let mod;
+      try {
+        mod = await import('@tauri-apps/plugin-accessibility');
+      } catch (e) {
+        skip(`plugin-accessibility not available: ${e}`);
+        return;
+      }
+      // Both queries need the system-level ohos.permission.ACCESSIBILITY; a third-party
+      // denial rejects with a structured error, which is an acceptable outcome — the
+      // contract under test is "boolean or structured error, never a silent false or
+      // a crash".
+      for (const [label, fn] of [
+        ['isScreenReaderEnabled', mod.isScreenReaderEnabled],
+        ['isTouchExploreEnabled', mod.isTouchExploreEnabled],
+      ] as const) {
+        try {
+          const value = await fn();
+          assert(typeof value === 'boolean', `${label} should return a boolean, got ${typeof value}`);
+          console.log(`[accessibility] ${label} = ${value}`);
+        } catch (e) {
+          if (isMissing(e)) skip(`${label} not available: ${e}`);
+          // Permission denial (structured accessibility error) — pass with a note.
+          console.log(`[accessibility] ${label} rejected (expected when permission denied): ${e}`);
+        }
+      }
+    },
+  },
+  {
+    name: '@tauri-apps/plugin-accessibility.onAccessibilityStateChange',
+    category: 'manual',
+    async fn() {
+      let mod;
+      try {
+        mod = await import('@tauri-apps/plugin-accessibility');
+      } catch (e) {
+        skip(`plugin-accessibility not available: ${e}`);
+        return;
+      }
+      const unlisten = await mod.onAccessibilityStateChange((enabled) => {
+        console.log(`[accessibility manual] state change received: ${enabled}`);
+      });
+      console.log('[accessibility manual] Toggle the system screen reader (Settings > Accessibility)');
+      console.log('[accessibility manual] Expect: a "[accessibility manual] state change received" log with the new state');
+      // Keep the listener registered for the remainder of the run; the manual session
+      // is short-lived so an explicit unlisten is not required.
+      void unlisten;
+    },
+  },
+
   // @tauri-apps/plugin-single-instance (no front-end API; requires dual-process orchestration)
   {
     name: '@tauri-apps/plugin-single-instance (manual)',

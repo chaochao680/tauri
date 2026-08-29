@@ -3989,6 +3989,23 @@
               "$ref": "#/definitions/OpenHarmonyDeviceTypes"
             }
           ]
+        },
+        "continuable": {
+          "description": "Marks the app's ability as continuable (app continuation / 任务接力).\n\nWhen `Some(true)`, the CLI writes `continuable: true` into each entry module.json5's abilities entry at build time (same injection point as `deviceTypes`). Requires `continueType` matching between devices. `None`/`Some(false)` keeps module.json5 unchanged.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "continueType": {
+          "description": "The continuation type identifiers used to match source/target devices for app continuation (module.json5 `continueType`). Only written when `continuable` is `Some(true)`; defaults to `[identifier]` when omitted.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false

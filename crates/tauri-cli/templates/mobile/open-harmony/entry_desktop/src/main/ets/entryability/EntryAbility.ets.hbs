@@ -1,6 +1,7 @@
 import {
   NativeAbility,
   LazyPlugin,
+  AccessibilityPlugin,
   AccountPlugin,
   AppControlPlugin,
   AutostartPlugin,
@@ -65,6 +66,7 @@ export default class EntryAbility extends NativeAbility {
   // them into every module host for this Ability session. Separate from the Tauri JS-layer
   // plugins below (PluginManager), which are a different transport (Rust<->JS).
   public bridgePlugins = [
+    new LazyPlugin(() => new AccessibilityPlugin()),
     new LazyPlugin(() => new PermissionPlugin()),
     new LazyPlugin(() => new AppControlPlugin()),
     new LazyPlugin(() => new FilesPlugin()),

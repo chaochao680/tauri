@@ -40,6 +40,14 @@ export const ohosAdapterTests: TestCase[] = [
         `monitor size should be > 0 (DisplayManager physical px), got ${JSON.stringify(m!.size)}`
       );
       assert(m!.scaleFactor > 0, `scaleFactor should be > 0, got ${m!.scaleFactor}`);
+      // Manual §二十七 (removed 2026-08-27): "值不随窗口最小化/恢复变化" —
+      // DisplayManager physical pixels are window-independent by construction;
+      // assert two consecutive calls return identical size as a stability proxy.
+      const m2 = await currentMonitor();
+      assert(
+        m2 !== null && m2.size.width === m!.size.width && m2.size.height === m!.size.height,
+        `monitor size should be stable across calls (DisplayManager physical px), got ${JSON.stringify(m!.size)} then ${JSON.stringify(m2?.size)}`
+      );
       console.log(`[monitor] size=${m!.size.width}x${m!.size.height}, scaleFactor=${m!.scaleFactor}, name=${m!.name}`);
     },
   },

@@ -1241,7 +1241,12 @@ pub fn test_async_spawn<R: Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<(
   Ok(())
 }
 
-/// Test command for web_page_snapshot on OHOS
+/// Test command for web_page_snapshot on OHOS.
+///
+/// Emits `web-page-snapshot-result` with a base64 PNG + dimensions so the
+/// frontend can render the snapshot onto a canvas (Image + drawImage). Uses
+/// `capture_webview` rather than `web_page_snapshot` because the latter omits
+/// the pixel buffer for NAPI efficiency and cannot drive putImageData.
 #[command]
 pub fn test_web_page_snapshot<R: Runtime>(
   app: tauri::AppHandle<R>,
@@ -1255,24 +1260,28 @@ pub fn test_web_page_snapshot<R: Runtime>(
     window.with_webview(move |w| {
       let handle = w.inner();
       tauri::async_runtime::spawn(async move {
-        match handle.web_page_snapshot().await {
+        // Use capture_webview (base64 PNG) rather than web_page_snapshot (RGBA bytes):
+        // the latter deliberately omits the pixel buffer for NAPI efficiency, so the
+        // frontend cannot putImageData from it. capture_webview returns a ready-to-render
+        // PNG that the frontend draws onto the canvas via Image + drawImage.
+        match handle.capture_webview().await {
           Ok(resp) => {
             log::info!(
-              "web_page_snapshot success: {}x{} ({} bytes)",
-              resp.width, resp.height, resp.rgba_len
+              "capture_webview success: {}x{} ({} base64 chars)",
+              resp.width, resp.height, resp.png_base64.len()
             );
             let _ = app_clone.emit(
               "web-page-snapshot-result",
               serde_json::json!({
-                "success": resp.success,
+                "success": true,
                 "width": resp.width,
                 "height": resp.height,
-                "rgba_len": resp.rgba_len,
+                "png_base64": resp.png_base64,
               }),
             );
           }
           Err(e) => {
-            log::error!("web_page_snapshot failed: {}", e);
+            log::error!("capture_webview failed: {}", e);
             let _ = app_clone.emit(
               "web-page-snapshot-result",
               serde_json::json!({
@@ -1866,9 +1875,11 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
   if let Some(h) = https_scheme {
     builder = builder.use_https_scheme(h);
     // Inject a script that logs isSecureContext + crypto.subtle availability
+    // plus the two fetch probes (external https / intercepted subresource)
     // to the webview console (visible in hilog as ARKWEB-CONSOLE). This lets
-    // us verify the https-scheme rewrite produced a secure context without
-    // needing DevTools (release build has no devtools feature).
+    // us verify the https-scheme rewrite without DevTools (release build has
+    // no devtools feature). Covers manual_tests.md §二十六 cases:
+    // page-load / secure-context / external-https / subresource.
     builder = builder.initialization_script(
       r#"window.addEventListener('DOMContentLoaded', () => {
         console.log('[https-scheme] isSecureContext=' + window.isSecureContext);
@@ -1882,6 +1893,18 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
         } catch(e) {
           console.log('[https-scheme] crypto.subtle unavailable: ' + e);
         }
+        // Probe 1 (§二十六 external-https): external https must NOT be intercepted.
+        // no-cors: a normal network fetch resolves with an opaque response;
+        // rejection means the request never completed through the default stack.
+        fetch('https://example.com', { mode: 'no-cors' })
+          .then(r => console.log('[https-scheme] external fetch resolved: type=' + r.type + ' status=' + r.status))
+          .catch(e => console.log('[https-scheme] external fetch REJECTED: ' + e));
+        // Probe 2 (§二十六 subresource): same-origin fetch under the rewritten
+        // https://tauri.localhost origin — must be served by onInterceptRequest
+        // + custom_protocol, not the network stack.
+        fetch('https://tauri.localhost/index.html')
+          .then(r => r.text().then(t => console.log('[https-scheme] subresource fetch OK: status=' + r.status + ' bytes=' + t.length)))
+          .catch(e => console.log('[https-scheme] subresource fetch REJECTED: ' + e));
       });"#,
     );
   }
@@ -1897,7 +1920,36 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
     let _ = drag_drop_overlay;
   }
 
-  builder.build()?;
+  let webview_window = builder.build()?;
+  #[cfg(not(target_env = "ohos"))]
+  let _ = &webview_window;
+
+  // §二十六 drag-overlay: log DragDrop events to hilog so the Enter→Over→Drop→Leave
+  // sequence (and dropped paths) is verifiable without DevTools. drag_drop_handler
+  // is wired by default (drag_drop_handler_enabled=true), events surface as
+  // WindowEvent::DragDrop on this window.
+  #[cfg(target_env = "ohos")]
+  if drag_drop_overlay == Some(true) {
+    let label_for_log = label.clone();
+    webview_window.on_window_event(move |event| {
+      if let tauri::WindowEvent::DragDrop(d) = event {
+        use tauri::DragDropEvent;
+        let desc = match d {
+          DragDropEvent::Enter { paths, position } => {
+            format!("Enter paths={:?} pos=({:.0},{:.0})", paths, position.x, position.y)
+          }
+          DragDropEvent::Over { position } => format!("Over pos=({:.0},{:.0})", position.x, position.y),
+          DragDropEvent::Drop { paths, position } => {
+            format!("Drop paths={:?} pos=({:.0},{:.0})", paths, position.x, position.y)
+          }
+          DragDropEvent::Leave => "Leave".to_string(),
+          _ => format!("{:?}", d),
+        };
+        log::info!("[DRAG-TEST] window '{}' event: {}", label_for_log, desc);
+      }
+    });
+  }
+
   Ok(())
 }
 

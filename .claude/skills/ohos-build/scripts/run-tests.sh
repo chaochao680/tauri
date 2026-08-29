@@ -206,6 +206,14 @@ if [ "$FAIL_COUNT" -gt 0 ]; then
     echo "FAILED tests:"
     grep '❌' "$REPORT_LOCAL" | sed 's/|/  /g'
     exit 1
+elif [ "$REPORT_DONE" != true ]; then
+    # A partial report (footer never appeared) usually means the app was killed
+    # mid-suite or the suite hung — treat it as a failure to avoid mistaking a
+    # truncated report for all-green (e.g. the 2026-08-27 53/290 false positive).
+    echo ""
+    echo "ERROR: report incomplete (footer never appeared) — suite was killed or hung."
+    echo "Pulled rows: $PASS_COUNT. Treat as FAILURE; check hilog for app death/restart."
+    exit 1
 else
     echo "ALL TESTS PASSED!"
 fi
