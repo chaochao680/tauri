@@ -164,11 +164,13 @@ fn get_response<R: Runtime>(
     proxy_builder = proxy_builder.body(request.body().clone());
     match crate::async_runtime::safe_block_on(proxy_builder.send()) {
       Ok(r) => {
-        // Lock hygiene (design.md D1 修法2): NOT_MODIFIED cache lookup stays in the
-        // first lock scope; the network read (safe_block_on(r.bytes())) is moved
-        // outside the lock to avoid holding the Mutex across a potentially slow I/O.
-        // After the read completes, re-acquire the lock to insert + get back.
-        // Concurrent inserts are last-writer-wins (cache semantics allow this).
+        // Lock hygiene (design.md D1 fix-2, OHOS only): NOT_MODIFIED cache lookup
+        // stays in the first lock scope; the network read (safe_block_on(r.bytes()))
+        // is moved outside the lock to avoid holding the Mutex across potentially
+        // slow I/O. On OHOS the request handler can run on the NAPI main thread,
+        // where holding a lock across network I/O stalls TSFN callbacks; other
+        // platforms keep the upstream single-flight behavior exactly.
+        #[cfg(target_env = "ohos")]
         let response = {
           let cached: Option<CachedResponse> = {
             let response_cache_ = response_cache.lock().unwrap();
@@ -191,6 +193,28 @@ fn get_response<R: Runtime>(
             };
             let mut response_cache_ = response_cache.lock().unwrap();
             response_cache_.insert(url.clone(), new_response.clone());
+            response_cache_.get(&url).unwrap().clone()
+          }
+        };
+        #[cfg(not(target_env = "ohos"))]
+        let response = {
+          let mut response_cache_ = response_cache.lock().unwrap();
+          let mut response = None;
+          if r.status() == http::StatusCode::NOT_MODIFIED {
+            response = response_cache_.get(&url);
+          }
+          if let Some(r) = response {
+            r.clone()
+          } else {
+            let status = r.status();
+            let headers = r.headers().clone();
+            let body = crate::async_runtime::safe_block_on(r.bytes())?;
+            let response = CachedResponse {
+              status,
+              headers,
+              body,
+            };
+            response_cache_.insert(url.clone(), response);
             response_cache_.get(&url).unwrap().clone()
           }
         };

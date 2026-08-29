@@ -2686,8 +2686,9 @@ mod tests {
     }
   }
 
-  /// S7 纯变换批：runtime 窗口事件 → 对外 WindowEvent 的映射。
-  /// CloseRequested/Moved/ScaleFactorChanged/ThemeChanged 在 OHOS 上不会自然发生。
+  /// S7 pure-transform batch: runtime window events → public WindowEvent
+  /// mapping. CloseRequested/Moved/ScaleFactorChanged/ThemeChanged never fire
+  /// naturally on OHOS.
   #[test]
   fn runtime_window_event_maps_all_variants() {
     use super::{RuntimeWebviewEvent, RuntimeWindowEvent, WebviewEvent, WindowEvent};

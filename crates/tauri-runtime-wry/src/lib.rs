@@ -1922,25 +1922,12 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
   }
 
   fn reparent(&self, window_id: WindowId) -> Result<()> {
-    // Lock hygiene (design.md D1 修法3): read the current window_id and release the
-    // guard before rx.recv() — the original code held the Mutex across a blocking
-    // channel receive, preventing other ops (set_position/set_focus/set_cookie) on
-    // the same webview from reading window_id during reparent. After recv() returns,
-    // re-acquire the lock to write the new window_id.
-    //
-    // Desktop behavior change: releasing the guard means concurrent ops on the same
-    // webview can read the OLD window_id while reparent is in progress. User code
-    // should not concurrently operate the same webview during reparent.
-    // On OHOS, reparent returns Err immediately (L4060-4063), so impact is minimal.
-    let old_window_id = {
-      let guard = self.window_id.lock().unwrap();
-      *guard
-    };
+    let mut current_window_id = self.window_id.lock().unwrap();
     let (tx, rx) = channel();
     send_user_message(
       &self.context,
       Message::Webview(
-        old_window_id,
+        *current_window_id,
         self.webview_id,
         WebviewMessage::Reparent(window_id, tx),
       ),
@@ -1948,18 +1935,27 @@ impl<T: UserEvent> WebviewDispatch<T> for WryWebviewDispatcher<T> {
 
     rx.recv().unwrap()?;
 
-    let mut current_window_id = self.window_id.lock().unwrap();
     *current_window_id = window_id;
     Ok(())
   }
 
   fn cookies_for_url(&self, url: Url) -> Result<Vec<Cookie<'static>>> {
-    // Lock hygiene (design.md D1 修法3): release the window_id guard before rx.recv()
-    // — the original code held the Mutex across a blocking channel receive.
+    // Lock hygiene (design.md D1 fix-3, OHOS only): release the window_id guard
+    // before rx.recv() — the original code held the Mutex across a blocking
+    // channel receive, stalling other ops (set_position/set_focus/set_cookie)
+    // on the same webview. On OHOS the receive can take long enough (bridge
+    // round-trip through the main thread) for that to matter, so the guard is
+    // dropped early there; other platforms keep the upstream behavior exactly.
+    // Upstream holds the guard for the whole function on other platforms.
+    #[cfg(not(target_env = "ohos"))]
+    let _window_id_guard = self.window_id.lock().unwrap();
+    #[cfg(target_env = "ohos")]
     let current_window_id = {
       let guard = self.window_id.lock().unwrap();
       *guard
     };
+    #[cfg(not(target_env = "ohos"))]
+    let current_window_id = *_window_id_guard;
     let (tx, rx) = channel();
     send_user_message(
       &self.context,
@@ -4558,10 +4554,13 @@ fn handle_event_loop<T: UserEvent>(
   // stored Rust values before the async destruction completes. See defensive guard
   // on wrapper.inner below.
   //
-  // NOTE(遗留问题一, 部分根治): tao WindowId 已携带真实 OHOS window id（ZST 缺陷已修,
-  //   见 openspec change p1-window-state-per-window-rect Phase 3）。但此 drain 旁路仍需
-  //   保留：Float 子窗口关闭走 ArkTS destroyWindow → 本队列，不产生 MainEvent::WindowDestroy
-  //   （该事件仅在主窗口 stage 拆除时触发）。根因分析见 doc/OHOS窗口遗留问题.md(问题一)
+  // NOTE (known-issue #1, partially remediated): tao WindowId now carries the
+  //   real OHOS window id (the ZST deficiency was fixed — see openspec change
+  //   p1-window-state-per-window-rect Phase 3). This drain bypass is still
+  //   required: Float subwindow close goes through ArkTS destroyWindow → this
+  //   queue and produces no MainEvent::WindowDestroy (that event only fires
+  //   when the main window stage is torn down). Root-cause analysis:
+  //   doc/OHOS窗口遗留问题.md (issue 1).
   #[cfg(target_env = "ohos")]
   {
     use tao::platform::ohos::WindowExtOpenHarmony;
@@ -4595,11 +4594,13 @@ fn handle_event_loop<T: UserEvent>(
       }
     }
 
-    // 回灌系统窗口状态到 tao 镜像位(问题五 5.3)。
-    // windowStatusChange 事件经 notify_window_status NAPI 入队,这里 drain 后用
-    // 真实 OHOS windowId 路由到对应 tao Window,调 apply_window_status 更新
-    // visible/fullscreen 镜像。路由模式与上方 drain_pending_window_closes 一致
-    // (不依赖 tao ZST WindowId,多窗口正确)。详见 doc/OHOS窗口遗留问题.md(问题五 5.3)。
+    // Feed system window status back into the tao mirror state (known-issue #5,
+    // §5.3). windowStatusChange events are enqueued via the notify_window_status
+    // NAPI call; drained here and routed by real OHOS windowId to the matching
+    // tao Window, whose apply_window_status updates the visible/fullscreen
+    // mirror. Routing mirrors drain_pending_window_closes above (does not rely
+    // on the tao ZST WindowId; correct for multiple windows). Details:
+    // doc/OHOS窗口遗留问题.md (issue 5, §5.3).
     let pending_status = tao::platform::ohos::ability::drain_pending_window_status();
     for (ohos_win_id, status) in pending_status {
       let applied = windows.0.borrow().iter().find_map(|(_id, wrapper)| {
@@ -4612,10 +4613,14 @@ fn handle_event_loop<T: UserEvent>(
         }
       });
       if applied.is_none() {
-        // G6/跨切面(tao#20):创建失败的 Float 窗口 window_id=None(ohos_win_id()==0),
-        // 既不匹配任何 drain 出的状态,也不会产生状态事件(无真实 OHOS 窗口),其镜像位静默陈旧。
-        // 故 drain 出却未匹配 = 真实窗口(id!=0)在入队与 drain 之间被销毁(陈旧 id)或路由不匹配。
-        // 非零 id 属可排查的陈旧 id → warn;id=0(主窗口/失败 Float 哨兵)保持 debug,避免噪音。
+        // G6 / cross-cutting (tao#20): a failed Float window has window_id=None
+        // (ohos_win_id() == 0) — it matches no drained status and produces no
+        // status events (no real OHOS window), so its mirror stays silently
+        // stale. A drained-but-unmatched status therefore means either a real
+        // window (id != 0) destroyed between enqueue and drain (stale id) or a
+        // routing mismatch. Non-zero ids are diagnosable stale ids → warn;
+        // id == 0 (main window / failed-Float sentinel) stays at debug to
+        // avoid noise.
         if ohos_win_id != 0 {
           log::warn!(
             "[wry] OHOS pending status drained but no matching window for id {} (status={}); \
@@ -4913,19 +4918,12 @@ fn on_close_requested<'a, T: UserEvent>(
 
     drop(windows_ref);
 
-    // Lock hygiene (design.md D1 修法1): drop the MutexGuard before invoking the
-    // callback, aligning with the main event path (L4701-4709, callback before
-    // lock). The standard tauri API registers handlers via proxy.send_event
-    // (async), so no synchronous re-entry into window_event_listeners exists —
-    // this is purely defensive lock-scope narrowing. Handler iteration order
-    // and callback ordering are preserved (handlers first, then callback).
-    {
-      let listeners = window_event_listeners.lock().unwrap();
-      for handler in listeners.values() {
-        handler(&WindowEvent::CloseRequested {
-          signal_tx: tx.clone(),
-        });
-      }
+    let listeners = window_event_listeners.lock().unwrap();
+    let handlers = listeners.values();
+    for handler in handlers {
+      handler(&WindowEvent::CloseRequested {
+        signal_tx: tx.clone(),
+      });
     }
     callback(RunEvent::WindowEvent {
       label,
@@ -6134,7 +6132,7 @@ mod with_config_tests {
     assert!(wb.prevent_overflow.is_some());
   }
 
-  // ─── S9 fmt 批：WindowBuilderWrapper Debug impl（L915，宿主可构造） ─────────────
+  // ─── S9 fmt batch: WindowBuilderWrapper Debug impl (L915, host-constructible) ──
 
   #[test]
   fn window_builder_wrapper_debug_formats_fields() {
@@ -6153,8 +6151,9 @@ mod with_config_tests {
   }
 }
 
-/// S7 纯变换批：runtime 抽象 → tao 类型的枚举/结构映射。这些臂在 OHOS 上
-/// 不会自然发生（cursor 切换、进度条、DPI 变化等），用构造输入直接点亮。
+/// S7 pure-transform batch: runtime-abstract → tao type enum/struct mappings.
+/// These arms never fire naturally on OHOS (cursor changes, progress bar, DPI
+/// changes, …), so tests light them up directly from constructed inputs.
 #[cfg(test)]
 mod mapping_tests {
   use super::*;

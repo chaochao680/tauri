@@ -3270,7 +3270,7 @@ pub struct OpenHarmonyConfig {
   #[serde(alias = "device-types", default)]
   pub device_types: OpenHarmonyDeviceTypes,
 
-  /// Marks the app's ability as continuable (app continuation / 任务接力).
+  /// Marks the app's ability as continuable (app continuation / task handoff).
   ///
   /// When `Some(true)`, the CLI writes `continuable: true` into each entry
   /// module.json5's abilities entry at build time (same injection point as

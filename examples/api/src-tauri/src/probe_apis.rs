@@ -1,11 +1,14 @@
-//! S9 补漏探针命令：点亮 JS API 面未暴露、仅 Rust 侧可达的 App/Window 方法
-//! （AppHandle monitor 四连 / app.rs+window/mod.rs set_menu+remove_menu /
-//! Webview::reparent 的 "not supported on OHOS" 警告分支）。
-//! 仅覆盖率插桩构建使用；语义与 driver 盲调用一致——执行即覆盖，错误聚合成字符串返回。
+//! S9 gap-filler probe commands: light up App/Window methods reachable only
+//! from Rust (not exposed on the JS API surface) — the AppHandle monitor
+//! quartet, app.rs + window/mod.rs set_menu/remove_menu, and the
+//! Webview::reparent "not supported on OHOS" warning branch.
+//! Coverage-instrumented builds only; semantics match the driver's blind
+//! calls — execution is the coverage, errors are aggregated into the
+//! returned string.
 
 use tauri::Manager;
 
-/// AppHandle 的 monitor/cursor 四连 + 每个 API 的返回摘要。
+/// AppHandle monitor/cursor quartet + a return summary per API.
 #[tauri::command]
 pub fn probe_app_monitors<R: tauri::Runtime>(
   app: tauri::AppHandle<R>,
@@ -37,7 +40,7 @@ pub fn probe_app_monitors<R: tauri::Runtime>(
   Ok(out.join(" | "))
 }
 
-/// app.rs AppHandle::set_menu + remove_menu（app-wide 菜单装/卸）。
+/// app.rs AppHandle::set_menu + remove_menu (app-wide menu install/remove).
 #[cfg(desktop)]
 #[tauri::command]
 pub fn probe_app_menu_set_remove<R: tauri::Runtime>(
@@ -59,7 +62,8 @@ pub fn probe_app_menu_set_remove<R: tauri::Runtime>(
   Ok(out.join(" | "))
 }
 
-/// window/mod.rs Window::set_menu + remove_menu（窗口级菜单装/卸，含 OHOS menubar 分支）。
+/// window/mod.rs Window::set_menu + remove_menu (per-window menu install/
+/// remove, including the OHOS menubar branch).
 #[cfg(desktop)]
 #[tauri::command]
 pub fn probe_window_menu_set_remove<R: tauri::Runtime>(
@@ -81,11 +85,15 @@ pub fn probe_window_menu_set_remove<R: tauri::Runtime>(
   Ok(out.join(" | "))
 }
 
-/// OHOS：默认显示器刷新率（Hz）。NDK 直连（OH_NativeDisplayManager_GetDefaultDisplayRefreshRate，
-/// 经 ohos-display-binding），非 bridge 插件——按核心特权模式从 tauri::ohos::APP 取
-/// OpenHarmonyApp::refresh_rate()，与 tao video_modes() 的 refresh_rate 同源。
-/// tauri::Monitor 不携带 refresh rate（上游全平台语义），JS Monitor API 无法到达，
-/// 故由此探针提供真机验证入口。MutexGuard 在作用域内显式 drop（ohos-bridge-arch 硬规则）。
+/// OHOS: default display refresh rate (Hz). NDK-direct
+/// (OH_NativeDisplayManager_GetDefaultDisplayRefreshRate via
+/// ohos-display-binding), not a bridge plugin — under the core-privilege
+/// mode it reads OpenHarmonyApp::refresh_rate() from tauri::ohos::APP,
+/// the same source as tao video_modes()'s refresh_rate. tauri::Monitor
+/// does not carry a refresh rate (upstream semantics on all platforms)
+/// and the JS Monitor API cannot reach it, so this probe provides the
+/// on-device verification entry point. The MutexGuard is dropped
+/// explicitly at scope end (ohos-bridge-arch hard rule).
 #[cfg(target_env = "ohos")]
 #[tauri::command]
 pub fn probe_display_refresh_rate() -> Result<String, String> {
@@ -101,7 +109,8 @@ pub fn probe_display_refresh_rate() -> Result<String, String> {
   Ok(format!("refresh_rate={rate} Hz"))
 }
 
-/// Webview::reparent —— OHOS 上预期走 "not supported" 警告分支（覆盖目的即在此）。
+/// Webview::reparent — on OHOS expected to take the "not supported" warning
+/// branch (which is exactly the coverage target).
 /// `Webview::reparent` lives in the `#[cfg(desktop)]` impl block upstream, so it is
 /// only available on desktop targets. Mobile (phone/tablet) compiles without it;
 /// surface a not-supported result instead of a compile error.
