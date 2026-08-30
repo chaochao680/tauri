@@ -3991,7 +3991,7 @@
           ]
         },
         "continuable": {
-          "description": "Marks the app's ability as continuable (app continuation / 任务接力).\n\nWhen `Some(true)`, the CLI writes `continuable: true` into each entry module.json5's abilities entry at build time (same injection point as `deviceTypes`). Requires `continueType` matching between devices. `None`/`Some(false)` keeps module.json5 unchanged.",
+          "description": "Marks the app's ability as continuable (app continuation / task handoff).\n\nWhen `Some(true)`, the CLI writes `continuable: true` into each entry module.json5's abilities entry at build time (same injection point as `deviceTypes`). Requires `continueType` matching between devices. `None`/`Some(false)` keeps module.json5 unchanged.",
           "type": [
             "boolean",
             "null"

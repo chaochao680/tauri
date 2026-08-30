@@ -423,8 +423,10 @@ export const coreTests: TestCase[] = [
       assert(result.success === true, `webPageSnapshot failed: ${result.error || 'unknown error'}`);
       assert(result.width > 0, `Expected width > 0, got ${result.width}`);
       assert(result.height > 0, `Expected height > 0, got ${result.height}`);
-      assert(result.rgba_len === result.width * result.height * 4,
-        `Expected rgba_len=${result.width * result.height * 4}, got ${result.rgba_len}`);
+      // The backend uses capture_webview (base64 PNG) — web_page_snapshot omits
+      // the RGBA buffer for NAPI efficiency, so assert on png_base64 instead.
+      assert(typeof result.png_base64 === 'string' && result.png_base64.length > 0,
+        `Expected non-empty png_base64, got ${typeof result.png_base64}`);
     },
   },
 

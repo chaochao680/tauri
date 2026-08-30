@@ -1882,7 +1882,7 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
     // plus the two fetch probes (external https / intercepted subresource)
     // to the webview console (visible in hilog as ARKWEB-CONSOLE). This lets
     // us verify the https-scheme rewrite without DevTools (release build has
-    // no devtools feature). Covers manual_tests.md §26 cases:
+    // no devtools feature). Covers manual_tests.md §二十六 cases:
     // page-load / secure-context / external-https / subresource.
     builder = builder.initialization_script(
       r#"window.addEventListener('DOMContentLoaded', () => {
@@ -1897,13 +1897,13 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
         } catch(e) {
           console.log('[https-scheme] crypto.subtle unavailable: ' + e);
         }
-        // Probe 1 (§26 external-https): external https must NOT be intercepted.
+        // Probe 1 (§二十六 external-https): external https must NOT be intercepted.
         // no-cors: a normal network fetch resolves with an opaque response;
         // rejection means the request never completed through the default stack.
         fetch('https://example.com', { mode: 'no-cors' })
           .then(r => console.log('[https-scheme] external fetch resolved: type=' + r.type + ' status=' + r.status))
           .catch(e => console.log('[https-scheme] external fetch REJECTED: ' + e));
-        // Probe 2 (§26 subresource): same-origin fetch under the rewritten
+        // Probe 2 (§二十六 subresource): same-origin fetch under the rewritten
         // https://tauri.localhost origin — must be served by onInterceptRequest
         // + custom_protocol, not the network stack.
         fetch('https://tauri.localhost/index.html')
@@ -1928,7 +1928,7 @@ pub fn create_ohos_test_webview<R: tauri::Runtime>(
   #[cfg(not(target_env = "ohos"))]
   let _ = &webview_window;
 
-  // §26 drag-overlay: log DragDrop events to hilog so the Enter→Over→Drop→Leave
+  // §二十六 drag-overlay: log DragDrop events to hilog so the Enter→Over→Drop→Leave
   // sequence (and dropped paths) is verifiable without DevTools. drag_drop_handler
   // is wired by default (drag_drop_handler_enabled=true), events surface as
   // WindowEvent::DragDrop on this window.

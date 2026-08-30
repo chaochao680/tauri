@@ -168,8 +168,12 @@ fn get_response<R: Runtime>(
         // stays in the first lock scope; the network read (safe_block_on(r.bytes()))
         // is moved outside the lock to avoid holding the Mutex across potentially
         // slow I/O. On OHOS the request handler can run on the NAPI main thread,
-        // where holding a lock across network I/O stalls TSFN callbacks; other
-        // platforms keep the upstream single-flight behavior exactly.
+        // where holding a lock across network I/O stalls TSFN callbacks. Other
+        // platforms keep the upstream single-flight semantics: lookup and insert
+        // stay under one lock; the guard is released once the response is cloned
+        // (just before the header-copy loop) rather than at the end of the
+        // function as upstream does — the loop and builder calls below never
+        // touch the cache, so this is equivalent.
         #[cfg(target_env = "ohos")]
         let response = {
           let cached: Option<CachedResponse> = {
