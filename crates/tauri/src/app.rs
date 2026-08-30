@@ -411,6 +411,21 @@ impl AppHandle<crate::Wry> {
   ) -> crate::Result<std::sync::Weak<tauri_runtime_wry::Window>> {
     self.runtime_handle.create_tao_window(f).map_err(Into::into)
   }
+
+  /// Sends a window message to the event loop.
+  pub fn send_tao_window_event(
+    &self,
+    window_id: tauri_runtime_wry::TaoWindowId,
+    message: tauri_runtime_wry::WindowMessage,
+  ) -> crate::Result<()> {
+    self
+      .runtime_handle
+      .send_event(tauri_runtime_wry::Message::Window(
+        self.runtime_handle.window_id(window_id),
+        message,
+      ))
+      .map_err(Into::into)
+  }
 }
 
 #[cfg(target_vendor = "apple")]
@@ -523,10 +538,25 @@ impl<R: Runtime> AppHandle<R> {
   /// but accepts a boxed trait object instead of a generic type.
   #[cfg_attr(feature = "tracing", tracing::instrument(name = "app::plugin::register", skip(plugin), fields(name = plugin.name())))]
   pub fn plugin_boxed(&self, mut plugin: Box<dyn Plugin<R>>) -> crate::Result<()> {
-    // initialize outside lock to avoid blocking on_event_loop_event (appfreeze fix)
-    crate::plugin::initialize(&mut plugin, self, &self.config().plugins)?;
-    let mut store = self.manager().plugins.lock().unwrap();
-    store.register(plugin);
+    // OHOS: initialize outside the plugins lock — a plugin's setup may round-trip
+    // the ArkTS bridge, which pumps the event loop and would otherwise deadlock
+    // against on_event_loop_event's lock below. Non-OHOS keeps the upstream
+    // in-lock ordering.
+    #[cfg(target_env = "ohos")]
+    {
+      crate::plugin::initialize(&mut plugin, self, &self.config().plugins)?;
+      let mut store = self.manager().plugins.lock().unwrap();
+      store.register(plugin);
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+      // Upstream ordering: initialize while holding the plugins lock (the
+      // removed PluginStore::initialize wrapper just forwarded to
+      // crate::plugin::initialize).
+      let mut store = self.manager().plugins.lock().unwrap();
+      crate::plugin::initialize(&mut plugin, self, &self.config().plugins)?;
+      store.register(plugin);
+    }
 
     Ok(())
   }
@@ -2660,7 +2690,11 @@ fn on_event_loop_event<R: Runtime>(
     _ => unimplemented!(),
   };
 
-  // try_lock to avoid blocking main thread when plugins lock is held by register (appfreeze fix)
+  // OHOS: the plugin store lock can be held across an ArkTS bridge round-trip
+  // (which pumps the event loop); a blocking lock here would freeze the main
+  // thread, so try_lock and skip instead. Non-OHOS keeps the upstream blocking
+  // lock.
+  #[cfg(target_env = "ohos")]
   if let Ok(mut store) = manager.plugins.try_lock() {
     store.on_event(app_handle, &event);
   } else {
@@ -2668,6 +2702,12 @@ fn on_event_loop_event<R: Runtime>(
     // thread. Log so a dropped event (e.g. a deep-link RunEvent::Opened) is traceable.
     log::warn!("[tauri] plugin store lock busy, skipping on_event (appfreeze try_lock)");
   }
+  #[cfg(not(target_env = "ohos"))]
+  manager
+    .plugins
+    .lock()
+    .expect("poisoned plugin store")
+    .on_event(app_handle, &event);
 
   event
 }

@@ -418,6 +418,7 @@ impl<T: UserEvent> Context<T> {
       Message::CreateWindow(
         window_id,
         Box::new(move |event_loop| {
+          #[cfg(target_env = "ohos")]
           log::debug!("[WRY] CreateWindow callback: start");
           let window = create_window(
             window_id,
@@ -3880,15 +3881,21 @@ fn handle_user_message<T: UserEvent>(
           }
           #[allow(unused_variables)]
           WindowMessage::SetSkipTaskbar(skip) => {
-            #[cfg(all(
-              any(
-                target_os = "linux",
-                target_os = "dragonfly",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd"
-              ),
-              not(target_env = "ohos")
+            // Upstream cfg restored verbatim, with the Linux family additionally
+            // excluding OHOS (target_os is "linux" there but the backend has no
+            // skip-taskbar support).
+            #[cfg(any(
+              windows,
+              all(
+                any(
+                  target_os = "linux",
+                  target_os = "dragonfly",
+                  target_os = "freebsd",
+                  target_os = "netbsd",
+                  target_os = "openbsd"
+                ),
+                not(target_env = "ohos")
+              )
             ))]
             let _ = window.set_skip_taskbar(skip);
           }
@@ -4228,6 +4235,7 @@ fn handle_user_message<T: UserEvent>(
             }
           }
           WebviewMessage::SetBackgroundColor(color) => {
+            #[cfg(target_env = "ohos")]
             log::debug!(
               "[tauri-runtime-wry] SetBackgroundColor message received: {:?}",
               color
@@ -4236,8 +4244,6 @@ fn handle_user_message<T: UserEvent>(
               webview.set_background_color(color.map(Into::into).unwrap_or((255, 255, 255, 255)))
             {
               log::error!("failed to set webview background color: {e}");
-            } else {
-              log::debug!("[tauri-runtime-wry] SetBackgroundColor succeeded");
             }
           }
           WebviewMessage::ClearAllBrowsingData => {
@@ -4543,6 +4549,10 @@ fn handle_event_loop<T: UserEvent>(
     #[cfg(feature = "tracing")]
     active_tracing_spans,
   } = context;
+  // On non-OHOS platforms the close/destroy lifecycle is upstream-verbatim and
+  // never reads exit_state (OHOS-only ExitRequested dedup guard).
+  #[cfg(not(target_env = "ohos"))]
+  let _ = exit_state;
   if *control_flow != ControlFlow::Exit {
     *control_flow = ControlFlow::Wait;
   }
@@ -4585,7 +4595,7 @@ fn handle_event_loop<T: UserEvent>(
           })
       });
       if let Some(window_id) = matching_id {
-        on_close_requested(callback, window_id, windows.clone(), exit_state.clone());
+        on_close_requested_ohos(callback, window_id, windows.clone(), exit_state.clone());
       } else {
         log::debug!(
           "[wry] OHOS pending close: no matching Tauri window for OHOS window ID {}",
@@ -4643,6 +4653,15 @@ fn handle_event_loop<T: UserEvent>(
       callback(RunEvent::Ready);
     }
 
+    // Upstream fires RunEvent::Resumed on every poll cycle; OHOS instead gets
+    // an Event::Resumed from the tao backend on foreground/restore, where the
+    // poll-based path never runs (ControlFlow::Wait).
+    #[cfg(not(target_env = "ohos"))]
+    Event::NewEvents(StartCause::Poll) => {
+      callback(RunEvent::Resumed);
+    }
+
+    #[cfg(target_env = "ohos")]
     Event::Resumed => {
       callback(RunEvent::Resumed);
     }
@@ -4652,7 +4671,6 @@ fn handle_event_loop<T: UserEvent>(
     }
 
     Event::LoopDestroyed => {
-      log::info!("[wry] Event::LoopDestroyed received");
       #[cfg(target_env = "ohos")]
       {
         // OHOS: check if ExitRequested was already sent via the window-close path
@@ -4789,19 +4807,41 @@ fn handle_event_loop<T: UserEvent>(
             }
           }
           TaoWindowEvent::CloseRequested => {
-            if on_close_requested(callback, window_id, windows, exit_state) {
-              #[cfg(not(target_env = "ohos"))]
-              {
-                *control_flow = ControlFlow::Exit;
-              }
+            #[cfg(not(target_env = "ohos"))]
+            on_close_requested(callback, window_id, windows);
+            // OHOS: on_close_requested_ohos drives destruction + exit checks
+            // itself; loop exit is driven by the system (LoopDestroyed), so its
+            // return value is intentionally ignored.
+            #[cfg(target_env = "ohos")]
+            {
+              let _ = on_close_requested_ohos(callback, window_id, windows, exit_state);
             }
           }
           TaoWindowEvent::Destroyed => {
-            if on_window_close(callback, window_id, windows, exit_state) {
-              #[cfg(not(target_env = "ohos"))]
-              {
-                *control_flow = ControlFlow::Exit;
+            #[cfg(not(target_env = "ohos"))]
+            {
+              let removed = windows.0.borrow_mut().remove(&window_id).is_some();
+              if removed {
+                let is_empty = windows.0.borrow().is_empty();
+                if is_empty {
+                  let (tx, rx) = channel();
+                  callback(RunEvent::ExitRequested { code: None, tx });
+
+                  let recv = rx.try_recv();
+                  let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
+
+                  if !should_prevent {
+                    *control_flow = ControlFlow::Exit;
+                  }
+                }
               }
+            }
+            // OHOS: the store entry is removed by the window-close path
+            // (on_window_close_ohos, idempotent); this arm is a safety net for
+            // any Destroyed event that arrives without a prior close.
+            #[cfg(target_env = "ohos")]
+            {
+              let _ = on_window_close_ohos(callback, window_id, windows, exit_state);
             }
           }
           TaoWindowEvent::Resized(size) => {
@@ -4841,10 +4881,14 @@ fn handle_event_loop<T: UserEvent>(
         let recv = rx.try_recv();
         let should_prevent = matches!(recv, Ok(ExitRequestedEventAction::Prevent));
 
-        // Mark ExitRequested as sent to prevent duplicate from LoopDestroyed path
+        // OHOS: mark ExitRequested as sent to prevent the LoopDestroyed path
+        // from firing a duplicate.
+        #[cfg(target_env = "ohos")]
         exit_state.0.store(true, Ordering::SeqCst);
 
         if !should_prevent {
+          // OHOS: loop teardown is system-driven (LoopDestroyed); ControlFlow::Exit
+          // must not be set from here.
           #[cfg(not(target_env = "ohos"))]
           {
             *control_flow = ControlFlow::Exit;
@@ -4852,20 +4896,21 @@ fn handle_event_loop<T: UserEvent>(
         }
       }
       Message::Window(id, WindowMessage::Close) => {
-        if on_close_requested(callback, id, windows, exit_state) {
-          #[cfg(not(target_env = "ohos"))]
-          {
-            *control_flow = ControlFlow::Exit;
-          }
+        #[cfg(not(target_env = "ohos"))]
+        on_close_requested(callback, id, windows);
+        #[cfg(target_env = "ohos")]
+        {
+          let _ = on_close_requested_ohos(callback, id, windows, exit_state);
         }
       }
       Message::Window(id, WindowMessage::Destroy) => {
-        // Call on_window_close directly, skip CloseRequested to avoid recursion
-        if on_window_close(callback, id, windows, exit_state) {
-          #[cfg(not(target_env = "ohos"))]
-          {
-            *control_flow = ControlFlow::Exit;
-          }
+        #[cfg(not(target_env = "ohos"))]
+        on_window_close(id, windows);
+        // OHOS: call the full close handler directly, skipping CloseRequested
+        // to avoid recursion.
+        #[cfg(target_env = "ohos")]
+        {
+          let _ = on_window_close_ohos(callback, id, windows, exit_state);
         }
       }
       Message::UserEvent(t) => callback(RunEvent::UserEvent(t)),
@@ -4904,7 +4949,59 @@ fn handle_event_loop<T: UserEvent>(
   }
 }
 
+// Non-OHOS platforms keep the upstream close/destroy lifecycle verbatim:
+// CloseRequested/null-inner close here, and the Destroyed event handler in
+// `handle_event_loop` performs store removal + the all-windows-closed exit
+// check. The OHOS rework below (system-driven teardown, no reliable Destroyed
+// event, ExitRequested dedup) lives in separate `_ohos` functions.
+
+#[cfg(not(target_env = "ohos"))]
 fn on_close_requested<'a, T: UserEvent>(
+  callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
+  window_id: WindowId,
+  windows: Arc<WindowsStore>,
+) {
+  let (tx, rx) = channel();
+  let windows_ref = windows.0.borrow();
+  if let Some(w) = windows_ref.get(&window_id) {
+    let label = w.label.clone();
+    let window_event_listeners = w.window_event_listeners.clone();
+
+    drop(windows_ref);
+
+    let listeners = window_event_listeners.lock().unwrap();
+    let handlers = listeners.values();
+    for handler in handlers {
+      handler(&WindowEvent::CloseRequested {
+        signal_tx: tx.clone(),
+      });
+    }
+    callback(RunEvent::WindowEvent {
+      label,
+      event: WindowEvent::CloseRequested { signal_tx: tx },
+    });
+    if let Ok(true) = rx.try_recv() {
+    } else {
+      on_window_close(window_id, windows);
+    }
+  }
+}
+
+#[cfg(not(target_env = "ohos"))]
+fn on_window_close(window_id: WindowId, windows: Arc<WindowsStore>) {
+  if let Some(window_wrapper) = windows.0.borrow_mut().get_mut(&window_id) {
+    window_wrapper.inner = None;
+    #[cfg(windows)]
+    window_wrapper.surface.take();
+  }
+}
+
+/// OHOS variant of `on_close_requested`: forwards to `on_window_close_ohos`
+/// (which also drives OS window destruction and the exit check).
+/// Returns `true` if the loop should exit (unused on OHOS — the system drives
+/// teardown via LoopDestroyed).
+#[cfg(target_env = "ohos")]
+fn on_close_requested_ohos<'a, T: UserEvent>(
   callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
   window_id: WindowId,
   windows: Arc<WindowsStore>,
@@ -4932,16 +5029,18 @@ fn on_close_requested<'a, T: UserEvent>(
     if let Ok(true) = rx.try_recv() {
       // User prevented close, do not call on_window_close
     } else {
-      return on_window_close(callback, window_id, windows, exit_state);
+      return on_window_close_ohos(callback, window_id, windows, exit_state);
     }
   }
   false
 }
 
-/// Handle window close: remove from store, fire events, check if event loop should exit.
-/// Returns `true` if all windows are closed and user did not prevent exit.
-/// Callers must set `ControlFlow::Exit` on non-OHOS platforms when this returns `true`.
-fn on_window_close<'a, T: UserEvent>(
+/// OHOS variant of `on_window_close`: remove from store, fire events, check if
+/// event loop should exit. Returns `true` if all windows are closed and user
+/// did not prevent exit (callers on OHOS never act on it — teardown is
+/// system-driven).
+#[cfg(target_env = "ohos")]
+fn on_window_close_ohos<'a, T: UserEvent>(
   callback: &'a mut (dyn FnMut(RunEvent<T>) + 'static),
   window_id: WindowId,
   windows: Arc<WindowsStore>,
@@ -5504,13 +5603,9 @@ You may have it installed on another user account, but it is not available for t
         ),
       );
       match response {
-        tauri_runtime::webview::NewWindowResponse::Allow => {
-          log::info!("[tauri-runtime-wry DBG] on_new_window response: Allow");
-          wry::NewWindowResponse::Allow
-        }
+        tauri_runtime::webview::NewWindowResponse::Allow => wry::NewWindowResponse::Allow,
         #[cfg(all(desktop, not(target_env = "ohos")))]
         tauri_runtime::webview::NewWindowResponse::Create { window_id } => {
-          log::info!("[tauri-runtime-wry DBG] on_new_window response: Create (non-OHOS) window_id={:?}", window_id);
           let windows = &context.main_thread.windows.0;
           let webview = windows
             .borrow()

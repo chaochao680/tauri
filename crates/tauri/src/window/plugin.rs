@@ -98,13 +98,15 @@ mod commands {
   setter!(set_position, Position);
   setter!(set_focus);
   setter!(set_focusable, bool);
-  // Custom implementation for set_background_color with debug logging
+  // Custom implementation for set_background_color (upstream setter! output on
+  // non-OHOS; OHOS additionally mirrors the color onto the webview layer).
   #[command(root = "crate")]
   pub async fn set_background_color<R: Runtime>(
     window: Window<R>,
     label: Option<String>,
     value: Option<Color>,
   ) -> crate::Result<()> {
+    #[cfg(target_env = "ohos")]
     log::info!(
       "[tauri-window] set_background_color called with value: {:?}",
       value

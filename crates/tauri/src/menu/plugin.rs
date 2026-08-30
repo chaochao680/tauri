@@ -678,6 +678,7 @@ async fn popup<R: Runtime>(
   window: Option<String>,
   at: Option<Position>,
 ) -> crate::Result<()> {
+  #[cfg(target_env = "ohos")]
   log::debug!("[Menu] popup command called: rid={rid}, at={at:?}");
   let window = window
     .map(|w| webview.manager().get_window(&w))
@@ -720,17 +721,20 @@ async fn popup<R: Runtime>(
     match kind {
       ItemKind::Menu => {
         let menu = resources_table.get::<Menu<R>>(rid)?;
+        #[cfg(target_env = "ohos")]
         log::debug!("[Menu] calling menu.popup_inner");
         menu.popup_inner(window, at)?;
       }
       ItemKind::Submenu => {
         let submenu = resources_table.get::<Submenu<R>>(rid)?;
+        #[cfg(target_env = "ohos")]
         log::debug!("[Menu] calling submenu.popup_inner");
         submenu.popup_inner(window, at)?;
       }
       _ => return Err(anyhow::anyhow!("unexpected menu item kind").into()),
     };
   } else {
+    #[cfg(target_env = "ohos")]
     log::debug!("[Menu] popup: window is None!");
   }
 
