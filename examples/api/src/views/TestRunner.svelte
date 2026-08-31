@@ -2851,8 +2851,8 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
       } catch (e) {
         const msg = String(e);
         if (msg.includes('not found') || msg.includes('command')) {
-          // Release build: sentry_test_panic is gated with #[cfg(debug_assertions)]
-          manualResult += '\n\n⚠️ sentry_test_panic not available — only compiled in debug builds.';
+          // Command not registered (shouldn't happen — sentry_test_panic has no cfg gate)
+          manualResult += '\n\n⚠️ sentry_test_panic command not found.';
         } else {
           // Expected: IPC will fail because the thread panicked
           manualResult += `\n\nPanic triggered. IPC error (expected): ${e}`;
