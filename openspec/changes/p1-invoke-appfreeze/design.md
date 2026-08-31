@@ -131,3 +131,42 @@ pub fn extend_api(&self, plugin: &str, invoke: Invoke<R>) -> bool {
 ## Open Questions
 
 - 持锁方根因（http `on_event` Exit `rx.recv()` 是否仍在 OHOS 上阻塞、`initialize_all` 慢初始化是否需要同类硬化）超出本变更范围，应另起 change 排查。本变更为兜底防崩，不修复根因。
+
+---
+
+## Addendum: 异步命令响应的 waker/drain 通道（#81 完整根因与修复）
+
+Decision 2 的 `extend_api` try_lock 降级是必要但不充分的：它在锁争用时避免主线程 appfreeze，但**异步插件命令响应仍超时**。深挖 IPC 响应链定位到第二层根因——主线程唤醒通道（waker + drain）从未工作。
+
+### 响应链（异步命令）
+异步插件命令是 `async fn`，在 tokio worker 线程上 resolve → `responder_eval`（`ipc/protocol.rs`）→ `webview.eval("runCallback(...)")` → `tauri-runtime-wry::send_user_message`（lib.rs:317）。`send_user_message` 关键分叉：
+- 主线程（`current_thread().id() == context.main_thread_id`）→ 直接 `handle_user_message`（**同步命令走此路，为何同步命令不超时**）。
+- 非主线程 → `context.proxy.send_event(message)` → tao `EventLoopProxy::send_event`（`tao/.../ohos/mod.rs:760`）：压入 `user_events_sender` mpsc 后 `self.waker.wake()`。
+
+`waker.wake()` 触发 TSFN `NonBlocking` 回调（`lifecycle.rs:69`）→ `h(Event::UserEvent)` → tao run_loop（`mod.rs:531`）的 `MainEvent::UserEvent` 分支（`mod.rs:690`）→ drain `user_events_receiver` → `handle_user_message` → `webview.evaluate_script`。**整个 `WindowsStore` RefCell borrow 只在此主线程 drain 路径发生**（`unsafe impl Send/Sync for WindowsStore` 的健全性不变量：仅主线程 borrow）。
+
+### 第二层根因：waker 快照时序 bug
+`OpenHarmonyWaker` 在 `create_proxy`/`create_waker`（`app.rs:160`）时**快照** `WAKER` 全局 TSFN。`WAKER` 由 `create_lifecycle_handle`（`lifecycle.rs:82-88`）填充，但**时序**：
+- `#[ability]` derive 的 NAPI `init`（`derive/lib.rs:135-136`）：行 135 跑 tauri 入口 `#fn_name`（mobile_entry_point 生成）→ `Builder::build()` → `Wry::init`（`context.proxy = event_loop.create_proxy()` 在 lib.rs:3174 **快照 WAKER**）→ `app.run()` → `event_loop.run`/`run_return`（OHOS 上**非阻塞**，只注册 handler 即返回，`tao/.../ohos/mod.rs:511-531` + `app.rs:730-751`）→ `#fn_name` 返回。
+- 行 136：`create_lifecycle_handle` → **此时才填充 WAKER**。
+
+因此 `context.proxy.waker`（send_user_message 实际使用的 proxy，在 `#fn_name` 内构造，永不重建）的 waker **永久为 `None`** → `wake()` 静默空操作 → `MainEvent::UserEvent` 从不 fire → worker 线程的异步响应永不 drain → JS Promise 永不 settle → 5000ms 超时。同步命令在主线程 resolve 走同步分支，不经 waker，故不受影响——这解释了"同步命令过、异步命令超时"的分布。`[DRAIN-DIAG]` count=0 实测证实 `MainEvent::UserEvent` 从未 fire。
+
+### 修复
+**Fix 1（drain，前序会话）**：`tao/.../ohos/mod.rs:690` `MainEvent::UserEvent` 分支由单次 `try_recv` 改为 `while let` 全量 drain。TSFN `NonBlocking` 唤醒会合并 N 个排队事件为一次 `MainEvent::UserEvent`；单次 `try_recv` 只取一个，余下滞留至下次唤醒（可能迟迟不来）。`while let` 一次唤醒取尽。**必要但不充分**——waker 不 fire 时 drain 根本不触发。
+
+**Fix 2（waker live-read，本会话）**：`OpenHarmonyWaker::wake()` 改为**实时读** `WAKER` 全局（`waker.rs`），而非用构造时快照的 `Option<Arc<TSFN>>` 字段。`OpenHarmonyWaker` 变为零字段 struct（`#[derive(Clone)]`，保留 `EventLoopProxy::clone` 所需 Clone）。`create_waker`（`app.rs:160`）不再快照，返回 `OpenHarmonyWaker::new()`。等任意 worker 线程命令 resolve 调 `wake()` 时，`create_lifecycle_handle` 早已执行完，实时读必得 `Some`。
+
+**健全性**：`WAKER` 是 `LazyLock<RwLock<Option<Arc<TSFN>>>>`，`wake()` 从任意线程 `read()` 后 clone `Arc` 出来再 drop guard 再 `.call(NonBlocking)`（不在持锁期间 call）。修法只改 waker **何时被读**，不改 callback **在哪运行**——TSFN 回调仍在主线程 fire → `MainEvent::UserEvent` → 主线程 drain → 主线程 borrow，`WindowsStore` 不变量保持。审计子 agent 复核：修法 sound、三铁律合规（仅改 openharmony-ability，OHOS-only by nature，不碰跨平台代码）。
+
+### 实测验证（HUAWEI MateBook Pro，desktop）
+- `[WAKE-CALL] waker=Some`（修前 None）；来自主线程 ThreadId(1) + tokio worker 23/24/33。
+- `[WAKE-FIRE] waker TSFN callback running on thread ThreadId(1)`——TSFN 回调**在主线程 fire**（审计担心的残留风险排除：既功能可用又保证 RefCell borrow 健全性）。
+- 163 次 wake → 163 次 callback fire（1:1）→ 163 事件被 drain；48 次"queue empty"为合并唤醒的良性现象（前次合并唤醒已 drain 完）。
+- **修前超时的异步窗口命令现在全部 PASS**：`window.set_position`(559ms)、`window.set_size`(614ms)、`maximize/unmaximize`(532/1051ms)、`create_transparent_borderless_window`(538ms) 等。原 #81 的 event 通道 `listen`/`emit` 测试不再出现在失败列表。
+
+### 残留：#85 多窗口死锁
+#81 修好后，测试跑到第 45 个 `on_new_window: Allow triggers event with correct URL`（`examples/api/src/lib/tests/core.ts:933`，**真正创建新窗口**）时**死锁**主线程，整个 runner 卡住。这是 **#85 多窗口**问题（`WebviewCreateRequest` 丢失 `window_id` 字段，`WindowCreate` 被忽略）。之前 #81 bug 把它**掩盖成 5s 超时**（runner 能跳过继续到 157 个测试）；#81 修好后异步命令真正执行，`window.open` 创建新窗口路径反而死锁。**必须修 #85 才能跑完整测试套件**。
+
+### 诊断日志（待 #65 统一清理）
+本会话临时加的 `[WAKE-CALL]`/`[WAKE-FIRE]` INFO 日志已确认修复后**移除**（高频刷屏 hilog 挤掉测试结果）。`[DRAIN-DIAG]`（tao mod.rs:690）+ `[IPC-DIAG]`（protocol.rs）为前序会话所加，待全功能通过后由 #65 统一清理。

@@ -154,6 +154,7 @@ export const windowOpsTests: TestCase[] = [
       await win.maximize();
       await delay(600);
       const after = await win.innerSize();
+      const afterOuter = await win.outerSize();
       await win.unmaximize();
       await delay(400);
       if (!mon) {
@@ -164,8 +165,14 @@ export const windowOpsTests: TestCase[] = [
       // 若原本已全屏（before 已 ≈ monitor），则 maximize 为 no-op，跳过强校验。
       const alreadyMax = before.width >= mon.size.width * 0.95 && before.height >= mon.size.height * 0.95;
       if (alreadyMax) return;
+      // D2 语义（OHOS）：innerSize = outer − 装饰(标题栏)。"铺满显示器"以 outerSize
+      // 断言；innerSize 校验内容区宽度铺满 + 高度扣除装饰后仍占大头（≥80%）。
       assert(
-        after.width >= mon.size.width * 0.9 && after.height >= mon.size.height * 0.9,
+        afterOuter.width >= mon.size.width * 0.9 && afterOuter.height >= mon.size.height * 0.9,
+        `maximize 后 outerSize ${afterOuter.width}×${afterOuter.height} 未接近显示器 ${mon.size.width}×${mon.size.height}`
+      );
+      assert(
+        after.width >= mon.size.width * 0.9 && after.height >= mon.size.height * 0.8,
         `maximize 后 innerSize ${after.width}×${after.height} 未接近显示器 ${mon.size.width}×${mon.size.height}`
       );
     },

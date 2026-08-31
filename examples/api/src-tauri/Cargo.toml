@@ -39,19 +39,29 @@ sentry = { version = "0.42", default-features = false, features = ["reqwest", "r
 tauri-plugin-sentry = { path = "../../../../sentry-tauri" }
 chrono = "0.4"
 url = "2"
+# ws echo server fixture (port 3004) for plugin-websocket autotest; used under #[cfg(desktop)]
+# in lib.rs. Declared unconditionally because `cfg(desktop)` is injected by tauri's build.rs
+# (cargo:rustc-cfg=desktop) and is invisible to Cargo's [target.cfg] dependency resolution —
+# gating under [target.'cfg(desktop)'] left it unactivated on OHOS-desktop (E0432 unresolved import).
+tungstenite = "0.24"
 
 [target.'cfg(not(target_env = "ohos"))'.dependencies]
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
-
-[target.'cfg(desktop)'.dependencies]
-# tungstenite is only used by the desktop-only ws echo server (lib.rs, cfg(desktop))
-tungstenite = "0.24"
+# deep-link is registered for non-OHOS in lib.rs (the #[cfg(not(target_env = "ohos"))] block,
+# L93-111) and the plugin ships native desktop support (windows/macos/linux targets in its
+# own Cargo.toml). Declared here rather than in the unconditional [dependencies] to avoid a
+# duplicate with the OHOS entry below (L58).
+tauri-plugin-deep-link = { path = "../../../../plugins-workspace/plugins/deep-link" }
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 napi-ohos = { version = "1.1" }
 napi-derive-ohos = { version = "1.1" }
 hilog = "*"
 openharmony-ability = { path = "../../../../openharmony-ability/crates/ability" }
+# OHOS print-job terminal-state events (print-state crossbeam channel → emit "ohos-print-state")
+openharmony-ability-plugin-webview = { path = "../../../../openharmony-ability/crates/plugin-webview" }
+# set_ime_position_test facade call (D3.8 direct-await version)
+openharmony-ability-plugin-window = { path = "../../../../openharmony-ability/crates/plugin-window" }
 tauri-plugin-dialog = { path = "../../../../plugins-workspace/plugins/dialog" }
 tauri-plugin-single-instance = { path = "../../../../plugins-workspace/plugins/single-instance" }
 tauri-plugin-global-shortcut = { path = "../../../../plugins-workspace/plugins/global-shortcut" }
@@ -64,6 +74,23 @@ tauri-plugin-upload = { path = "../../../../plugins-workspace/plugins/upload" }
 tauri-plugin-localhost = { path = "../../../../plugins-workspace/plugins/localhost" }
 tauri-plugin-opener = { path = "../../../../plugins-workspace/plugins/opener" }
 tauri-plugin-positioner = { path = "../../../../plugins-workspace/plugins/positioner" }
+# Mobile-native plugins adapted to OHOS (mobile-form bridges; runtime invoke
+# routing for plugin:NAME|command requires OHOS_DEVICE_TYPE=mobile for the
+# biometric/nfc/barcode-scanner commands that have no Rust invoke_handler).
+tauri-plugin-haptics = { path = "../../../../plugins-workspace/plugins/haptics" }
+tauri-plugin-geolocation = { path = "../../../../plugins-workspace/plugins/geolocation" }
+tauri-plugin-biometric = { path = "../../../../plugins-workspace/plugins/biometric" }
+tauri-plugin-nfc = { path = "../../../../plugins-workspace/plugins/nfc" }
+tauri-plugin-barcode-scanner = { path = "../../../../plugins-workspace/plugins/barcode-scanner" }
+tauri-plugin-huawei-account = { path = "../../../../plugins-workspace/plugins/huawei-account" }
+# OHOS-only: minimal accessibility API (font scale / screen reader state + event)
+tauri-plugin-accessibility = { path = "../../../../plugins-workspace/plugins/accessibility" }
+# OHOS-only: in-app webview screenshot + color picking
+tauri-plugin-screenshot = { path = "../../../../plugins-workspace/plugins/screenshot" }
+# OHOS-only: passive app-continuation restore queries
+tauri-plugin-continuation = { path = "../../../../plugins-workspace/plugins/continuation" }
+muda = { path = "../../../../muda" }
+tray-icon = { path = "../../../../tray-icon" }
 
 [dependencies.tauri]
 path = "../../../crates/tauri"
@@ -85,6 +112,12 @@ features = ["test"]
 [features]
 prod = ["tauri/custom-protocol"]
 devtools = ["tauri/devtools"]
+# Coverage dump command (OHOS only). Enables invoke('dump_coverage') to flush
+# LLVM profiling data (.profraw) to the app sandbox cache dir.
+cov-dump = []
+# Fault injection commands (OHOS only). Enables invoke('fault_injection_set_rule')
+# and invoke('fault_injection_clear') to inject bridge call failures for coverage.
+fault-injection = ["openharmony-ability/fault-injection"]
 
 [profile.release]
 # Enable debug info (most important for OHOS panic/crash debugging)

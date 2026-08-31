@@ -80,6 +80,28 @@ export PATH="$DEVECO_HOME/jbr/bin:$PATH:$DEVECO_HOME/tools/hvigor/bin:$DEVECO_HO
 OHOS_CLANG=$(echo "$OHOS_HOME/native/llvm/bin/clang.exe" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
 OHOS_SYSROOT=$(echo "$OHOS_HOME/native/sysroot" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
 OHOS_AR=$(echo "$OHOS_HOME/native/llvm/bin/llvm-ar.exe" | sed 's|^/\(.\)/|\U\1:\\|; s|/|\\|g')
+
+# 转 8.3 短路径（去除空格），避免 cc-rs 对 CFLAGS 字符串分词时
+# 把 "C:\Program Files\..." 按空格拆断。短路径在本机恒定存在。
+to_short_path() {
+    local p="$1"
+    # 仅当路径含空格时才转；不含空格直接返回原值
+    if [[ "$p" == *" "* ]]; then
+        # powershell FSO ShortPath，失败则回退原值
+        local short
+        short=$(powershell.exe -NoProfile -Command "(New-Object -ComObject Scripting.FileSystemObject).GetFolder('$p').ShortPath" 2>/dev/null | tr -d '\r')
+        if [ -n "$short" ]; then
+            echo "$short"
+            return
+        fi
+    fi
+    echo "$p"
+}
+
+OHOS_CLANG=$(to_short_path "$OHOS_CLANG")
+OHOS_SYSROOT=$(to_short_path "$OHOS_SYSROOT")
+OHOS_AR=$(to_short_path "$OHOS_AR")
+
 export CC_aarch64_unknown_linux_ohos="$OHOS_CLANG"
 export CFLAGS_aarch64_unknown_linux_ohos="--target=aarch64-linux-ohos --sysroot=$OHOS_SYSROOT -D__MUSL__"
 export AR_aarch64_unknown_linux_ohos="$OHOS_AR"

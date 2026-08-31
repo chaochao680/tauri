@@ -72,3 +72,11 @@ ohos/entry/libs
 .env.local
 test-report.md
 examples/huawei-account/dist/
+
+# ── OHOS build/diagnostic artifacts ──
+*.har
+*.hap
+*.rar
+hilog-trace*.txt
+examples/api/src-tauri/.gen-ohos-backup/
+.claude/plans/

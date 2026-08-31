@@ -304,6 +304,7 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         let options = message.options.unwrap_or_default();
 
         let uri = request.uri().to_string();
+        #[cfg(target_env = "ohos")]
         let url = if uri == "/" {
           webview
             .url()
@@ -311,6 +312,8 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
         } else {
           Url::parse(&uri).expect("invalid IPC request URL")
         };
+        #[cfg(not(target_env = "ohos"))]
+        let url = Url::parse(&uri).expect("invalid IPC request URL");
         let request = InvokeRequest {
           cmd: message.cmd,
           callback: message.callback,

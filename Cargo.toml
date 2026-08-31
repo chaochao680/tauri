@@ -81,4 +81,8 @@ muda = { path = "../muda" }
 tray-icon = { path = "../tray-icon" }
 openharmony-ability = { path = "../openharmony-ability/crates/ability" }
 openharmony-ability-derive = { path = "../openharmony-ability/crates/derive" }
+# window-vibrancy: crates/tauri restores the upstream "0.6" requirement for
+# windows/macos (non-OHOS builds resolve crates.io exactly like upstream); the
+# OHOS-only "0.7" requirement is redirected here to the local fork (0.7.1,
+# matching upstream repo main).
 window-vibrancy = { path = "../window-vibrancy" }

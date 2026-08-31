@@ -77,6 +77,9 @@
           ]
         }
       }
+    },
+    "updater": {
+      "pubkey": ""
     }
   },
   "bundle": {
@@ -133,7 +136,8 @@
       "deviceTypes": {
         "mobile": ["phone", "tablet"],
         "desktop": ["2in1"]
-      }
+      },
+      "continuable": true
     }
   }
 }

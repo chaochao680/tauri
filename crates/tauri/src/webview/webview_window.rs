@@ -1039,9 +1039,25 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
   ///
   /// **macOS** doesn't provide such method and is always enabled by default,
   /// but you still need to add menu item accelerators to use shortcuts.
+  ///
+  /// **OHOS** is enabled by default (ArkWeb native clipboard shortcuts);
+  /// use [`Self::disable_clipboard_access`] to intercept keyboard
+  /// Ctrl+C/X/V/A/Z/Y.
   #[must_use]
   pub fn enable_clipboard_access(mut self) -> Self {
     self.webview_builder = self.webview_builder.enable_clipboard_access();
+    self
+  }
+
+  /// Disables clipboard access for the page.
+  ///
+  /// This is the default on **Linux** and **Windows**. On **OHOS** the default
+  /// is enabled (ArkWeb native clipboard shortcuts); calling this intercepts
+  /// keyboard Ctrl+C/X/V/A/Z/Y so they never reach the webview. See the
+  /// ohos-webview-flag-clipboard spec.
+  #[must_use]
+  pub fn disable_clipboard_access(mut self) -> Self {
+    self.webview_builder = self.webview_builder.disable_clipboard_access();
     self
   }
 
@@ -1153,6 +1169,18 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
   #[must_use]
   pub fn use_https_scheme(mut self, enabled: bool) -> Self {
     self.webview_builder = self.webview_builder.use_https_scheme(enabled);
+    self
+  }
+
+  /// Sets whether to render a transparent drag-drop overlay (OHOS-only).
+  ///
+  /// When enabled, a transparent Stack with `HitTestMode.Transparent` is rendered
+  /// above the Web component to receive ArkUI drag events. Pointer events pass
+  /// through to the Web. See `WebviewBuilder::drag_drop_overlay`.
+  #[cfg(target_env = "ohos")]
+  #[must_use]
+  pub fn drag_drop_overlay(mut self, enabled: bool) -> Self {
+    self.webview_builder = self.webview_builder.drag_drop_overlay(enabled);
     self
   }
 

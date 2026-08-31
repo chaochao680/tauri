@@ -5,10 +5,20 @@
   import { pluginTests } from '../lib/tests/plugins';
   import { dpiTests } from '../lib/tests/dpi';
   import { windowDpiTests } from '../lib/tests/window-dpi';
-  import { windowOpsTests } from '../lib/tests/window-ops';
   import { imageTests } from '../lib/tests/image';
   import { menuTests } from '../lib/tests/menu';
   import { trayTests } from '../lib/tests/tray';
+  import { ohosAdapterTests } from '../lib/tests/ohos-adapter';
+  import { ohosInitTests } from '../lib/tests/ohos-init';
+  import { ohosGapTests } from '../lib/tests/ohos-gap';
+  import { ohosMobilePluginTests } from '../lib/tests/ohos-mobile-plugins';
+  import { ohosScreenshotTests } from '../lib/tests/ohos-screenshot';
+  import { ohosContinuationTests } from '../lib/tests/ohos-continuation';
+  import { windowOpsTests } from '../lib/tests/window-ops';
+  import { windowOpsExtraTests } from '../lib/tests/window-ops-extra';
+  import { driverTests, sideReplayTests, badInputTests } from '../lib/tests/driver-generated';
+  import { faultInjectionTests } from '../lib/tests/fault-injection-generated';
+  import { apiGapTests } from '../lib/tests/api-gap';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow, currentMonitor, cursorPosition, Effect, LogicalSize, PhysicalPosition, PhysicalSize, UserAttentionType } from '@tauri-apps/api/window';
@@ -26,6 +36,7 @@
 
   // Manual test state
   let manualResult = $state('');
+  let revealPublicPath = $state('/storage/media/100/local/files/Docs/IDEProjects');
   let focusWatchActive = $state(false);
   let focusWatchUnlisten = null;
   let focusEvents = $state([]);
@@ -69,7 +80,12 @@
     pressedKeys.clear();
   }
 
-  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...windowOpsTests, ...imageTests, ...menuTests, ...trayTests];
+  // driver 盲调用 + side-effect 复放按 design 放最后（S2 覆盖率套件）。
+  // 门控：仅覆盖率验证构建（cov-build.sh VITE_COVERAGE_TESTS=true）注入覆盖率批次；
+  // VITE_AUTOTEST（自动跑测试）不注入，普通 demo 保持 283 用例标准集。
+  // api-gap 批（S10）压轴：含 app 隐显 / 设置页跳转等破坏性操作，必须在所有批次之后。
+  const coverageTests = import.meta.env.VITE_COVERAGE_TESTS ? [...driverTests, ...sideReplayTests, ...badInputTests, ...faultInjectionTests, ...windowOpsExtraTests, ...apiGapTests] : [];
+  const allTests = [...coreTests, ...pluginTests, ...dpiTests, ...windowDpiTests, ...imageTests, ...menuTests, ...trayTests, ...ohosAdapterTests, ...ohosInitTests, ...ohosGapTests, ...ohosMobilePluginTests, ...ohosScreenshotTests, ...ohosContinuationTests, ...windowOpsTests, ...coverageTests];
   const webview = getCurrentWebview();
 
   async function runAll() {
@@ -98,12 +114,36 @@
     report = r;
     onMessage(`--- Done: ${r.passed} passed, ${r.failed} failed, ${r.skipped} skipped ---`);
     running = false;
+
+    // Flush LLVM coverage data on OHOS instrumented builds. No-op / rejected
+    // silently on non-cov-dump builds (command not registered).
+    try {
+      await invoke('dump_coverage');
+      onMessage('[cov-dump] coverage flushed');
+    } catch (e) {
+      // command absent on non-cov-dump builds — ignore
+    }
   }
 
-  // Auto-run on first mount
+  // Auto-run on first mount — ONLY in the main window, and only in autotest
+  // builds (VITE_AUTOTEST / VITE_COVERAGE_TESTS，由 run-tests.sh / cov-build.sh
+  // 设置)。普通 demo 构建（cargo tauri ohos run）不自动跑，手动点 Run All。
+  // Test sub-windows (clipboard/zoom/https-scheme tests created via
+  // create_ohos_test_webview) load the same index.html, so their onMount
+  // would also fire runAll() and spawn a flood of auto-test sub-windows,
+  // polluting keyboard-interaction verification (Ctrl+C / Ctrl+= intercept).
+  // Gate on the main window label so sub-windows stay static.
   let listenId = 0;
   onMount(async () => {
-    runAll();
+    const isMainWindow = getCurrentWindow().label === 'main';
+    const isAutotest = Boolean(import.meta.env.VITE_AUTOTEST || import.meta.env.VITE_COVERAGE_TESTS);
+    if (isMainWindow && isAutotest) {
+      runAll();
+    } else if (isMainWindow) {
+      onMessage('[TestRunner] autotest disabled (no VITE_AUTOTEST/VITE_COVERAGE_TESTS) — click Run All to test');
+    } else {
+      onMessage(`[TestRunner] sub-window "${getCurrentWindow().label}" — auto-test skipped (static test window)`);
+    }
     // Listen for menu events from Rust (tray + global on_menu_event)
     const myListenId = ++listenId;
     let fireCount = 0;
@@ -203,6 +243,91 @@
       } else {
         manualResult = `Monitor: ${m.size.width}×${m.size.height} @ scale ${m.scaleFactor} | position (${m.position.x}, ${m.position.y}) | name "${m.name ?? ''}"`;
       }
+      onMessage(manualResult);
+    });
+  }
+
+  // setIgnoreCursorEvents smoke test (ohos-window-ignore-cursor-events).
+  // Toggle true → false on the current window: fire-and-forget TSFN bridge
+  // (tao set_ignore_cursor_events → openharmony_ability set_window_touchable →
+  // ArkHelper → WindowManager → win.setWindowTouchable). Rust always returns Ok;
+  // real proof is hilog `grep setWindowTouchable` + visual pass-through. Briefly
+  // setting true lets the user observe the window stop consuming events; false
+  // restores. For full pass-through verification create a Float overlay window.
+  async function manualIgnoreCursorEvents() {
+    await wrapManual('setIgnoreCursorEvents', async () => {
+      const win = getCurrentWindow();
+      // 1. Safe restore first — verifies the TSFN bridge is wired (no throw).
+      await win.setIgnoreCursorEvents(false);
+      manualResult = 'setIgnoreCursorEvents(false) → OK (TSFN bridge wired, events consumed normally)';
+      onMessage(manualResult);
+      // 2. Briefly enable ignore=true (events pass through) so the user can observe.
+      await win.setIgnoreCursorEvents(true);
+      onMessage('setIgnoreCursorEvents(true) → dispatched. For ~3s the window ignores events (pass-through). Click to test, then auto-restore.');
+      await new Promise((r) => setTimeout(r, 3000));
+      // 3. Auto-restore so the window doesn't get stuck non-interactive.
+      await win.setIgnoreCursorEvents(false);
+      manualResult = 'Restored: setIgnoreCursorEvents(false). Check hilog `grep setWindowTouchable` for debug logs.';
+      onMessage(manualResult);
+    });
+  }
+
+  // Full pass-through test on a Float overlay sub-window (manual_tests.md §二十八).
+  // The 3s-toggle smoke above only exercises the TSFN bridge on the main window;
+  // T0/T1 require an overlay ABOVE the main window so click/hover pass-through is
+  // observable. setIgnoreCursorEvents DOES pass label (unlike setBackgroundColor),
+  // so targeting the sub-window via getByLabel works.
+  let overlayIgnoreCursorWin = null;
+  async function manualOverlayIgnoreCursor() {
+    await wrapManual('overlayIgnoreCursor', async () => {
+      const label = 'manual-ignore-cursor-overlay';
+      // Reuse if still open; otherwise create a fresh transparent Float overlay.
+      let win = await WebviewWindow.getByLabel(label);
+      if (!win) {
+        await invoke('create_transparent_window', { windowId: label });
+        win = await WebviewWindow.getByLabel(label);
+      }
+      if (!win) throw new Error('overlay window not created');
+      overlayIgnoreCursorWin = win;
+      await win.setIgnoreCursorEvents(true);
+      manualResult = '✅ overlay 子窗口（"manual-ignore-cursor-overlay"，800×600 Float）已 setIgnoreCursorEvents(true)。\n' +
+        '验证步骤（30 秒窗口）：\n' +
+        '  T0 触摸/点击穿透：点击 overlay 深色卡片覆盖区域 → 点击应落到下层主窗口（主窗口按钮可点/有反应，overlay 不响应不获焦）\n' +
+        '  T1 hover 穿透：鼠标悬停 overlay 覆盖的主窗口按钮 → hover 高亮应生效\n' +
+        '  30 秒后自动恢复 touchable（overlay 重新消费事件）。';
+      onMessage(manualResult);
+      setTimeout(async () => {
+        try {
+          await overlayIgnoreCursorWin?.setIgnoreCursorEvents(false);
+          onMessage('Restored: overlay setIgnoreCursorEvents(false) — overlay consumes events again.');
+        } catch (e) {
+          onMessage('overlay restore failed: ' + e);
+        }
+      }, 30000);
+    });
+  }
+
+  // RunEvent::Resumed manual test (ohos-event-lifecycle-forward).
+  // Listens for the 'tauri://resumed' event, then prompts the user to background
+  // and foreground the app. On OHOS, MainEvent::Start (SHOWN) is forwarded as
+  // Event::Resumed. Returns whether the event fired within the wait window.
+  async function manualEventResumed() {
+    await wrapManual('RunEvent::Resumed', async () => {
+      let fired = false;
+      const unlisten = await listen('tauri://resumed', () => {
+        fired = true;
+      });
+      manualResult = 'Listening for tauri://resumed.\nBackground the app (Home/最小化) then bring it back to foreground.\nWaiting up to 30s...';
+      onMessage(manualResult);
+      // Give the user up to 30s to background/foreground.
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (fired) break;
+      }
+      unlisten();
+      manualResult = fired
+        ? 'PASS: RunEvent::Resumed fired after background→foreground.'
+        : 'FAIL: RunEvent::Resumed did not fire within 30s. (background the app and return to trigger SHOWN→Resumed)';
       onMessage(manualResult);
     });
   }
@@ -577,17 +702,17 @@ Expected behavior:
       const { Menu, Submenu, IconMenuItem } = await import('@tauri-apps/api/menu');
       const { NativeIcon } = await import('@tauri-apps/api/menu/iconMenuItem');
 
-      // 3 mapped variants (should show icons)
+      // 4 mapped variants (should show icons)
       const mapped = [
         { variant: NativeIcon.Add, label: 'Add (mapped: ohos_star)' },
         { variant: NativeIcon.LockLocked, label: 'LockLocked (mapped: ohos_lock)' },
         { variant: NativeIcon.Network, label: 'Network (mapped: ohos_wifi)' },
+        { variant: NativeIcon.Folder, label: 'Folder (mapped: folder)' },
       ];
 
       // unmapped variants (should show no icon)
       const unmapped = [
         { variant: NativeIcon.Home, label: 'Home (unmapped)' },
-        { variant: NativeIcon.Folder, label: 'Folder (unmapped)' },
         { variant: NativeIcon.Share, label: 'Share (unmapped)' },
         { variant: NativeIcon.User, label: 'User (unmapped)' },
         { variant: NativeIcon.Refresh, label: 'Refresh (unmapped)' },
@@ -619,8 +744,9 @@ Expected behavior:
         'Mapped → should show icons for:\n' +
         '  • Add → ★ (ohos_star)\n' +
         '  • LockLocked → 🔒 (ohos_lock)\n' +
-        '  • Network → 📶 (ohos_wifi)\n\n' +
-        'Unmapped → no icons (Home, Folder, Share, etc.)\n\n' +
+        '  • Network → 📶 (ohos_wifi)\n' +
+        '  • Folder → 📁 (folder, no ohos_ prefix)\n\n' +
+        'Unmapped → no icons (Home, Share, etc.)\n\n' +
         'If mapped items show system icons and unmapped show text only → PASS.';
       onMessage(manualResult);
     });
@@ -1219,11 +1345,40 @@ Expected behavior:
       }
       const win = await WebviewWindow.getByLabel(lastCreatedWindowLabel);
       if (!win) throw new Error(`sub-window "${lastCreatedWindowLabel}" not found`);
+      // Self-verifying (2026-08-27): setWindowFocusable has NO visual effect — the
+      // observable criterion is whether the sub-window steals keyboard focus from
+      // the main window when clicked. is_focused reads the app-level HAS_FOCUS flag
+      // (main-window focus); normal sub-window click → false, focusable=false click
+      // → stays true (device-verified A/B). Programmatic setFocus() can't be used
+      // (raiseToAppTop only raises z-order, never transfers focus).
+      const main = getCurrentWindow();
+      const baseline = await main.isFocused();
+      if (!baseline) {
+        manualResult = `主窗口当前未持有焦点(创建子窗口会抢走焦点)。\n请先点击主窗口任意空白区域,再点本按钮。`;
+        onMessage(manualResult);
+        return;
+      }
       await win.setFocusable(false);
       ohosWinState = `setFocusable(false) on "${lastCreatedWindowLabel}" → 3s 后恢复`;
-      manualResult = `setFocusable(false) dispatched on sub-window "${lastCreatedWindowLabel}"。\n\nExpected: 子窗口 3s 内不可聚焦（setWindowFocusable），点击不获取焦点。\n3 秒后自动恢复。`;
+      manualResult = `setFocusable(false) dispatched on sub-window "${lastCreatedWindowLabel}"。\n\n👉 请在 3 秒内点击子窗口一次,等待自动判定...`;
       onMessage(manualResult);
-      setTimeout(() => win.setFocusable(true), 3000);
+      // Poll main-window focus during the 3s window; restore afterwards and judge.
+      let focusStolen = false;
+      const started = Date.now();
+      const poll = setInterval(async () => {
+        if (!(await main.isFocused())) focusStolen = true;
+      }, 250);
+      setTimeout(async () => {
+        clearInterval(poll);
+        try { await win.setFocusable(true); } catch { /* best-effort restore */ }
+        if (focusStolen) {
+          manualResult = `❌ FAIL: 3 秒内主窗口焦点丢失 — 子窗口仍抢走了焦点(setWindowFocusable 未生效)。`;
+        } else {
+          manualResult = `✅ PASS: 3 秒内主窗口焦点保持 — 子窗口拒绝了焦点点击(setWindowFocusable 生效,无视觉变化属正常语义)。\n（前提:期间确实点击过子窗口;点其他窗口/桌面也会导致 FAIL）`;
+        }
+        ohosWinState = `setFocusable(true) restored on "${lastCreatedWindowLabel}"`;
+        onMessage(manualResult);
+      }, 3000);
     });
   }
 
@@ -1802,6 +1957,178 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     });
   }
 
+  // ─── OHOS Adapter Manual Tests ───
+  async function manualOhosPrint() {
+    await wrapManual('webview.print', async () => {
+      // window.print() is injected by tauri's print.js init script (plugin:webview|print
+      // → wry OHOS print → createPdf → @ohos.print). Webview class has no print method;
+      // the global window.print shim is the correct entry point on macOS/iOS/OHOS.
+      try {
+        await window.print();
+        manualResult = 'window.print() called — check system print dialog (may take a few seconds for createPdf)';
+      } catch (e) {
+        manualResult = `print() error: ${e}`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosMonitorFromPoint() {
+    await wrapManual('monitor_from_point', async () => {
+      const { currentMonitor, monitorFromPoint } = await import('@tauri-apps/api/window');
+      const m = await currentMonitor();
+      if (!m) { manualResult = 'No monitor'; onMessage(manualResult); return; }
+      const w = m.size.width, h = m.size.height;
+      // OHOS single-display boundary check (spec ohos-monitor-real-values):
+      // points inside the half-open rect [0,w) x [0,h) return Some(monitor), else null.
+      const cases = [
+        ['(100,200) 屏内', 100, 200, true],
+        [`(${w - 1},${h - 1}) 右下角内`, w - 1, h - 1, true],
+        [`(${w},${h}) 刚好越界`, w, h, false],
+        ['(-1,0) 负坐标', -1, 0, false],
+        ['(99999,0) 超远', 99999, 0, false]
+      ];
+      const lines = [`monitor size: ${w}x${h} (DisplayManager 物理像素)`, ''];
+      let allPass = true;
+      for (const [label, x, y, expectSome] of cases) {
+        let got = '', pass = false;
+        try {
+          const r = await monitorFromPoint(x, y);
+          got = r ? 'Some(monitor)' : 'null';
+          pass = expectSome ? !!r : !r;
+        } catch (e) {
+          got = `err: ${e}`;
+        }
+        if (!pass) allPass = false;
+        lines.push(`${pass ? '✅' : '❌'} ${label} → ${got}（预期 ${expectSome ? 'Some' : 'None'}）`);
+      }
+      lines.push('', allPass ? 'ALL PASS ✅' : 'SOME FAILED ❌');
+      manualResult = lines.join('\n');
+      onMessage(manualResult);
+    });
+  }
+
+  // OHOS: display refresh rate probe (Rust-only value; JS Monitor API has no
+  // refreshRate on any platform). Rust reads DisplayManager via NDK (same
+  // source as tao video_modes); rAF measurement is a webview-side cross-check.
+  async function manualOhosDisplayRefreshRate() {
+    await wrapManual('display.refresh_rate', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      let probe;
+      try {
+        probe = await invoke('probe_display_refresh_rate');
+      } catch (e) {
+        manualResult = `probe_display_refresh_rate error: ${e}`;
+        onMessage(manualResult);
+        return;
+      }
+      const frames = await new Promise((resolve) => {
+        let count = 0;
+        const start = performance.now();
+        const tick = () => {
+          count++;
+          if (performance.now() - start < 1000) requestAnimationFrame(tick);
+          else resolve(count);
+        };
+        requestAnimationFrame(tick);
+      });
+      manualResult = `${probe}\n` +
+        `webview rAF measured: ~${frames} fps (LTPO may throttle when idle)\n` +
+        `Note: refresh rate is Rust-only (tao video_modes source), not in JS Monitor API.`;
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosDialogError() {
+    await wrapManual('dialog.error degrade', async () => {
+      manualResult = 'dialog::error() is an internal runtime function.\n' +
+        'On OHOS it degrades to log::error! (no panic).\n' +
+        'The function is only called under cfg(windows) in practice.\n' +
+        'To verify: check hilog for "[dialog::error]" entries after\n' +
+        'triggering a runtime error path. App should NOT crash.';
+      onMessage(manualResult);
+    });
+  }
+
+  // OHOS adapter: create test webviews with specific flags
+  async function manualOhosTestClipboardOff() {
+    await wrapManual('clipboard=false', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-cb-off-' + Date.now(),
+        label: 'Clipboard OFF test',
+        clipboard: false,
+      });
+      manualResult = 'Test webview created with clipboard=false.\nSelect text + Ctrl+C → clipboard should NOT change.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosTestClipboardOn() {
+    await wrapManual('clipboard=true', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-cb-on-' + Date.now(),
+        label: 'Clipboard ON test',
+        clipboard: true,
+      });
+      manualResult = 'Test webview created with clipboard=true.\nSelect text + Ctrl+C → clipboard should change.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosTestZoomOff() {
+    await wrapManual('zoom_hotkeys=false', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-zoom-off-' + Date.now(),
+        label: 'Zoom OFF test',
+        zoomHotkeys: false,
+      });
+      manualResult = 'Test webview created with zoom_hotkeys=false.\nCtrl+= / Ctrl+- / Ctrl+0 → page zoom should NOT change.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosTestZoomOn() {
+    await wrapManual('zoom_hotkeys=true', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-zoom-on-' + Date.now(),
+        label: 'Zoom ON test',
+        zoomHotkeys: true,
+      });
+      manualResult = 'Test webview created with zoom_hotkeys=true.\nCtrl+= / Ctrl+- / Ctrl+0 → page zoom should change.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosTestHttpsScheme() {
+    await wrapManual('https_scheme=true', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-https-' + Date.now(),
+        label: 'HTTPS Scheme test',
+        httpsScheme: true,
+      });
+      manualResult = 'Test webview created with use_https_scheme=true.\nInit script logs isSecureContext / crypto.subtle / external+subresource fetch probes to hilog (ARKWEB-CONSOLE).\nJudge: window renders + [https-scheme] lines.';
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOhosTestDragOverlay() {
+    await wrapManual('drag_drop_overlay=true', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('create_ohos_test_webview', {
+        windowId: 'test-drag-' + Date.now(),
+        label: 'Drag Overlay test',
+        dragDropOverlay: true,
+      });
+      manualResult = 'Test webview created with drag_drop_overlay=true.\n1. Drag a file from 文件管理器 into the window → hilog [DRAG-TEST] Enter/Over/Drop(paths)/Leave.\n2. Click / scroll / select text in the window → pointer must still work (passthrough).';
+      onMessage(manualResult);
+    });
+  }
+
   // ─── Autostart Manual Tests ───
   async function manualAutostartIsEnabled() {
     await wrapManual('autostart.isEnabled', async () => {
@@ -1864,6 +2191,18 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     const unlisten = await listen('ua-test-result', (event) => {
       const { windowId, userAgent } = event.payload;
       const msg = `[UA-TEST] ${windowId}: ${userAgent}`;
+      console.log(msg);
+      onMessage(msg);
+    });
+    return unlisten;
+  });
+
+  // Listen for OHOS print-job terminal states (succeed/fail/cancel/block) emitted
+  // from Rust (openharmony-ability print-state channel → "ohos-print-state" event).
+  onMount(async () => {
+    const unlisten = await listen('ohos-print-state', (event) => {
+      const { id, state, error } = event.payload;
+      const msg = `[PRINT-STATE] webview ${id}: ${state}${error ? ` — ${error}` : ''}`;
       console.log(msg);
       onMessage(msg);
     });
@@ -1961,7 +2300,9 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
         return;
       }
 
-      // Render snapshot to canvas for visual verification
+      // Render snapshot to canvas for visual verification.
+      // The backend returns a base64 PNG (not raw RGBA — web_page_snapshot omits
+      // the pixel buffer for NAPI efficiency), so decode via Image + drawImage.
       snapshotWidth = result.width;
       snapshotHeight = result.height;
       hasSnapshot = true;
@@ -1971,11 +2312,12 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
 
       if (canvasEl) {
         const ctx = canvasEl.getContext('2d');
-        const imageData = new ImageData(new Uint8ClampedArray(result.rgba), result.width, result.height);
-        ctx.putImageData(imageData, 0, 0);
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0, result.width, result.height);
+        img.src = `data:image/png;base64,${result.png_base64}`;
       }
 
-      manualResult = `Snapshot captured: ${result.width}×${result.height}, rgba_len=${result.rgba_len}\n` +
+      manualResult = `Snapshot captured: ${result.width}×${result.height}, base64 ${result.png_base64?.length ?? 0} chars\n` +
         `Check: canvas below should match the current WebView content.\n` +
         `If visual matches → PASS.`;
       onMessage(manualResult);
@@ -1986,6 +2328,9 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
   async function manualNewWindowAllow() {
     await wrapManual('newWindowAllow', async () => {
       await invoke('set_deny_new_window', { deny: false });
+      // Explicitly reset create flag: a prior Create-button press sets it true,
+      // and Allow must open the in-page dialog (not a Float OS window).
+      await invoke('set_create_new_window', { create: false });
       window.open('https://example.com/manual-allow-test', '_blank');
       manualResult = 'Allow mode: dialog should appear with ✕ close button in title bar.\n' +
         'Verify:\n' +
@@ -2122,6 +2467,355 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
     });
   }
 
+  // Notification action button (onAction emit/Channel, manual_tests.md §三十二 ③④).
+  // One button covers warm-start (background → tap action) and cold-start
+  // (kill app → tap action relaunches it). The listener stays registered so
+  // the callback survives backgrounding.
+  let notificationActionListener = null;
+  let notificationActionCount = 0;
+  async function manualNotificationAction() {
+    await wrapManual('notificationAction', async () => {
+      const { onAction, registerActionTypes, sendNotification, isPermissionGranted } = await import('@tauri-apps/plugin-notification');
+      const granted = await isPermissionGranted();
+      if (!granted) {
+        manualResult = '⚠️ 通知权限未授予。请先点击 "Request Permission" 按钮请求权限。';
+        onMessage(manualResult);
+        return;
+      }
+      await registerActionTypes([{
+        id: 'manual-action-type',
+        actions: [{ id: 'manual-action', title: 'Tap Me' }],
+      }]);
+      // Re-register: drop the previous listener and reset the counter.
+      notificationActionListener?.unregister();
+      notificationActionListener = null;
+      notificationActionCount = 0;
+      notificationActionListener = await onAction((n) => {
+        notificationActionCount += 1;
+        const payload = JSON.stringify(n);
+        onMessage(`[onAction] fired (${notificationActionCount}): ${payload}`);
+        const actionIdMatch = n.actionId === 'manual-action';
+        manualResult = `✅ onAction 回调触发（第 ${notificationActionCount} 次）：${payload}\n` +
+          `断言：id=${n.id}, actionId="${n.actionId}"` +
+          `${actionIdMatch ? ' === "manual-action" ✅' : ' ≠ "manual-action" ❌'}`;
+      });
+      sendNotification({
+        id: 9001,
+        title: 'Action 手动测试',
+        body: '展开通知点击 "Tap Me" 按钮',
+        actionTypeId: 'manual-action-type',
+      });
+      manualResult = '✅ 已发送带 actionTypeId 的通知（id=9001）。验证步骤：\n' +
+        '  热启动：切应用到后台 → 通知中心展开本通知 → 点 "Tap Me" → 应用回前台且回调触发（actionId=manual-action）\n' +
+        '  冷启动：任务管理器结束 com.tauri.api → 点通知 "Tap Me" → 应用被拉起（冷启动 emit 早于 webview 注册监听，回调预期不触发，以应用拉起+hilog 派发为准）';
+      onMessage('Action notification sent (id=9001, actionTypeId=manual-action-type)');
+    });
+  }
+
+  // Notification received callback (onNotificationReceived, manual_tests.md §三十).
+  // Registers a listener, sends a notification, waits up to 15s for the callback.
+  // OHOS PLATFORM LIMITATION (verified in source, NOT a timing issue): there is no
+  // three-party-accessible subscription API for "notification received" events —
+  // Plugin.ets:633 "no corresponding OHOS subscription API; registration succeeds
+  // but no events will be delivered". notificationManager.subscribe is @systemapi
+  // (needs NOTIFICATION_CONTROLLER, system_basic, three-party apps not eligible),
+  // so the implementation never subscribes and there is no event source driving
+  // the listener channel. fired=false is the EXPECTED terminal state, not a
+  // harness failure. Listener stays registered so the path can be re-tested if
+  // the platform ever exposes it.
+  let notificationReceivedListener = null;
+  async function manualNotificationReceived() {
+    await wrapManual('notificationReceived', async () => {
+      const { onNotificationReceived, sendNotification, isPermissionGranted } = await import('@tauri-apps/plugin-notification');
+      const granted = await isPermissionGranted();
+      if (!granted) {
+        manualResult = '⚠️ 通知权限未授予。请先点击 "Request Permission" 按钮请求权限。';
+        onMessage(manualResult);
+        return;
+      }
+      notificationReceivedListener?.unregister();
+      notificationReceivedListener = null;
+      let fired = false;
+      notificationReceivedListener = await onNotificationReceived((n) => {
+        fired = true;
+        const payload = JSON.stringify(n);
+        onMessage(`[onNotificationReceived] fired: ${payload}`);
+        manualResult = `✅ onNotificationReceived 回调触发：${payload}`;
+      });
+      sendNotification({
+        id: 9002,
+        title: 'onNotificationReceived 手动测试',
+        body: '回调应在通知投递后 15s 内触发',
+      });
+      for (let i = 0; i < 15 && !fired; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (!fired) {
+        manualResult = '⏳ 15s 内未触发 onNotificationReceived 回调（OHOS 平台限制：无三方可用的通知到达订阅 API，回调预期不投递——记录形态。见 Plugin.ets:633 & manual_tests.md §三十）';
+      }
+      onMessage(`onNotificationReceived manual: fired=${fired}`);
+    });
+  }
+
+  // ─── Accessibility Manual Tests ───
+  async function manualFontScale() {
+    await wrapManual('fontScale', async () => {
+      const { getFontScale } = await import('@tauri-apps/plugin-accessibility');
+      const scale = await getFontScale();
+      manualResult = `getFontScale() → ${scale}\n\n` +
+        '验证步骤：\n' +
+        '  1. 记录当前值（默认 1.0）\n' +
+        '  2. 系统设置 → 显示和亮度 → 字体大小与显示大小，调大字号\n' +
+        '  3. 返回应用重新点击本按钮\n' +
+        '  4. 断言：第二次返回值 > 第一次（fontSizeScale 跟随系统设置变化）';
+      onMessage(`fontScale = ${scale}`);
+    });
+  }
+
+  async function manualScreenReaderQueries() {
+    await wrapManual('screenReaderQueries', async () => {
+      const { isScreenReaderEnabled, isTouchExploreEnabled } = await import('@tauri-apps/plugin-accessibility');
+      const sr = await isScreenReaderEnabled();
+      const te = await isTouchExploreEnabled();
+      manualResult = `isScreenReaderEnabled() → ${sr}\nisTouchExploreEnabled() → ${te}\n\n` +
+        '验证步骤：\n' +
+        '  1. 设置 → 辅助功能（无障碍），记录屏幕阅读器开关状态\n' +
+        '  2. 对照上方查询值与系统开关是否一致\n' +
+        '  3. 切换系统开关后重新点击本按钮，断言查询值跟随变化\n' +
+        '（注：查询零权限拒绝——真机实测 ACCESSIBILITY 只读不设防）';
+      onMessage(`screenReader=${sr}, touchExplore=${te}`);
+    });
+  }
+
+  async function manualAccessibilityStateChange() {
+    await wrapManual('accessibilityStateChange', async () => {
+      const { onAccessibilityStateChange } = await import('@tauri-apps/plugin-accessibility');
+      let events = 0;
+      let last = '(none)';
+      const unlisten = await onAccessibilityStateChange((enabled) => {
+        events += 1;
+        last = String(enabled);
+      });
+      // Collect state-change events for up to 20s while the tester toggles the reader.
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        manualResult = `onAccessibilityStateChange 已注册，等待事件… (${i + 1}s/20s)\n\n` +
+          '验证步骤：设置 → 辅助功能，开关屏幕阅读器\n\n' +
+          `已收到 ${events} 次状态事件\n最近一次: ${last}`;
+      }
+      unlisten();
+      manualResult = (events > 0
+        ? `✅ 状态事件链路验证通过：共 ${events} 次事件，最近一次 enabled=${last}\n` +
+          '（bridge subscribe → Observer → Rust emit → JS listen 端到端）'
+        : '⚠️ 20s 内未收到状态事件。订阅注册本身已实锤（hilog Observer has subscribed）；\n' +
+          '请确认期间确实开关了系统屏幕阅读器');
+      onMessage(`accessibility state change: ${events} events, last=${last}`);
+    });
+  }
+
+  // ─── Geolocation Manual Tests ───
+  async function manualGeolocationPermission() {
+    await wrapManual('geolocationPermission', async () => {
+      const { requestPermissions } = await import('@tauri-apps/plugin-geolocation');
+      const { invoke } = await import('@tauri-apps/api/core');
+      // 1) App-level permission dialog (LOCATION + APPROXIMATELY_LOCATION).
+      const status = await requestPermissions();
+      // 2) Jump to system location settings for the master switch
+      //    (BusinessError 3301100 gate — app permission alone is not enough).
+      let settings = '未跳转';
+      try {
+        await invoke('plugin:geolocation|open_location_settings');
+        settings = '已请求跳转（设置页应已打开）';
+      } catch (e) {
+        settings = `跳转失败: ${String(e)}`;
+      }
+      manualResult = `requestPermissions() → ${JSON.stringify(status)}\n` +
+        `open_location_settings() → ${settings}\n` +
+        '验证步骤：\n' +
+        '  1. 如系统弹出权限对话框，选择"允许"（应用级位置权限）\n' +
+        '  2. 设置页打开后，开启"定位服务"总开关\n' +
+        '  3. 返回本应用，点击 "Watch Position (emit)" 按钮进行功能测试';
+      onMessage('geolocation permission + location settings opened');
+    });
+  }
+
+  async function manualGeolocationWatch() {
+    await wrapManual('geolocationWatch', async () => {
+      const { watchPosition, clearWatch } = await import('@tauri-apps/plugin-geolocation');
+      let count = 0;
+      let last = '(none)';
+      const channelId = await watchPosition(
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 },
+        (location, error) => {
+          if (error) {
+            last = `error: ${error}`;
+          } else if (location) {
+            count += 1;
+            last = `lat=${location.coords.latitude}, lng=${location.coords.longitude}, acc=${location.coords.accuracy}`;
+          }
+        }
+      );
+      // Collect Channel-emit events for up to 10s, updating the result live.
+      for (let i = 0; i < 10; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        manualResult = `watchPosition() 已注册 (channelId=${channelId})，等待位置事件… (${i + 1}s/10s)\n` +
+          `已收到 ${count} 次位置更新\n最近一次: ${last}`;
+      }
+      await clearWatch(channelId);
+      manualResult = '✅ watchPosition/clearWatch 链路完成。\n' +
+        `共收到 ${count} 次位置更新（Channel emit 事件）\n最近一次: ${last}\n\n` +
+        (count > 0
+          ? '✅ emit 端到端链路验证通过：locationChange → Plugin.emit → NAPI → Channel → JS 回调'
+          : '⚠️ 未收到位置事件（设备未产生位置 fix）。注册/注销链路已验证；' +
+            '事件流验证需设备能产生位置 fix（Wi-Fi/网络定位）');
+      onMessage(`geolocation watch: ${count} events, last=${last}`);
+    });
+  }
+
+  async function manualGeolocationCurrent() {
+    await wrapManual('geolocationCurrent', async () => {
+      const { getCurrentPosition } = await import('@tauri-apps/plugin-geolocation');
+      try {
+        const pos = await getCurrentPosition({ enableHighAccuracy: false, timeout: 15000, maximumAge: 0 });
+        const c = pos.coords;
+        manualResult = '✅ getCurrentPosition() 返回：\n' +
+          `lat=${c.latitude}, lng=${c.longitude}, acc=${c.accuracy}, alt=${c.altitude}\n` +
+          `timestamp=${pos.timestamp}\n` +
+          '断言：latitude/longitude 为合理数值（Wi-Fi/网络定位）';
+        onMessage(`getCurrentPosition: ${c.latitude},${c.longitude}`);
+      } catch (e) {
+        manualResult = `❌ getCurrentPosition() reject：${e}\n` +
+          'PC 无 GPS 时可能超时 reject——记录形态即可（manual_tests §三十一 geolocation 备注）';
+        onMessage(manualResult);
+      }
+    });
+  }
+
+  // ─── Mobile Native Plugins Manual Tests (manual_tests.md §三十一) ───
+  // These five plugins have no JS package dependency in examples/api — raw
+  // invoke() against the plugin commands, same convention as
+  // ohos-mobile-plugins.ts autotests.
+  async function manualBarcodeScan() {
+    await wrapManual('barcodeScan', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const perm = await invoke('plugin:barcode-scanner|check_permissions');
+      let camera = perm?.camera;
+      if (camera !== 'granted') {
+        const r = await invoke('plugin:barcode-scanner|request_permissions');
+        camera = r?.camera;
+      }
+      if (camera !== 'granted') {
+        manualResult = `⚠️ 相机权限未授予（${camera}），scan 无法拉起相机。`;
+        onMessage(manualResult);
+        return;
+      }
+      try {
+        const result = await invoke('plugin:barcode-scanner|scan');
+        manualResult = '✅ scan() 返回：\n' +
+          `content=${result?.content}\nformat=${result?.format}\n` +
+          '断言：content 为二维码实际内容，相机扫码 UI 正常拉起与关闭';
+        onMessage(`barcode scan: ${result?.content} (${result?.format})`);
+      } catch (e) {
+        manualResult = `❌ scan() reject：${e}\n（无摄像头设备 reject 且报错清晰也属预期结果）`;
+        onMessage(manualResult);
+      }
+    });
+  }
+
+  async function manualBarcodeVibrate() {
+    await wrapManual('barcodeVibrate', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      try {
+        await invoke('plugin:barcode-scanner|vibrate');
+        manualResult = '✅ vibrate() resolve\n断言：设备振动 100ms（@ohos.vibrator.startVibration，同 haptics 路径）';
+        onMessage('barcode vibrate: 设备振动');
+      } catch (e) {
+        manualResult = `❌ vibrate() reject：${e}\n（无马达设备 reject 也属预期结果）`;
+        onMessage(manualResult);
+      }
+    });
+  }
+
+  async function manualBiometricAuth() {
+    await wrapManual('biometricAuth', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const status = await invoke('plugin:biometric|status');
+      const statusStr = JSON.stringify(status);
+      if (!status?.isAvailable) {
+        manualResult = `ℹ️ biometric status：${statusStr}\n设备无生物识别硬件/未录入指纹（isAvailable=false，PC 预期形态，认证 UI 不会拉起）。`;
+        onMessage(manualResult);
+        return;
+      }
+      try {
+        await invoke('plugin:biometric|authenticate', { reason: '手动测试认证' });
+        manualResult = `✅ authenticate() resolve（认证成功）。\nstatus=${statusStr}`;
+        onMessage('biometric authenticate: success');
+      } catch (e) {
+        manualResult = `❌ authenticate() reject（取消/失败）：${e}\nstatus=${statusStr}\n断言：errorCode 清晰，系统认证 UI 正常显示过`;
+        onMessage(manualResult);
+      }
+    });
+  }
+
+  async function manualNfc() {
+    await wrapManual('nfc', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const r = await invoke('plugin:nfc|is_available');
+      let scanResult = '';
+      try {
+        await invoke('plugin:nfc|scan');
+        scanResult = 'scan resolve（意外：当前设计应 reject）';
+      } catch (e) {
+        scanResult = `scan reject（预期）：${e}`;
+      }
+      manualResult = `is_available → ${JSON.stringify(r)}\n${scanResult}\n` +
+        '断言：is_available 返回布尔；scan 报错信息含能力说明（未实现，设计决策）';
+      onMessage(`nfc isAvailable=${JSON.stringify(r)}`);
+    });
+  }
+
+  async function manualHaptics() {
+    await wrapManual('haptics', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const attempts = [
+        ['vibrate(200)', () => invoke('plugin:haptics|vibrate', { duration: 200 })],
+        ['impactFeedback(Medium)', () => invoke('plugin:haptics|impact_feedback', { style: 'Medium' })],
+        ['notificationFeedback(Success)', () => invoke('plugin:haptics|notification_feedback', { type: 'Success' })],
+        ['selectionFeedback()', () => invoke('plugin:haptics|selection_feedback')],
+      ];
+      const results = [];
+      for (const [name, fn] of attempts) {
+        try { await fn(); results.push(`${name}: resolve ✅`); } catch (e) { results.push(`${name}: reject ${e}`); }
+      }
+      manualResult = results.join('\n') +
+        '\n断言：无马达设备各命令 BusinessError 801 → skip（路由链已验证）；有马达设备产生对应振动';
+      onMessage(results.join(' | '));
+    });
+  }
+
+  async function manualHuaweiAccount() {
+    await wrapManual('huaweiAccount', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      let loginResult;
+      try {
+        const r = await invoke('plugin:huawei-account|login');
+        loginResult = '✅ login() resolve: ' + JSON.stringify(r);
+      } catch (e) {
+        loginResult = `❌ login() reject：${e}\n（需 AppGallery Connect 配置 + 设备已登录华为账号；缺配置时记录报错形态）`;
+      }
+      let silentResult;
+      try {
+        silentResult = 'silent_login resolve: ' + JSON.stringify(await invoke('plugin:huawei-account|silent_login'));
+      } catch (e) {
+        silentResult = `silent_login reject：${e}`;
+      }
+      try { await invoke('plugin:huawei-account|logout'); } catch (e) { /* ignore */ }
+      manualResult = `${loginResult}\n${silentResult}\n(logout 已调用)`;
+      onMessage(manualResult);
+      onMessage('huawei-account flow attempted');
+    });
+  }
+
   // ─── Sentry Manual Tests ───
   async function manualSentryJsError() {
     await wrapManual('sentryJsError', async () => {
@@ -2157,8 +2851,8 @@ initial=${report.initial}, after_open=${report.after_open}, after_close=${report
       } catch (e) {
         const msg = String(e);
         if (msg.includes('not found') || msg.includes('command')) {
-          // Release build: sentry_test_panic is gated with #[cfg(debug_assertions)]
-          manualResult += '\n\n⚠️ sentry_test_panic not available — only compiled in debug builds.';
+          // Command not registered (shouldn't happen — sentry_test_panic has no cfg gate)
+          manualResult += '\n\n⚠️ sentry_test_panic command not found.';
         } else {
           // Expected: IPC will fail because the thread panicked
           manualResult += `\n\nPanic triggered. IPC error (expected): ${e}`;
@@ -2432,8 +3126,36 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       const dir = await appCacheDir();
       const filePath = await join(dir, `opener-reveal-${Date.now()}.txt`);
       await writeFile(filePath, new TextEncoder().encode('opener reveal test'));
-      await revealItemInDir(filePath);
-      manualResult = `revealItemInDir(${filePath}) called.\nCheck: file manager opens and highlights the file.\nFile left at: ${filePath}`;
+      try {
+        await revealItemInDir(filePath);
+        manualResult = `revealItemInDir(${filePath}) → FM opened (UNEXPECTED for a sandbox path).\nFile left at: ${filePath}`;
+      } catch (e) {
+        manualResult = `revealItemInDir(${filePath}) → documented error (expected):\n${String(e)}\n→ PASS if the error mentions "app-sandbox paths" / platform limitation.\nFile left at: ${filePath}`;
+      }
+      onMessage(manualResult);
+    });
+  }
+
+  async function manualOpenerRevealPublic() {
+    await wrapManual('opener.revealItemInDir (public dir)', async () => {
+      const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
+      const target = revealPublicPath.trim();
+      if (!target) {
+        manualResult = 'Enter a real filesystem path first (default points under Docs).';
+        onMessage(manualResult);
+        return;
+      }
+      // The path must EXIST on device (reveal_item_in_dir canonicalizes it).
+      // Default is the Docs/IDEProjects directory: its parent (Docs) is revealed
+      // → FM opens "我的电脑 > 文档". A file path under Docs works the same way
+      // (its parent dir is revealed). OHOS cannot highlight a specific file —
+      // only the parent directory is opened (platform limitation).
+      try {
+        await revealItemInDir(target);
+        manualResult = `revealItemInDir(${target}) called.\nCheck: FM opens the PARENT directory of the entered path (OHOS cannot highlight a specific file).\nNo error → PASS.`;
+      } catch (e) {
+        manualResult = `revealItemInDir(${target}) FAILED:\n${String(e)}`;
+      }
       onMessage(manualResult);
     });
   }
@@ -2529,19 +3251,6 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
     }}>
       Clear Console
     </button>
-    <button class="btn" onclick={async () => {
-      try {
-        const closed = await invoke('close_all_test_windows');
-        const list = Array.isArray(closed) ? closed : [];
-        onMessage(list.length > 0
-          ? `Closed ${list.length} test window(s): ${list.join(', ')}`
-          : 'No test windows to close (only main remains)');
-      } catch (e) {
-        onMessage(`Failed to close test windows: ${e}`);
-      }
-    }}>
-      Close All Test Windows
-    </button>
   </div>
 
   {#if report}
@@ -2575,6 +3284,8 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         {focusWatchActive ? 'Stop watching focus' : 'Watch onFocusChanged'}
       </button>
       <button class="btn" onclick={manualMonitor}>currentMonitor</button>
+      <button class="btn" onclick={manualIgnoreCursorEvents}>setIgnoreCursorEvents (3s toggle)</button>
+      <button class="btn" onclick={manualOverlayIgnoreCursor}>Overlay Ignore Cursor (穿透, §二十八)</button>
       <button class="btn" onclick={manualAppCacheDir}>appCacheDir</button>
       <button class="btn" onclick={manualWindowDpi}>Window DPI (resize/drag to verify)</button>
       <button class="btn" onclick={manualOsInfo}>OS Info (platform/type/version)</button>
@@ -2806,6 +3517,26 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <button class="btn" onclick={manualDialogMessageError}>Dialog.message (error)</button>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">OHOS Adapter Manual Tests</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualOhosPrint}>WebView Print</button>
+        <button class="btn" onclick={manualOhosMonitorFromPoint}>monitorFromPoint (边界测试)</button>
+        <button class="btn" onclick={manualOhosDisplayRefreshRate}>Display Refresh Rate</button>
+        <button class="btn" onclick={manualOhosDialogError}>Dialog Error (degrade)</button>
+        <button class="btn" onclick={manualEventResumed}>RunEvent::Resumed (background→foreground)</button>
+      </div>
+      <div class="flex gap-2 flex-wrap mt-2">
+        <button class="btn" onclick={manualOhosTestClipboardOff}>Clipboard OFF</button>
+        <button class="btn" onclick={manualOhosTestClipboardOn}>Clipboard ON</button>
+      </div>
+      <div class="flex gap-2 flex-wrap mt-2">
+        <button class="btn" onclick={manualOhosTestZoomOff}>Zoom OFF</button>
+        <button class="btn" onclick={manualOhosTestZoomOn}>Zoom ON</button>
+        <button class="btn" onclick={manualOhosTestHttpsScheme}>HTTPS Scheme</button>
+        <button class="btn" onclick={manualOhosTestDragOverlay}>Drag Overlay (§二十六)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
       <h5 class="my-1 text-xs text-gray-500">Autostart Manual Tests</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualAutostartIsEnabled}>isEnabled()</button>
@@ -2863,6 +3594,35 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
         <button class="btn" onclick={manualNotificationSend}>Send Notification</button>
         <button class="btn" onclick={manualNotificationChannel}>Send With Channel</button>
         <button class="btn" onclick={manualNotificationPermission}>Request Permission</button>
+        <button class="btn" onclick={manualNotificationAction}>Send With Action Button (onAction)</button>
+        <button class="btn" onclick={manualNotificationReceived}>Send & Listen (onNotificationReceived)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Accessibility Manual Tests (fontScale/屏幕阅读器)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualFontScale}>Font Scale 查询</button>
+        <button class="btn" onclick={manualScreenReaderQueries}>Screen Reader 查询对照</button>
+        <button class="btn" onclick={manualAccessibilityStateChange}>State Change Watch (20s)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Geolocation Manual Tests (emit/Channel 验证)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualGeolocationPermission}>请求权限 + 打开定位设置</button>
+        <button class="btn" onclick={manualGeolocationCurrent}>Get Current Position</button>
+        <button class="btn" onclick={manualGeolocationWatch}>Watch Position (emit)</button>
+      </div>
+    </div>
+    <div class="mt-2 pt-2 border-t-1 border-solid border-code">
+      <h5 class="my-1 text-xs text-gray-500">Mobile Native Plugins Manual Tests (barcode/biometric/nfc/haptics/huawei-account)</h5>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn" onclick={manualBarcodeScan}>Barcode Scan (camera)</button>
+        <button class="btn" onclick={manualBarcodeVibrate}>Barcode Vibrate (扫码振动反馈)</button>
+        <button class="btn" onclick={manualBiometricAuth}>Biometric Authenticate</button>
+        <button class="btn" onclick={manualNfc}>NFC isAvailable + scan</button>
+        <button class="btn" onclick={manualHaptics}>Haptics (vibrate/impact/notification/selection)</button>
+        <button class="btn" onclick={manualHuaweiAccount}>Huawei Account (login/silent/logout)</button>
       </div>
     </div>
     <div class="mt-2 pt-2 border-t-1 border-solid border-code">
@@ -2895,7 +3655,13 @@ Mutex released, no cascade deadlock: ${ok ? 'PASS ✅' : 'FAIL ❌'}`;
       <h5 class="my-1 text-xs text-gray-500">Plugins Manual Tests (opener/store/upload/localhost)</h5>
       <div class="flex gap-2 flex-wrap">
         <button class="btn" onclick={manualOpenerOpenPath}>Opener openPath (open file)</button>
-        <button class="btn" onclick={manualOpenerReveal}>Opener revealItemInDir</button>
+        <button class="btn" onclick={manualOpenerReveal}>Opener revealItemInDir (sandbox→err)</button>
+        <div class="flex items-center gap-2">
+          <input class="btn text-left font-mono text-xs" style="min-width:24rem"
+                 bind:value={revealPublicPath}
+                 placeholder="/storage/media/100/local/files/Docs/..." />
+          <button class="btn" onclick={manualOpenerRevealPublic}>Opener revealItemInDir (public dir→FM)</button>
+        </div>
         <button class="btn" onclick={manualOpenerOpenUrl}>Opener openUrl (open browser)</button>
         <button class="btn" onclick={manualStorePersist}>Store Persist (set+save)</button>
         <button class="btn" onclick={manualStoreVerify}>Store Verify (after restart)</button>
