@@ -788,7 +788,8 @@ pub fn update_entry_package(project_dir: &Path, plugins: &[PluginMeta]) -> Resul
 }
 
 /// Idempotently sync the plugin imports and `STATIC_PLUGINS` registrations in
-/// an entry module's `EntryAbility.ets` with the detected plugin set.
+/// an entry module's `EntryAbility.ets` with the detected plugin set, and the
+/// `@ohos-rs/ability` bridge plugin factories with the canonical list.
 ///
 /// That file is generated once at `ohos init` from the handlebars template
 /// (`{{#each plugins}}` loops) and, like the rest of `gen/`, is never
@@ -797,6 +798,12 @@ pub fn update_entry_package(project_dir: &Path, plugins: &[PluginMeta]) -> Resul
 /// build-profile/oh-package, but never reach the ArkTS plugin registry and
 /// fail at runtime with "Plugin not found: <name>". This backfills the two
 /// generated blocks the same way the template would have.
+///
+/// Bridge-backed plugins fail harder: a Rust-side bridge declaration without
+/// the matching ArkTS factory in `bridgePlugins` aborts bridge session setup,
+/// freezing the whole app — not just the missing plugin — so the canonical
+/// factory list is backfilled the same additive way (see
+/// [`sync_bridge_plugin_factories`]).
 ///
 /// Additive-only: existing lines (including hand edits) are never rewritten or
 /// removed; entries for plugins that are no longer detected are left in place.
@@ -878,6 +885,8 @@ pub fn update_entry_ability(
     }
   }
 
+  sync_bridge_plugin_factories(&mut lines, entry_module);
+
   let mut updated = lines.join("\n");
   if !updated.ends_with('\n') {
     updated.push('\n');
@@ -886,6 +895,192 @@ pub fn update_entry_ability(
     .with_context(|| format!("failed to write {}", ability_path.display()))?;
 
   Ok(())
+}
+
+/// ArkTS bridge plugin factories shipped by `@ohos-rs/ability` and registered
+/// in the generated EntryAbility's `bridgePlugins` array. Mirrors the
+/// `entry_{desktop,mobile}` EntryAbility.ets.hbs templates — keep both in
+/// sync. Unused factories stay lazy and never instantiate, so backfilling the
+/// full list is safe even for apps that use none of them.
+///
+/// Each entry is `(import binding, factory name)`; the two differ only for the
+/// aliased global-shortcut plugin (its plain name collides with the JS-layer
+/// plugin import).
+const BRIDGE_PLUGIN_FACTORIES: &[(&str, &str)] = &[
+  ("AccessibilityPlugin", "AccessibilityPlugin"),
+  ("PermissionPlugin", "PermissionPlugin"),
+  ("AppControlPlugin", "AppControlPlugin"),
+  ("FilesPlugin", "FilesPlugin"),
+  ("ResourcePlugin", "ResourcePlugin"),
+  ("WindowPlugin", "WindowPlugin"),
+  ("WebviewPlugin", "WebviewPlugin"),
+  ("UrlPlugin", "UrlPlugin"),
+  ("ClipboardPlugin", "ClipboardPlugin"),
+  (
+    "GlobalShortcutPlugin as GlobalShortcutBridgePlugin",
+    "GlobalShortcutBridgePlugin",
+  ),
+  ("DeepLinkPlugin", "DeepLinkPlugin"),
+  ("AutostartPlugin", "AutostartPlugin"),
+  ("MenuPlugin", "MenuPlugin"),
+  ("StatusbarPlugin", "StatusbarPlugin"),
+  ("AccountPlugin", "AccountPlugin"),
+  ("UpdaterPlugin", "UpdaterPlugin"),
+];
+
+/// Backfills the `@ohos-rs/ability` import block and the `bridgePlugins` array
+/// of a generated EntryAbility.ets with the canonical bridge plugin factory
+/// list — additive-only, mirroring the JS-layer sync in
+/// [`update_entry_ability`].
+///
+/// A generated file predating the bridge plugin architecture (no
+/// `@ohos-rs/ability` import, or no `bridgePlugins` array) cannot be patched
+/// line-wise; the caller is pointed at `ohos init` to regenerate instead.
+fn sync_bridge_plugin_factories(lines: &mut Vec<String>, entry_module: &str) {
+  let Some(import_close) = lines
+    .iter()
+    .position(|l| l.trim_start().starts_with('}') && l.contains("from '@ohos-rs/ability'"))
+  else {
+    log::warn!(
+      "{entry_module}/EntryAbility.ets has no '@ohos-rs/ability' import; it predates the bridge plugin architecture — re-run `tauri ohos init` to regenerate"
+    );
+    return;
+  };
+
+  let Some(array_open) = lines.iter().position(|l| l.contains("bridgePlugins = [")) else {
+    log::warn!(
+      "{entry_module}/EntryAbility.ets has no `bridgePlugins` array; it predates the bridge plugin architecture — re-run `tauri ohos init` to regenerate"
+    );
+    return;
+  };
+  let Some(array_close) = (array_open + 1..lines.len()).find(|&i| lines[i].trim() == "]") else {
+    log::warn!(
+      "{entry_module}/EntryAbility.ets has a malformed `bridgePlugins` array; skipping bridge plugin sync"
+    );
+    return;
+  };
+
+  let mut missing = Vec::new();
+  for (binding, factory) in BRIDGE_PLUGIN_FACTORIES {
+    if lines
+      .iter()
+      .any(|l| l.contains(&format!("new {factory}()")))
+    {
+      continue;
+    }
+    // Skip the import when the local name is already present somewhere (e.g.
+    // an orphaned import whose factory line was hand-removed) — a duplicate
+    // binding would fail the ArkTS compile.
+    let needs_import = !lines.iter().any(|l| l.contains(factory));
+    missing.push((*binding, *factory, needs_import));
+  }
+  if missing.is_empty() {
+    return;
+  }
+
+  // Insert factory lines (higher index) before import lines (lower index) so
+  // neither insertion point shifts while the other is still in use.
+  let mut factory_at = array_close;
+  for (_, factory, _) in &missing {
+    log::info!("Adding EntryAbility bridgePlugins entry for '{factory}'");
+    lines.insert(
+      factory_at,
+      format!("    new LazyPlugin(() => new {factory}()),"),
+    );
+    factory_at += 1;
+  }
+
+  let mut import_at = import_close;
+  for (binding, factory, needs_import) in &missing {
+    if *needs_import {
+      log::info!("Adding EntryAbility '@ohos-rs/ability' import for bridge plugin '{factory}'");
+      lines.insert(import_at, format!("  {binding},"));
+      import_at += 1;
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Bridge-era EntryAbility.ets skeleton around the two anchors
+  /// [`sync_bridge_plugin_factories`] patches: the multi-line
+  /// `@ohos-rs/ability` import block and the `bridgePlugins` array.
+  fn entry_ability(import_names: &[&str], factories: &[&str]) -> Vec<String> {
+    let mut lines = vec![
+      "import {".to_string(),
+      "  NativeAbility,".to_string(),
+      "  LazyPlugin,".to_string(),
+    ];
+    lines.extend(import_names.iter().map(|n| format!("  {n},")));
+    lines.extend([
+      "} from '@ohos-rs/ability'".to_string(),
+      String::new(),
+      "export default class EntryAbility extends NativeAbility {".to_string(),
+      "  public bridgePlugins = [".to_string(),
+    ]);
+    lines.extend(
+      factories
+        .iter()
+        .map(|n| format!("    new LazyPlugin(() => new {n}()),")),
+    );
+    lines.extend(["  ]".to_string(), "}".to_string()]);
+    lines
+  }
+
+  #[test]
+  fn backfills_missing_bridge_factories_and_imports() {
+    // An older generated file that only knows PermissionPlugin.
+    let mut lines = entry_ability(&["PermissionPlugin"], &["PermissionPlugin"]);
+    sync_bridge_plugin_factories(&mut lines, "entry_mobile");
+
+    let content = lines.join("\n");
+    assert!(content.contains("  AccessibilityPlugin,\n"));
+    assert!(content.contains("    new LazyPlugin(() => new AccessibilityPlugin()),"));
+    // The aliased global-shortcut binding round-trips both halves.
+    assert!(content.contains("  GlobalShortcutPlugin as GlobalShortcutBridgePlugin,\n"));
+    assert!(content.contains("    new LazyPlugin(() => new GlobalShortcutBridgePlugin()),"));
+    // Existing entries are left untouched.
+    assert_eq!(
+      content
+        .matches("new LazyPlugin(() => new PermissionPlugin()),")
+        .count(),
+      1
+    );
+  }
+
+  #[test]
+  fn backfill_is_idempotent() {
+    let mut lines = entry_ability(&["PermissionPlugin"], &["PermissionPlugin"]);
+    sync_bridge_plugin_factories(&mut lines, "entry_mobile");
+    let once = lines.clone();
+    sync_bridge_plugin_factories(&mut lines, "entry_mobile");
+    assert_eq!(once, lines);
+  }
+
+  #[test]
+  fn orphaned_import_is_not_duplicated() {
+    // MenuPlugin is still imported but its factory line was hand-removed —
+    // backfilling must add the factory without duplicating the import binding.
+    let mut lines = entry_ability(&["MenuPlugin"], &[]);
+    sync_bridge_plugin_factories(&mut lines, "entry_mobile");
+
+    let content = lines.join("\n");
+    assert_eq!(content.matches("  MenuPlugin,").count(), 1);
+    assert!(content.contains("new LazyPlugin(() => new MenuPlugin()),"));
+  }
+
+  #[test]
+  fn pre_bridge_file_is_left_untouched() {
+    let mut lines: Vec<String> = "export default class EntryAbility extends NativeAbility {"
+      .lines()
+      .map(String::from)
+      .collect();
+    let before = lines.clone();
+    sync_bridge_plugin_factories(&mut lines, "entry_mobile");
+    assert_eq!(before, lines);
+  }
 }
 
 fn serialize_json5(value: &Value) -> Result<String> {

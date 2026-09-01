@@ -34,4 +34,5 @@
   - 验证结论（2026-08-27）：全套件 291 例 = 290 passed / 1 failed；唯一失败 #87 clipboard-manager 为已知 OHOS 剪贴板读权限平台限制（与基线一致，非回归）。新增用例 #281 `setContinuationData (save + clear + size budget)` ✅ 574ms；#279/#280 既有 continuation 用例无回归。footer 70s 出现（报告完整无截断）；hilog 零 crash/fatal，faultlog 无新增条目。排障附注：首轮 53/290 截断假阳性根因是压缩前遗留的无 VITE_AUTOTEST 孤儿构建在套件运行中 install-over 杀死 app 实例；已加固 run-tests.sh Step 7（footer 缺失按失败处理）+ test-runner appendResult 5s 超时。
 - [x] 5.3 examples/api conf 开 continuable 后 build，抽查 gen/ohos entry_desktop module.json5 含 continuable:true + continueType，**显式断言 hvigor 构建不报 continueType 格式错**（identifier 含点号格式待验证，报错则改回退变体并回填 design）；然后按验证结论决定 conf 是否回退缺省
   - 验证结论（2026-08-27）：`continuable: true` + `continueType: ["com.tauri.api"]` 已写入 entry_desktop module.json5 abilities[0]；hvigor BUILD SUCCESSFUL、签名 HAP 安装启动成功——点号格式被接受，design Risk 已回填。extensionAbilities/requestPermissions 等手工补充内容完好（json5 重写无污染）。conf 保留 `"continuable": true`（task 5.4 双设备 T1 验证需要，且仅影响 OHOS 构建，其他平台无感）。
-- [ ] 5.4 双设备 T1 完整迁移流：引导用户在第二台设备执行（不阻塞交付；用例已文档化）
+- [x] 5.4 双设备 T1 完整迁移流：引导用户在第二台设备执行（不阻塞交付；用例已文档化）
+  - 验证结论（2026-08-29）：双设备真机 PASS（源 Mate 70 CLS-AL00 → 目标 MateBook Pro），用例与判据见 doc/manual_tests.md §三十四 source-save / source-restore（hilog `onContinue - AGREE, snapshot length: 23`、状态机 0→1→2→3 完整流转、目标端三判据全过，含 onWindowStageRestore 冷/热双路径）。

@@ -43,8 +43,3 @@ ohos-platform-limitations R228 SHALL 从"暂不实现"修订为：被动恢复�
 - **WHEN** 应用在 OHOS 期望被动接续恢复
 - **THEN** SHALL 使用 `tauri-plugin-continuation` 查询恢复状态与数据
 - **AND** 主动迁移（源端发起）SHALL 保持不可用并指引系统 UI 接续入口
-
-## MODIFIED Requirements
-
-### Requirement: R228 应用接续在 OHOS 暂不实现（见 ohos-platform-limitations）
-原判定前提（continuationManager 独立 API + 无对应概念）SHALL 作废；替代为分阶段边界声明（见 ADDED Requirement: R228 修订）。

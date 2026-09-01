@@ -1,7 +1,8 @@
 # ohos-continuation-bridge Specification
 
-## ADDED Requirements
-
+## Purpose
+TBD - created by archiving change p1-ohos-continuation. Update Purpose after archive.
+## Requirements
 ### Requirement: NativeAbility 生命周期回调转发接续信号
 `NativeAbility.ets` SHALL 在 `onCreate(want, launchParam)` / `onNewWant(want, launchParam)` 中比较 `launchParam.launchReason === AbilityConstant.LaunchReason.CONTINUATION`，并将判定结果以布尔 `isContinuation` 字段传入既有 lifecycle 转发链（不在 wire 上传数值 launchReason）。回调时序与既有注入点 SHALL 保持不变（仅扩展 payload 字段）。
 
@@ -62,7 +63,3 @@
 - **WHEN** run-ut.sh 执行 openharmony-ability 测试集
 - **THEN** 接续存储相关断言 SHALL 全部通过
 
-## MODIFIED Requirements
-
-### Requirement: R228 应用接续改为分阶段生命周期驱动方案（见 ohos-platform-limitations）
-（本 Phase 不修订 R228 正文——留 Phase 2c 插件落地后一并修订；此处仅记录设计共识：被动接续可行、主动迁移系统独占。）

@@ -98,12 +98,12 @@ export default class EntryAbility extends NativeAbility {
   }
 
   onForeground(): void {
-    console.info('[GEO-DIAG] ===== EntryAbility onForeground =====');
+    console.info('[Tauri] ===== EntryAbility onForeground =====');
     this.pluginManager?.notifyForeground();
   }
 
   onBackground(): void {
-    console.info('[GEO-DIAG] ===== EntryAbility onBackground =====');
+    console.info('[Tauri] ===== EntryAbility onBackground =====');
   }
 
   /**
@@ -203,16 +203,6 @@ export default class EntryAbility extends NativeAbility {
     await super.onWindowStageCreate(windowStage);
     console.info('[Tauri] ===== super.onWindowStageCreate done =====');
 
-    // Diagnostic: log window stage events (SHOWN/ACTIVE/INACTIVE/HIDDEN/RESUMED)
-    // to correlate with permission dialog lifecycle (ability onBackground/onForeground).
-    try {
-      windowStage.on('windowStageEvent', (event: window.WindowStageEventType): void => {
-        console.info('[GEO-DIAG] windowStageEvent: ' + event);
-      });
-    } catch (e) {
-      console.warn('[GEO-DIAG] windowStage.on failed: ' + (e as Error).message);
-    }
-
     // Set window background AFTER super.onWindowStageCreate to avoid being overwritten
     // by loadContentByName. OHOS default window background is black.
     // NOTE: OHOS requires #AARRGGBB format (8-digit hex), not #RRGGBB.
@@ -222,7 +212,9 @@ export default class EntryAbility extends NativeAbility {
       if (deviceInfo.sdkApiVersion >= 20) {
         try {
           await win.setWindowContainerColor('#FFFFFFFF', '#FFFFFFFF');
-        } catch (_) {}
+        } catch (e) {
+          console.warn('[Tauri] setWindowContainerColor failed (expected on non-2in1): ' + JSON.stringify(e));
+        }
       }
       await win.setWindowSystemBarProperties({
         statusBarColor: '#00000000',

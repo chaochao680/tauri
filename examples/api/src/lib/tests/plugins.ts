@@ -1243,10 +1243,10 @@ export const pluginTests: TestCase[] = [
         skip(`plugin-accessibility not available: ${e}`);
         return;
       }
-      // Both queries need the system-level ohos.permission.ACCESSIBILITY; a third-party
-      // denial rejects with a structured error, which is an acceptable outcome — the
-      // contract under test is "boolean or structured error, never a silent false or
-      // a crash".
+      // Both queries need the system-level ohos.permission.ACCESSIBILITY. Contract
+      // under test: a boolean on success; a permission denial (BusinessError code=201
+      // in the rejection message) passes with a note; anything else — including a
+      // non-boolean return — fails the test.
       for (const [label, fn] of [
         ['isScreenReaderEnabled', mod.isScreenReaderEnabled],
         ['isTouchExploreEnabled', mod.isTouchExploreEnabled],
@@ -1257,8 +1257,9 @@ export const pluginTests: TestCase[] = [
           console.log(`[accessibility] ${label} = ${value}`);
         } catch (e) {
           if (isMissing(e)) skip(`${label} not available: ${e}`);
-          // Permission denial (structured accessibility error) — pass with a note.
-          console.log(`[accessibility] ${label} rejected (expected when permission denied): ${e}`);
+          else if (String(e).includes('code=201'))
+            console.log(`[accessibility] ${label} rejected (permission denied): ${e}`);
+          else throw e;
         }
       }
     },

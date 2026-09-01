@@ -70,8 +70,3 @@ examples/api Continuation.svelte SHALL 增加"保存接续数据"输入区（set
 - **WHEN** 两台同账号设备均安装 app 且 continuable 生效，源设备 set 数据后经系统迁移入口发起接续
 - **THEN** 源端 hilog SHALL 出现 onContinue AGREE 日志
 - **AND** 目标端 isContinuationRestoreLaunch SHALL 为 true 且 getContinuationData 解析后 continuationData 等于源端 set 值
-
-## MODIFIED Requirements
-
-### Requirement: R228 源端保存边界收尾（见 ohos-platform-limitations）
-R228 SHALL 收尾改写：被动恢复查询/数据回传（p1c/p2c）与源端保存（p3c setContinuationData + onContinue 快照 + continuable 门控）均已提供；主动发起迁移由系统 UI 独占，SHALL NOT 提供。

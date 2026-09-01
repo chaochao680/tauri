@@ -3272,10 +3272,13 @@ pub struct OpenHarmonyConfig {
 
   /// Marks the app's ability as continuable (app continuation / task handoff).
   ///
-  /// When `Some(true)`, the CLI writes `continuable: true` into each entry
-  /// module.json5's abilities entry at build time (same injection point as
-  /// `deviceTypes`). Requires `continueType` matching between devices.
-  /// `None`/`Some(false)` keeps module.json5 unchanged.
+  /// When `Some(true)`, the CLI writes `continuable: true` plus `continueType`
+  /// into each entry module.json5's abilities entry at build time (same
+  /// injection point as `deviceTypes`). Any other value (`None` or
+  /// `Some(false)`) removes both keys from module.json5, so toggling back to
+  /// disabled also takes effect on rebuild — keys hand-added to module.json5
+  /// are stripped on the next build. Requires `continueType` matching between
+  /// devices.
   #[serde(alias = "continuable")]
   pub continuable: Option<bool>,
 

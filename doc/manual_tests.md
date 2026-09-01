@@ -728,7 +728,7 @@
 | Localhost（本地资源服务） | 1 | 0 | **1** |
 | OHOS — Drag Overlay（拖拽降级） | 2 | 0 | **2** |
 | OHOS — HTTPS Scheme（安全上下文） | 2 | 2 | **4** |
-| OHOS — Monitor（真实值 + from-point） | 0 | 1 | **1** |
+| OHOS — Monitor（真实值 + from-point） | 0 | 2 | **2** |
 | OHOS — WebView Print（打印） | 1 | 0 | **1** |
 | OHOS — Event Lifecycle（Start→Resumed） | 1 | 0 | **1** |
 | OHOS — Clipboard Flag（with_clipboard 开/关） | 2 | 0 | **2** |
@@ -738,10 +738,10 @@
 | OHOS Gap — notification 触发（onAction/onNotificationReceived） | 1 | 1 | **2** |
 | OHOS Gap — updater check（AppGallery 占位） | 0 | 1 | **1** |
 | OHOS 移动原生插件 — barcode-scanner（scan/vibrate） | 1 | 1 | **2** |
-| OHOS 移动原生插件 — biometric（authenticate） | 1 | 1 | **2** |
+| OHOS 移动原生插件 — biometric（authenticate） | 1 | 0 | **1** |
 | OHOS 移动原生插件 — geolocation（定位/权限） | 0 | 1 | **1** |
-| OHOS 移动原生插件 — haptics（三种效果） | 1 | 1 | **2** |
-| OHOS 移动原生插件 — nfc（is_available/scan/write） | 1 | 1 | **2** |
+| OHOS 移动原生插件 — haptics（三种效果） | 0 | 1 | **1** |
+| OHOS 移动原生插件 — nfc（is_available/scan/write） | 0 | 1 | **1** |
 | OHOS 移动原生插件 — huawei-account（一键登录） | 0 | 1 | **1** |
 | OHOS Plugin emit/Channel（geolocation watch/notification action） | 1 | 3 | **4** |
 | OHOS — Accessibility 插件（fontScale/屏幕阅读器） | 0 | 3 | **3** |
@@ -750,5 +750,5 @@
 | Key Repeat Detection（key-synthesis 长按/点按） | 2 | 2 | **4** |
 | **合计** | **94** | **80** | **174** |
 
-> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正。2026-08-28 复验期间移除 §二十七 save-state（无法触发的定性用例，1 T1）；同日补 §三十四 screenshot canvas-snapshot（Take Snapshot 接线 bug 修复，1 T0）→ 92 T0 / 79 T1 / 171；key-synthesis 新增 2 T0 + 2 T1。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。2026-08-29 移除 §九 Resumed T1（接续目标端白屏修复后由自动测试覆盖，判据 hilog `onWindowStageRestore` 双路径），合计 94 T0 / 81 T1 / 175。2026-08-31 移除 §十八 热键缩放 T1（主窗口默认 opt-in 不响应、flag=true 路径由 §二十七 覆盖，避免误判为缺陷），合计 94 T0 / 80 T1 / 174。
+> **统计口径（2026-08-27 起）**: 已由自动测试覆盖并验证的用例不保留在本文档（从 §三十 移除 os 七项 + clipboard 三项，断言收紧进 `ohos-gap.ts`）。2026-08-27 逐行实核：此前合计含 4 个幽灵 T0（声称 96/78/174，实际 92/77/173），已按逐节表格行修正为 92/79/171（含本日新增 continuation T1 一例）。同日 Phase 3c 二次实核又发现分项表 6 处与表格行不符（Opener 少计 1 T0、Monitor 多计 1 T0、webPageSnapshot 幽灵行、emit/Channel 多计 1 T1、Accessibility 错记 1 T0 为 T1），已全部修正。2026-08-28 复验期间移除 §二十七 save-state（无法触发的定性用例，1 T1）；同日补 §三十四 screenshot canvas-snapshot（Take Snapshot 接线 bug 修复，1 T0）→ 92 T0 / 79 T1 / 171；key-synthesis 新增 2 T0 + 2 T1。以逐行 grep 实数为准（`grep -cE "\*\*T0\*\*"` / `"\*\*T1\*\*"` 校验行数，勿用 -o 计出现次数）。2026-08-29 移除 §九 Resumed T1（接续目标端白屏修复后由自动测试覆盖，判据 hilog `onWindowStageRestore` 双路径），合计 94 T0 / 81 T1 / 175。2026-08-31 移除 §十八 热键缩放 T1（主窗口默认 opt-in 不响应、flag=true 路径由 §二十七 覆盖，避免误判为缺陷），合计 94 T0 / 80 T1 / 174。2026-09-01 三次实核：分项表 4 处与表格行不符（Monitor 少计 1 T1、biometric 多计 1 T1、haptics/nfc 各多计 1 T0），已按表格行修正——分项行求和现与合计一致（94 T0 / 80 T1 / 174）。
 

@@ -46,8 +46,3 @@ examples/api SHALL 提供 `Screenshot.svelte` demo 页（≥5 个已知纯色色
 - **WHEN** TestRunner 跑 ohos-screenshot 套件
 - **THEN** captureWebview 用例 SHALL 断言 `pngBase64.startsWith("iVBOR")` 且 width/height > 0
 - **AND** pickColorAt 用例 SHALL 对红色块断言 r>200、g<60、b<60（阈值可按实测回填）
-
-## MODIFIED Requirements
-
-### Requirement: R229 截图取色改为应用内 webview 最小 API（见 ohos-platform-limitations）
-应用内 webview 截图/取色 SHALL 经 `tauri-plugin-screenshot` 提供；系统级 `@ohos.screenshot`（仅系统应用）SHALL 维持不可用，文档 SHALL 指引用户使用本插件的应用内截图能力。
